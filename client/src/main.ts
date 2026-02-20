@@ -21,7 +21,6 @@ import {
   getDirection,
   getNearestItem,
   getNearestPeer,
-  type GameState,
   type ItemType,
   type WorldItem,
 } from './state/gameState';
