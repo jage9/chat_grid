@@ -85,6 +85,10 @@ dom.appVersion.textContent = APP_VERSION
   ? `Another AI experiment with Jage. Version ${APP_VERSION}`
   : 'Another AI experiment with Jage. Version unknown';
 const ITEM_TYPE_SEQUENCE: ItemType[] = ['radio_station', 'dice'];
+const ITEM_TYPE_GLOBAL_PROPERTIES: Record<ItemType, Record<string, string | number | boolean>> = {
+  radio_station: { useCooldownMs: 1000 },
+  dice: { useCooldownMs: 1000 },
+};
 const APP_BASE_URL = import.meta.env.BASE_URL || '/';
 function withBase(path: string): string {
   const normalizedBase = APP_BASE_URL.endsWith('/') ? APP_BASE_URL : `${APP_BASE_URL}/`;
@@ -311,7 +315,7 @@ function getCarriedItem(): WorldItem | null {
   return Array.from(state.items.values()).find((item) => item.carrierId === state.player.id) || null;
 }
 
-function beginItemSelection(context: 'pickup' | 'delete' | 'edit' | 'use', items: WorldItem[]): void {
+function beginItemSelection(context: 'pickup' | 'delete' | 'edit' | 'use' | 'inspect', items: WorldItem[]): void {
   if (items.length === 0) {
     updateStatus('No items available.');
     audio.sfxUiCancel();
@@ -343,6 +347,25 @@ function beginItemProperties(item: WorldItem): void {
 
 function useItem(item: WorldItem): void {
   signaling.send({ type: 'item_use', itemId: item.id });
+}
+
+function announceAllItemProperties(item: WorldItem): void {
+  const details: string[] = [];
+  details.push(`title: ${item.title}`);
+  details.push(`type: ${item.type}`);
+  details.push(`position: ${item.x}, ${item.y}`);
+  details.push(`carrierId: ${item.carrierId ?? 'none'}`);
+  details.push(`version: ${item.version}`);
+  details.push(`capabilities: ${item.capabilities.join(', ') || 'none'}`);
+  details.push(`useSound: ${item.useSound ?? 'none'}`);
+  for (const [key, value] of Object.entries(item.params).sort(([a], [b]) => a.localeCompare(b))) {
+    details.push(`${key}: ${String(value)}`);
+  }
+  const globalProperties = ITEM_TYPE_GLOBAL_PROPERTIES[item.type] ?? {};
+  for (const [key, value] of Object.entries(globalProperties).sort(([a], [b]) => a.localeCompare(b))) {
+    details.push(`${key}: ${String(value)} (global)`);
+  }
+  updateStatus(details.join('; '));
 }
 
 function releaseSharedRadioSource(streamUrl: string): void {
@@ -1140,8 +1163,28 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
 
   if (code === 'KeyO') {
     const squareItems = getItemsAtPosition(state.player.x, state.player.y);
+    const carried = getCarriedItem();
+    if (shiftKey) {
+      if (squareItems.length === 0) {
+        if (!carried) {
+          updateStatus('No item to inspect.');
+          audio.sfxUiCancel();
+          return;
+        }
+        announceAllItemProperties(carried);
+        audio.sfxUiBlip();
+        return;
+      }
+      if (squareItems.length === 1) {
+        announceAllItemProperties(squareItems[0]);
+        audio.sfxUiBlip();
+        return;
+      }
+      beginItemSelection('inspect', squareItems);
+      return;
+    }
+
     if (squareItems.length === 0) {
-      const carried = getCarriedItem();
       if (!carried) {
         updateStatus('No editable item here.');
         audio.sfxUiCancel();
@@ -1430,6 +1473,11 @@ function handleSelectItemModeInput(code: string): void {
     }
     if (context === 'use') {
       useItem(selected);
+      return;
+    }
+    if (context === 'inspect') {
+      announceAllItemProperties(selected);
+      audio.sfxUiBlip();
       return;
     }
     return;
