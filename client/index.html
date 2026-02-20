@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat Grid</title>
+  </head>
+  <body>
+    <main class="app">
+      <h1>Chat Grid</h1>
+      <div id="nicknameContainer" class="nickname-row">
+        <label for="preconnectNickname">Nickname</label>
+        <input id="preconnectNickname" type="text" maxlength="32" autocomplete="nickname" />
+      </div>
+      <div class="controls" id="button-container">
+        <button id="connectButton">Connect</button>
+        <button id="settingsButton">Settings</button>
+        <button id="disconnectButton" class="hidden">Disconnect</button>
+        <button id="focusGridButton" class="hidden" aria-controls="gameCanvas">Chat Grid</button>
+      </div>
+      <div id="deviceSummary">
+        <p id="audioInputCurrent" class="hidden"></p>
+        <p id="audioOutputCurrent" class="hidden"></p>
+      </div>
+      <div id="status" role="region" aria-live="polite"></div>
+      <canvas
+        id="gameCanvas"
+        width="600"
+        height="600"
+        tabindex="0"
+        class="hidden"
+        aria-label="Chat Grid, press arrows to move."
+      ></canvas>
+      <div id="instructions" class="hidden">
+        <h2>Help</h2>
+
+        <h3>Movement</h3>
+        <p><b>Arrow Keys:</b> Move</p>
+        <p><b>C:</b> Coordinates</p>
+        <p><b>Escape:</b> Disconnect/cancel</p>
+
+        <h3>Users, Nickname, and Chat</h3>
+        <p><b>L:</b> Locate nearest user</p>
+        <p><b>Shift+L:</b> List users</p>
+        <p><b>Shift+U:</b> List connected users</p>
+        <p><b>N:</b> Change nickname</p>
+        <p><b>Apostrophe:</b> Start chat</p>
+        <p><b>Comma / Period:</b> Previous/next chat message</p>
+        <p><b>Less Than / Greater Than:</b> First/last chat message</p>
+
+        <h3>Items</h3>
+        <p><b>I:</b> Locate nearest item</p>
+        <p><b>Shift+I:</b> List items</p>
+        <p><b>A:</b> Add item</p>
+        <p><b>O:</b> Edit item properties</p>
+        <p><b>D:</b> Pick up/drop item</p>
+        <p><b>Shift+D:</b> Delete item</p>
+        <p><b>U:</b> Use item</p>
+
+        <h3>Audio</h3>
+        <p><b>P:</b> Ping server</p>
+        <p><b>M:</b> Mute/unmute</p>
+        <p><b>Shift+M:</b> Toggle stereo/mono output</p>
+        <p><b>E:</b> Cycle voice effect</p>
+        <p><b>Dash or Equals:</b> Lower/raise active effect value</p>
+      </div>
+
+      <small id="appVersion">Another AI experiment with Jage. Version</small>
+
+      <div id="settingsModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modal-content">
+          <h2 id="modalTitle">Audio Settings</h2>
+          <label for="audioInputSelect">Microphone (Input)</label>
+          <select id="audioInputSelect"></select>
+          <label for="audioOutputSelect">Speakers (Output)</label>
+          <select id="audioOutputSelect"></select>
+          <button id="closeSettingsButton">Close</button>
+        </div>
+      </div>
+    </main>
+    <script src="%BASE_URL%version.js"></script>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,19 @@
+[project]
+name = "chat-grid-server"
+version = "0.1.0"
+description = "Chat Grid signaling server"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.10.4",
+  "websockets>=15.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.4",
+  "pytest-asyncio>=0.25.2",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

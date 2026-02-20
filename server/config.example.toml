@@ -1,0 +1,23 @@
+[server]
+# Bind IP for signaling server.
+bind_ip = "127.0.0.1"
+# Listen port for signaling websocket server.
+port = 8765
+
+[network]
+# Maximum inbound websocket message size in bytes.
+max_message_bytes = 2000000
+# If false, TLS cert and key are required and server runs as wss:// only.
+allow_insecure_ws = true
+
+[tls]
+# Required when allow_insecure_ws = false.
+cert_file = ""
+key_file = ""
+
+[logging]
+level = "INFO"
+
+[storage]
+# Item persistence file. Relative paths are resolved from this config file directory.
+state_file = "runtime/items.json"

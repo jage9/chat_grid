@@ -1,0 +1,16 @@
+[Unit]
+Description=chgrid signaling server
+After=network.target
+
+[Service]
+Type=simple
+User=bestmidi
+Group=bestmidi
+WorkingDirectory=/home/bestmidi/chgrid/server
+Environment=PATH=/home/bestmidi/chgrid/server/.venv/bin:/usr/bin:/bin
+ExecStart=/home/bestmidi/chgrid/server/.venv/bin/python main.py --config /home/bestmidi/chgrid/server/config.toml
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

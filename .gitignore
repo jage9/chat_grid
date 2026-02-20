@@ -1,0 +1,18 @@
+# Local config/state
+server/config.toml
+server/runtime/
+
+# Python
+server/.venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Node/Vite
+client/node_modules/
+client/dist/
+
+# OS/editor/log noise
+.DS_Store
+*.log
+*.bak

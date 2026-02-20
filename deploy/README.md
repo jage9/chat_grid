@@ -1,0 +1,116 @@
+# Deployment Guide
+
+Target example: AlmaLinux/cPanel host with files under `/home/bestmidi`.
+
+## 1) Place project files
+- Repo root: `/home/bestmidi/chgrid`
+
+## 2) Make deploy scripts executable (once)
+
+```bash
+cd /home/bestmidi/chgrid
+chmod +x deploy/scripts/*.sh
+```
+
+## 3) Install server (uv)
+
+Verify server files first:
+
+```bash
+ls -l /home/bestmidi/chgrid/server/pyproject.toml
+```
+
+Run install scripts from repo root (`/home/bestmidi/chgrid`), not from `server/`.
+
+```bash
+cd /home/bestmidi/chgrid
+./deploy/scripts/install_server.sh /home/bestmidi/chgrid
+```
+
+Notes:
+- Script defaults to Python `3.13` (`PYTHON_SPEC=3.13`).
+- It reuses existing `.venv` instead of replacing it interactively.
+- If you need to force a fresh 3.13 env:
+  - `rm -rf /home/bestmidi/chgrid/server/.venv`
+  - rerun `./deploy/scripts/install_server.sh /home/bestmidi/chgrid`
+
+This creates:
+- `/home/bestmidi/chgrid/server/.venv`
+- `/home/bestmidi/chgrid/server/config.toml` (if missing)
+
+Edit `/home/bestmidi/chgrid/server/config.toml`:
+- `server.bind_ip = "127.0.0.1"`
+- `server.port = 8765`
+- `network.allow_insecure_ws = true`
+- `tls.cert_file = ""`
+- `tls.key_file = ""`
+- `storage.state_file = "runtime/items.json"`
+
+## 4) Build and publish client
+
+```bash
+cd /home/bestmidi/chgrid
+./deploy/scripts/deploy_client.sh /home/bestmidi/chgrid /home/bestmidi/public_html/chgrid /chgrid/
+```
+
+Notes:
+- Third arg is Vite base path for production assets.
+- For `https://bestmidi.com/chgrid/`, use `/chgrid/`.
+- For site root deploy (`https://bestmidi.com/`), use `/`.
+
+## 5) Install/restart signaling service (systemd)
+
+```bash
+cd /home/bestmidi/chgrid
+./deploy/scripts/install_service.sh /home/bestmidi/chgrid
+```
+
+Logs:
+
+```bash
+journalctl -u chgrid-signaling.service -f
+```
+
+## 6) Apache websocket proxy
+
+Install using script:
+
+```bash
+cd /home/bestmidi/chgrid
+./deploy/scripts/install_apache.sh \
+  /home/bestmidi/chgrid \
+  /etc/apache2/conf.d/userdata/ssl/2_4/bestmidi/yourdomain.com/chgrid.conf
+```
+
+Notes:
+- Replace `yourdomain.com` with your real domain.
+- Script copies `deploy/apache/chgrid-vhost-snippet.conf`, runs `rebuildhttpdconf`, then restarts Apache via WHM restart command.
+
+## 7) Optional HTTPS relay for HTTP radio streams
+
+If stream sources are plain HTTP (for example ports `8000`, `8010`, `8020`, `8030`), add relays in:
+
+`/etc/apache2/conf.d/userdata/ssl/2_4/bestmidi/bestmidi.com/chgrid.conf`
+
+Example:
+
+```apache
+ProxyPass        /listen/8000/  http://127.0.0.1:8000/
+ProxyPassReverse /listen/8000/  http://127.0.0.1:8000/
+ProxyPass        /listen/8010/  http://127.0.0.1:8010/
+ProxyPassReverse /listen/8010/  http://127.0.0.1:8010/
+ProxyPass        /listen/8020/  http://127.0.0.1:8020/
+ProxyPassReverse /listen/8020/  http://127.0.0.1:8020/
+ProxyPass        /listen/8030/  http://127.0.0.1:8030/
+ProxyPassReverse /listen/8030/  http://127.0.0.1:8030/
+```
+
+Apply changes:
+
+```bash
+sudo /usr/local/cpanel/scripts/rebuildhttpdconf
+sudo /usr/local/cpanel/scripts/restartsrv_httpd
+```
+
+Usage example in Chat Grid:
+- `https://bestmidi.com/listen/8000/stream`

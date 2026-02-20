@@ -1,0 +1,16 @@
+[Unit]
+Description=chgrid client preview server (vite)
+After=network.target
+
+[Service]
+Type=simple
+User=chgrid
+Group=chgrid
+WorkingDirectory=/opt/chgrid/client
+Environment=PATH=/usr/bin:/bin
+ExecStart=/usr/bin/npm run preview -- --host 0.0.0.0 --port 4173
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
