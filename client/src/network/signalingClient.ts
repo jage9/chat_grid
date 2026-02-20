@@ -38,7 +38,12 @@ export class SignalingClient {
       };
 
       this.ws.onmessage = async (event) => {
-        const parsed = JSON.parse(String(event.data));
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(String(event.data));
+        } catch {
+          return;
+        }
         const validated = incomingMessageSchema.safeParse(parsed);
         if (!validated.success) return;
         await onMessage(validated.data);

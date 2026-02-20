@@ -27,6 +27,7 @@
 
 ## Versioning & Configuration
 - Bump `client/public/version.js` on every user-visible change using `YYYY.MM.DD Rn`.
+- Commit each completed logical change; include the version bump in that same commit when client behavior changes.
 - Do not duplicate version constants elsewhere in client code.
 - `server/config.toml` is deployment-local and must not be committed.
 - Production should use TLS (`network.allow_insecure_ws = false`).

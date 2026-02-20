@@ -577,9 +577,7 @@ async function checkMicPermission(): Promise<boolean> {
 }
 
 async function setupLocalMedia(audioDeviceId = ''): Promise<void> {
-  if (localStream) {
-    localStream.getTracks().forEach((track) => track.stop());
-  }
+  stopLocalMedia();
 
   await audio.ensureContext();
 
@@ -602,6 +600,14 @@ async function setupLocalMedia(audioDeviceId = ''): Promise<void> {
   }
   outboundStream = await audio.configureOutboundStream(localStream);
   await peerManager.replaceOutgoingTrack(outboundStream);
+}
+
+function stopLocalMedia(): void {
+  if (localStream) {
+    localStream.getTracks().forEach((track) => track.stop());
+    localStream = null;
+  }
+  outboundStream = null;
 }
 
 function describeMediaError(error: unknown): string {
@@ -638,14 +644,23 @@ async function connect(): Promise<void> {
     return;
   }
 
+  state.player.x = Math.floor(Math.random() * GRID_SIZE);
+  state.player.y = Math.floor(Math.random() * GRID_SIZE);
   const storedPosition = localStorage.getItem('spatialChatPosition');
   if (storedPosition) {
-    const parsed = JSON.parse(storedPosition) as { x: number; y: number };
-    state.player.x = parsed.x;
-    state.player.y = parsed.y;
-  } else {
-    state.player.x = Math.floor(Math.random() * GRID_SIZE);
-    state.player.y = Math.floor(Math.random() * GRID_SIZE);
+    try {
+      const parsed = JSON.parse(storedPosition) as { x?: number; y?: number };
+      if (Number.isFinite(parsed.x) && Number.isFinite(parsed.y)) {
+        const x = Math.floor(parsed.x as number);
+        const y = Math.floor(parsed.y as number);
+        if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE) {
+          state.player.x = x;
+          state.player.y = y;
+        }
+      }
+    } catch {
+      // Ignore malformed saved positions and keep randomized defaults.
+    }
   }
 
   try {
@@ -670,6 +685,7 @@ async function connect(): Promise<void> {
     await signaling.connect(onMessage);
   } catch (error) {
     console.error(error);
+    stopLocalMedia();
     updateStatus('Connect failed. Signaling server may be offline or unreachable.');
     connecting = false;
     updateConnectAvailability();
@@ -686,11 +702,7 @@ function disconnect(): void {
   }
 
   signaling.disconnect();
-  if (localStream) {
-    localStream.getTracks().forEach((track) => track.stop());
-    localStream = null;
-  }
-  outboundStream = null;
+  stopLocalMedia();
 
   peerManager.cleanupAll();
   cleanupAllRadioRuntimes();
@@ -1627,8 +1639,9 @@ async function populateAudioDevices(): Promise<void> {
     return;
   }
 
+  let temporaryStream: MediaStream | null = null;
   try {
-    await navigator.mediaDevices.getUserMedia({ audio: true });
+    temporaryStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const devices = await navigator.mediaDevices.enumerateDevices();
 
     dom.audioInputSelect.innerHTML = '';
@@ -1665,6 +1678,8 @@ async function populateAudioDevices(): Promise<void> {
     updateDeviceSummary();
   } catch {
     updateStatus('Could not list devices.');
+  } finally {
+    temporaryStream?.getTracks().forEach((track) => track.stop());
   }
 }
 
