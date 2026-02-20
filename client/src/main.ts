@@ -98,6 +98,9 @@ const EDITABLE_ITEM_PROPERTY_KEYS = new Set([
   'sides',
   'number',
 ]);
+const OPTION_ITEM_PROPERTY_VALUES: Partial<Record<string, string[]>> = {
+  effect: EFFECT_SEQUENCE.map((effect) => effect.id),
+};
 const APP_BASE_URL = import.meta.env.BASE_URL || '/';
 function withBase(path: string): string {
   const normalizedBase = APP_BASE_URL.endsWith('/') ? APP_BASE_URL : `${APP_BASE_URL}/`;
@@ -145,6 +148,7 @@ const sharedRadioSources = new Map<string, SharedRadioSource>();
 const itemRadioOutputs = new Map<string, ItemRadioOutput>();
 let replaceTextOnNextType = false;
 let itemPropertiesReadOnly = false;
+let pendingEscapeDisconnect = false;
 
 const signalingProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const signalingUrl = `${signalingProtocol}://${window.location.host}/ws`;
@@ -362,6 +366,9 @@ function beginItemProperties(item: WorldItem, readOnly = false): void {
   state.selectedItemId = item.id;
   state.mode = 'itemProperties';
   itemPropertiesReadOnly = readOnly;
+  state.editingPropertyKey = null;
+  state.itemPropertyOptionValues = [];
+  state.itemPropertyOptionIndex = 0;
   if (readOnly) {
     state.itemPropertyKeys = getInspectItemPropertyKeys(item);
   } else {
@@ -381,6 +388,21 @@ function beginItemProperties(item: WorldItem, readOnly = false): void {
 
 function useItem(item: WorldItem): void {
   signaling.send({ type: 'item_use', itemId: item.id });
+}
+
+function openItemPropertyOptionSelect(item: WorldItem, key: string): void {
+  const options = OPTION_ITEM_PROPERTY_VALUES[key];
+  if (!options || options.length === 0) {
+    return;
+  }
+  state.mode = 'itemPropertyOptionSelect';
+  state.editingPropertyKey = key;
+  state.itemPropertyOptionValues = options;
+  const currentValue = getItemPropertyValue(item, key);
+  const currentIndex = options.indexOf(currentValue);
+  state.itemPropertyOptionIndex = currentIndex >= 0 ? currentIndex : 0;
+  updateStatus(`Select ${key}: ${state.itemPropertyOptionValues[state.itemPropertyOptionIndex]}`);
+  audio.sfxUiBlip();
 }
 
 function releaseSharedRadioSource(streamUrl: string): void {
@@ -824,6 +846,10 @@ function disconnect(): void {
   state.itemPropertyKeys = [];
   state.itemPropertyIndex = 0;
   state.editingPropertyKey = null;
+  state.itemPropertyOptionValues = [];
+  state.itemPropertyOptionIndex = 0;
+  itemPropertiesReadOnly = false;
+  pendingEscapeDisconnect = false;
 
   connecting = false;
   dom.nicknameContainer.classList.remove('hidden');
@@ -1016,6 +1042,10 @@ function toggleMute(): void {
 }
 
 function handleNormalModeInput(code: string, shiftKey: boolean): void {
+  if (code !== 'Escape' && pendingEscapeDisconnect) {
+    pendingEscapeDisconnect = false;
+  }
+
   if (code === 'KeyN') {
     state.mode = 'nickname';
     state.nicknameInput = state.player.nickname;
@@ -1303,7 +1333,15 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
   }
 
   if (code === 'Escape') {
-    disconnect();
+    if (pendingEscapeDisconnect) {
+      pendingEscapeDisconnect = false;
+      disconnect();
+      return;
+    }
+    pendingEscapeDisconnect = true;
+    updateStatus('Press Escape again to disconnect.');
+    audio.sfxUiCancel();
+    return;
   }
 }
 
@@ -1519,12 +1557,18 @@ function handleItemPropertiesModeInput(code: string): void {
   if (!itemId) {
     state.mode = 'normal';
     itemPropertiesReadOnly = false;
+    state.editingPropertyKey = null;
+    state.itemPropertyOptionValues = [];
+    state.itemPropertyOptionIndex = 0;
     return;
   }
   const item = state.items.get(itemId);
   if (!item) {
     state.mode = 'normal';
     itemPropertiesReadOnly = false;
+    state.editingPropertyKey = null;
+    state.itemPropertyOptionValues = [];
+    state.itemPropertyOptionIndex = 0;
     updateStatus('Item no longer exists.');
     audio.sfxUiCancel();
     return;
@@ -1554,6 +1598,10 @@ function handleItemPropertiesModeInput(code: string): void {
       audio.sfxUiBlip();
       return;
     }
+    if (OPTION_ITEM_PROPERTY_VALUES[key]) {
+      openItemPropertyOptionSelect(item, key);
+      return;
+    }
     state.mode = 'itemPropertyEdit';
     state.editingPropertyKey = key;
     state.nicknameInput =
@@ -1576,6 +1624,9 @@ function handleItemPropertiesModeInput(code: string): void {
     state.selectedItemId = null;
     state.itemPropertyKeys = [];
     state.itemPropertyIndex = 0;
+    state.editingPropertyKey = null;
+    state.itemPropertyOptionValues = [];
+    state.itemPropertyOptionIndex = 0;
     updateStatus('Closed item properties.');
     audio.sfxUiCancel();
   }
@@ -1684,6 +1735,47 @@ function handleItemPropertyEditModeInput(code: string, key: string): void {
   }
 }
 
+function handleItemPropertyOptionSelectModeInput(code: string): void {
+  const itemId = state.selectedItemId;
+  const propertyKey = state.editingPropertyKey;
+  if (!itemId || !propertyKey || state.itemPropertyOptionValues.length === 0) {
+    state.mode = 'itemProperties';
+    state.editingPropertyKey = null;
+    state.itemPropertyOptionValues = [];
+    state.itemPropertyOptionIndex = 0;
+    return;
+  }
+
+  if (code === 'ArrowDown' || code === 'ArrowUp') {
+    state.itemPropertyOptionIndex =
+      code === 'ArrowDown'
+        ? (state.itemPropertyOptionIndex + 1) % state.itemPropertyOptionValues.length
+        : (state.itemPropertyOptionIndex - 1 + state.itemPropertyOptionValues.length) % state.itemPropertyOptionValues.length;
+    updateStatus(`${propertyKey}: ${state.itemPropertyOptionValues[state.itemPropertyOptionIndex]}`);
+    audio.sfxUiBlip();
+    return;
+  }
+
+  if (code === 'Enter') {
+    const selectedValue = state.itemPropertyOptionValues[state.itemPropertyOptionIndex];
+    signaling.send({ type: 'item_update', itemId, params: { [propertyKey]: selectedValue } });
+    state.mode = 'itemProperties';
+    state.editingPropertyKey = null;
+    state.itemPropertyOptionValues = [];
+    state.itemPropertyOptionIndex = 0;
+    return;
+  }
+
+  if (code === 'Escape') {
+    state.mode = 'itemProperties';
+    state.editingPropertyKey = null;
+    state.itemPropertyOptionValues = [];
+    state.itemPropertyOptionIndex = 0;
+    updateStatus('Cancelled.');
+    audio.sfxUiCancel();
+  }
+}
+
 function handleNicknameModeInput(code: string, key: string): void {
   if (code === 'Enter') {
     const clean = sanitizeName(state.nicknameInput);
@@ -1778,6 +1870,8 @@ function setupInputHandlers(): void {
       handleItemPropertiesModeInput(code);
     } else if (state.mode === 'itemPropertyEdit') {
       handleItemPropertyEditModeInput(code, event.key);
+    } else if (state.mode === 'itemPropertyOptionSelect') {
+      handleItemPropertyOptionSelectModeInput(code);
     } else {
       handleNormalModeInput(code, event.shiftKey);
     }

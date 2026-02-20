@@ -31,7 +31,8 @@ export type GameMode =
   | 'addItem'
   | 'selectItem'
   | 'itemProperties'
-  | 'itemPropertyEdit';
+  | 'itemPropertyEdit'
+  | 'itemPropertyOptionSelect';
 
 export type Player = {
   id: string | null;
@@ -66,6 +67,8 @@ export type GameState = {
   itemPropertyKeys: string[];
   itemPropertyIndex: number;
   editingPropertyKey: string | null;
+  itemPropertyOptionValues: string[];
+  itemPropertyOptionIndex: number;
   addItemTypeIndex: number;
   isMuted: boolean;
   player: Player;
@@ -93,6 +96,8 @@ export function createInitialState(): GameState {
     itemPropertyKeys: [],
     itemPropertyIndex: 0,
     editingPropertyKey: null,
+    itemPropertyOptionValues: [],
+    itemPropertyOptionIndex: 0,
     addItemTypeIndex: 0,
     isMuted: false,
     player: {
