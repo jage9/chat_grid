@@ -1751,7 +1751,7 @@ function handleItemPropertyOptionSelectModeInput(code: string): void {
       code === 'ArrowDown'
         ? (state.itemPropertyOptionIndex + 1) % state.itemPropertyOptionValues.length
         : (state.itemPropertyOptionIndex - 1 + state.itemPropertyOptionValues.length) % state.itemPropertyOptionValues.length;
-    updateStatus(`${propertyKey}: ${state.itemPropertyOptionValues[state.itemPropertyOptionIndex]}`);
+    updateStatus(state.itemPropertyOptionValues[state.itemPropertyOptionIndex]);
     audio.sfxUiBlip();
     return;
   }
