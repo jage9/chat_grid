@@ -19,7 +19,7 @@ ITEM_DEFINITIONS: dict[ItemType, ItemDefinition] = {
         default_title="radio",
         capabilities=("editable", "carryable", "deletable"),
         use_sound=None,
-        default_params={"streamUrl": "", "enabled": True, "volume": 50},
+        default_params={"streamUrl": "", "enabled": True, "volume": 50, "effect": "off", "effectValue": 50},
     ),
     "dice": ItemDefinition(
         default_title="Dice",

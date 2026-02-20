@@ -1,4 +1,12 @@
 import { HEARING_RADIUS } from '../state/gameState';
+import {
+  EFFECT_SEQUENCE,
+  clampEffectLevel,
+  connectEffectChain,
+  disconnectEffectRuntime,
+  type EffectId,
+  type EffectRuntime,
+} from './effects';
 
 export type SpatialPeerRuntime = {
   nickname: string;
@@ -18,19 +26,7 @@ type SoundSpec = {
   delay?: number;
 };
 
-type EffectId = 'reverb' | 'echo' | 'flanger' | 'high_pass' | 'low_pass' | 'off';
 type OutputMode = 'stereo' | 'mono';
-
-type EffectPreset = { id: EffectId; label: string; defaultValue: number };
-
-const EFFECT_SEQUENCE: EffectPreset[] = [
-  { id: 'reverb', label: 'Reverb', defaultValue: 50 },
-  { id: 'echo', label: 'Echo', defaultValue: 50 },
-  { id: 'flanger', label: 'Flanger', defaultValue: 50 },
-  { id: 'high_pass', label: 'High Pass', defaultValue: 50 },
-  { id: 'low_pass', label: 'Low Pass', defaultValue: 50 },
-  { id: 'off', label: 'Off', defaultValue: 0 },
-];
 
 export class AudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -41,9 +37,7 @@ export class AudioEngine {
   private outboundSource: MediaStreamAudioSourceNode | null = null;
   private outboundInputGain: GainNode | null = null;
   private outboundDestination: MediaStreamAudioDestinationNode | null = null;
-  private outboundEffectNodes: AudioNode[] = [];
-  private flangerLfo: OscillatorNode | null = null;
-  private flangerLfoGain: GainNode | null = null;
+  private outboundEffectRuntime: EffectRuntime | null = null;
   private outputMode: OutputMode = 'stereo';
   private effectIndex = EFFECT_SEQUENCE.findIndex((effect) => effect.id === 'off');
   private readonly effectValues: Record<EffectId, number> = {
@@ -315,140 +309,22 @@ export class AudioEngine {
       return;
     }
 
-    this.cleanupEffectNodes();
+    disconnectEffectRuntime(this.outboundEffectRuntime);
+    this.outboundEffectRuntime = null;
     this.outboundInputGain.disconnect();
 
     const effect = EFFECT_SEQUENCE[this.effectIndex].id;
-    const effectMix = this.effectValues[effect] / 100;
-
-    if (effect === 'off') {
-      this.outboundInputGain.connect(this.outboundDestination);
-      return;
-    }
-
-    if (effect === 'high_pass' || effect === 'low_pass') {
-      const filter = this.audioCtx.createBiquadFilter();
-      filter.type = effect === 'high_pass' ? 'highpass' : 'lowpass';
-      if (effect === 'high_pass') {
-        filter.frequency.value = 120 + effectMix * 7000;
-      } else {
-        filter.frequency.value = 7800 - effectMix * 7600;
-      }
-      filter.Q.value = 0.7 + effectMix * 8;
-      this.outboundInputGain.connect(filter);
-      filter.connect(this.outboundDestination);
-      this.outboundEffectNodes.push(filter);
-      return;
-    }
-
-    if (effect === 'echo') {
-      const delay = this.audioCtx.createDelay(1);
-      delay.delayTime.value = 0.04 + effectMix * 0.76;
-      const feedback = this.audioCtx.createGain();
-      feedback.gain.value = 0.04 + effectMix * 0.88;
-      const wetGain = this.audioCtx.createGain();
-      wetGain.gain.value = 0.08 + effectMix * 0.92;
-      const dryGain = this.audioCtx.createGain();
-      dryGain.gain.value = 1 - effectMix * 0.85;
-
-      this.outboundInputGain.connect(dryGain);
-      dryGain.connect(this.outboundDestination);
-      this.outboundInputGain.connect(delay);
-      delay.connect(wetGain);
-      wetGain.connect(this.outboundDestination);
-      delay.connect(feedback);
-      feedback.connect(delay);
-
-      this.outboundEffectNodes.push(delay, feedback, wetGain, dryGain);
-      return;
-    }
-
-    if (effect === 'reverb') {
-      const convolver = this.audioCtx.createConvolver();
-      convolver.buffer = this.createImpulseResponse(0.4 + effectMix * 4.2, 1 + effectMix * 3.6);
-      const wetGain = this.audioCtx.createGain();
-      wetGain.gain.value = 0.06 + effectMix * 0.94;
-      const dryGain = this.audioCtx.createGain();
-      dryGain.gain.value = 1 - effectMix * 0.8;
-
-      this.outboundInputGain.connect(dryGain);
-      dryGain.connect(this.outboundDestination);
-      this.outboundInputGain.connect(convolver);
-      convolver.connect(wetGain);
-      wetGain.connect(this.outboundDestination);
-
-      this.outboundEffectNodes.push(convolver, wetGain, dryGain);
-      return;
-    }
-
-    const delay = this.audioCtx.createDelay(0.05);
-    delay.delayTime.value = 0.0005 + effectMix * 0.012;
-    const feedback = this.audioCtx.createGain();
-    feedback.gain.value = 0.04 + effectMix * 0.9;
-    const wetGain = this.audioCtx.createGain();
-    wetGain.gain.value = 0.05 + effectMix * 0.95;
-    const dryGain = this.audioCtx.createGain();
-    dryGain.gain.value = 1 - effectMix * 0.82;
-
-    const lfo = this.audioCtx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 0.05 + effectMix * 1.8;
-    const lfoGain = this.audioCtx.createGain();
-    lfoGain.gain.value = 0.0002 + effectMix * 0.015;
-
-    lfo.connect(lfoGain);
-    lfoGain.connect(delay.delayTime);
-    lfo.start();
-
-    this.outboundInputGain.connect(dryGain);
-    dryGain.connect(this.outboundDestination);
-    this.outboundInputGain.connect(delay);
-    delay.connect(wetGain);
-    wetGain.connect(this.outboundDestination);
-    delay.connect(feedback);
-    feedback.connect(delay);
-
-    this.flangerLfo = lfo;
-    this.flangerLfoGain = lfoGain;
-    this.outboundEffectNodes.push(delay, feedback, wetGain, lfoGain, dryGain);
-  }
-
-  private cleanupEffectNodes(): void {
-    for (const node of this.outboundEffectNodes) {
-      node.disconnect();
-    }
-    this.outboundEffectNodes = [];
-
-    if (this.flangerLfo) {
-      this.flangerLfo.stop();
-      this.flangerLfo.disconnect();
-      this.flangerLfo = null;
-    }
-    if (this.flangerLfoGain) {
-      this.flangerLfoGain.disconnect();
-      this.flangerLfoGain = null;
-    }
-  }
-
-  private createImpulseResponse(duration: number, decay: number): AudioBuffer {
-    if (!this.audioCtx) {
-      throw new Error('Audio context not initialized');
-    }
-    const length = Math.floor(this.audioCtx.sampleRate * duration);
-    const impulse = this.audioCtx.createBuffer(2, length, this.audioCtx.sampleRate);
-    for (let channel = 0; channel < impulse.numberOfChannels; channel += 1) {
-      const data = impulse.getChannelData(channel);
-      for (let i = 0; i < length; i += 1) {
-        const noise = Math.random() * 2 - 1;
-        data[i] = noise * Math.pow(1 - i / length, decay);
-      }
-    }
-    return impulse;
+    this.outboundEffectRuntime = connectEffectChain(
+      this.audioCtx,
+      this.outboundInputGain,
+      this.outboundDestination,
+      effect,
+      this.effectValues[effect],
+    );
   }
 
   private clampLevel(value: number): number {
-    const clamped = Math.max(0, Math.min(100, value));
-    return Math.round(clamped / 5) * 5;
+    return clampEffectLevel(value);
   }
 
   private playSound(spec: SoundSpec): void {

@@ -47,6 +47,7 @@ from .models import (
 LOGGER = logging.getLogger("chgrid.server")
 PACKET_LOGGER = logging.getLogger("chgrid.server.packet")
 CLIENT_PACKET_ADAPTER = TypeAdapter(ClientPacket)
+RADIO_EFFECT_IDS = {"reverb", "echo", "flanger", "high_pass", "low_pass", "off"}
 
 
 class SignalingServer:
@@ -491,6 +492,30 @@ class SignalingServer:
                         )
                         return
                     next_params["volume"] = volume
+
+                    effect = str(next_params.get("effect", "off")).strip().lower()
+                    if effect not in RADIO_EFFECT_IDS:
+                        await self._send_item_result(
+                            client,
+                            False,
+                            "update",
+                            "effect must be one of reverb, echo, flanger, high_pass, low_pass, off.",
+                            item.id,
+                        )
+                        return
+                    next_params["effect"] = effect
+
+                    try:
+                        effect_value = int(next_params.get("effectValue", 50))
+                    except (TypeError, ValueError):
+                        await self._send_item_result(client, False, "update", "effectValue must be a number.", item.id)
+                        return
+                    if not (0 <= effect_value <= 100):
+                        await self._send_item_result(
+                            client, False, "update", "effectValue must be between 0 and 100.", item.id
+                        )
+                        return
+                    next_params["effectValue"] = round(effect_value / 5) * 5
                 item.params = next_params
             item.updatedAt = self.item_service.now_ms()
             item.version += 1

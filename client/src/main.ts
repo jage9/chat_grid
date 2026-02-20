@@ -1,5 +1,14 @@
 import './styles.css';
 import { AudioEngine } from './audio/audioEngine';
+import {
+  EFFECT_IDS,
+  EFFECT_SEQUENCE,
+  clampEffectLevel,
+  connectEffectChain,
+  disconnectEffectRuntime,
+  type EffectId,
+  type EffectRuntime,
+} from './audio/effects';
 import { applyTextInput } from './input/textInput';
 import { type IncomingMessage, type OutgoingMessage } from './network/protocol';
 import { SignalingClient } from './network/signalingClient';
@@ -112,6 +121,10 @@ type SharedRadioSource = {
 };
 type ItemRadioOutput = {
   streamUrl: string;
+  effectInput: GainNode;
+  effectRuntime: EffectRuntime | null;
+  effect: EffectId;
+  effectValue: number;
   gain: GainNode;
   panner: StereoPannerNode | null;
 };
@@ -317,7 +330,7 @@ function beginItemProperties(item: WorldItem): void {
   state.mode = 'itemProperties';
   state.itemPropertyKeys = ['title'];
   if (item.type === 'radio_station') {
-    state.itemPropertyKeys.push('streamUrl', 'enabled', 'volume');
+    state.itemPropertyKeys.push('streamUrl', 'enabled', 'volume', 'effect', 'effectValue');
   } else if (item.type === 'dice') {
     state.itemPropertyKeys.push('sides', 'number');
   }
@@ -370,10 +383,41 @@ function getOrCreateSharedRadioSource(streamUrl: string): SharedRadioSource | nu
 function cleanupRadioRuntime(itemId: string): void {
   const output = itemRadioOutputs.get(itemId);
   if (!output) return;
+  output.effectInput.disconnect();
+  disconnectEffectRuntime(output.effectRuntime);
   output.gain.disconnect();
   output.panner?.disconnect();
   itemRadioOutputs.delete(itemId);
   releaseSharedRadioSource(output.streamUrl);
+}
+
+function normalizeRadioEffect(effect: unknown): EffectId {
+  if (typeof effect !== 'string') return 'off';
+  const normalized = effect.trim().toLowerCase() as EffectId;
+  return EFFECT_IDS.has(normalized) ? normalized : 'off';
+}
+
+function normalizeRadioEffectValue(effectValue: unknown): number {
+  if (typeof effectValue !== 'number' || !Number.isFinite(effectValue)) {
+    return 50;
+  }
+  return clampEffectLevel(effectValue);
+}
+
+function applyRadioEffect(
+  output: ItemRadioOutput,
+  audioCtx: AudioContext,
+  effect: EffectId,
+  effectValue: number,
+): void {
+  if (output.effect === effect && output.effectValue === effectValue) {
+    return;
+  }
+  output.effectInput.disconnect();
+  disconnectEffectRuntime(output.effectRuntime);
+  output.effectRuntime = connectEffectChain(audioCtx, output.effectInput, output.gain, effect, effectValue);
+  output.effect = effect;
+  output.effectValue = effectValue;
 }
 
 function cleanupAllRadioRuntimes(): void {
@@ -405,7 +449,11 @@ async function ensureRadioRuntime(item: WorldItem): Promise<void> {
 
   const gain = audioCtx.createGain();
   gain.gain.value = 0;
-  shared.source.connect(gain);
+  const effectInput = audioCtx.createGain();
+  shared.source.connect(effectInput);
+  const effect = normalizeRadioEffect(item.params.effect);
+  const effectValue = normalizeRadioEffectValue(item.params.effectValue);
+  const effectRuntime = connectEffectChain(audioCtx, effectInput, gain, effect, effectValue);
   let panner: StereoPannerNode | null = null;
   if (audio.supportsStereoPanner()) {
     panner = audioCtx.createStereoPanner();
@@ -413,7 +461,7 @@ async function ensureRadioRuntime(item: WorldItem): Promise<void> {
   } else {
     gain.connect(audioCtx.destination);
   }
-  itemRadioOutputs.set(item.id, { streamUrl, gain, panner });
+  itemRadioOutputs.set(item.id, { streamUrl, effectInput, effectRuntime, effect, effectValue, gain, panner });
 }
 
 async function syncRadioStationPlayback(): Promise<void> {
@@ -443,6 +491,9 @@ function updateRadioStationSpatialAudio(): void {
     const enabled = item.params.enabled !== false;
     const volume = Number(item.params.volume ?? 50);
     const normalizedVolume = Number.isFinite(volume) ? Math.max(0, Math.min(100, volume)) / 100 : 0.5;
+    const effect = normalizeRadioEffect(item.params.effect);
+    const effectValue = normalizeRadioEffectValue(item.params.effectValue);
+    applyRadioEffect(output, audioCtx, effect, effectValue);
     if (!streamUrl || !enabled) {
       output.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
       continue;
@@ -497,6 +548,8 @@ function describeCharacter(ch: string): string {
 function getItemPropertyValue(item: WorldItem, key: string): string {
   if (key === 'title') return item.title;
   if (key === 'enabled') return item.params.enabled === false ? 'off' : 'on';
+  if (key === 'effect') return normalizeRadioEffect(item.params.effect);
+  if (key === 'effectValue') return String(normalizeRadioEffectValue(item.params.effectValue));
   return String(item.params[key] ?? '');
 }
 
@@ -1476,6 +1529,22 @@ function handleItemPropertyEditModeInput(code: string, key: string): void {
         return;
       }
       signaling.send({ type: 'item_update', itemId, params: { volume: parsed } });
+    } else if (propertyKey === 'effect') {
+      const normalized = value.trim().toLowerCase() as EffectId;
+      if (!EFFECT_IDS.has(normalized)) {
+        updateStatus(`effect must be one of: ${EFFECT_SEQUENCE.map((effect) => effect.id).join(', ')}.`);
+        audio.sfxUiCancel();
+        return;
+      }
+      signaling.send({ type: 'item_update', itemId, params: { effect: normalized } });
+    } else if (propertyKey === 'effectValue') {
+      const parsed = Number(value);
+      if (!Number.isInteger(parsed) || parsed < 0 || parsed > 100) {
+        updateStatus('effectValue must be an integer between 0 and 100.');
+        audio.sfxUiCancel();
+        return;
+      }
+      signaling.send({ type: 'item_update', itemId, params: { effectValue: clampEffectLevel(parsed) } });
     } else if (propertyKey === 'sides' || propertyKey === 'number') {
       const parsed = Number(value);
       if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
