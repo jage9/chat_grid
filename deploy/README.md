@@ -128,7 +128,7 @@ Initial clone (one time):
 
 ```bash
 cd /home/bestmidi
-git clone git@github.com:jage9/chat_grid.git chgrid
+git clone https://github.com/jage9/chat_grid.git chgrid
 ```
 
 Update and redeploy:
@@ -136,7 +136,7 @@ Update and redeploy:
 ```bash
 cd /home/bestmidi/chgrid
 git fetch origin
-git checkout main
+git switch main
 git pull --ff-only origin main
 
 # Rebuild/publish web client
@@ -153,3 +153,5 @@ journalctl -u chat-grid.service -n 50 --no-pager
 Notes:
 - Run Apache install/reload steps again only if proxy config changed.
 - If your checkout has local changes, stash or commit before `git pull`.
+- For HTTPS GitHub auth, use your GitHub username plus a Personal Access Token (PAT) as the password.
+- SSH key passphrases are only used for `git@github.com:` remotes, not `https://` remotes.
