@@ -163,6 +163,10 @@ class SignalingServer:
         )
         await self._send(client.websocket, packet)
 
+    async def _broadcast_wheel_result_after_delay(self, message: str, delay_seconds: float = 3.0) -> None:
+        await asyncio.sleep(delay_seconds)
+        await self._broadcast(BroadcastChatMessagePacket(type="chat_message", message=message, system=True))
+
     async def _handle_message(self, client: ClientConnection, raw_message: str) -> None:
         try:
             payload = json.loads(raw_message)
@@ -418,6 +422,7 @@ class SignalingServer:
                     f"{client.nickname} rolled {item.title}: {', '.join(str(value) for value in rolls)} (total {total})."
                 )
                 self_message = f"You rolled {item.title}: {', '.join(str(value) for value in rolls)} (total {total})."
+                delayed_wheel_result: str | None = None
             else:
                 spaces_raw = item.params.get("spaces", "")
                 if isinstance(spaces_raw, str):
@@ -436,8 +441,9 @@ class SignalingServer:
                     )
                     return
                 landed = random.choice(spaces)
-                others_message = f"{client.nickname} spins {item.title} and it lands on {landed}."
+                others_message = f"{client.nickname} spins {item.title}."
                 self_message = others_message
+                delayed_wheel_result = str(landed)
             await self._broadcast(
                 BroadcastChatMessagePacket(type="chat_message", message=others_message, system=True),
                 exclude=client.websocket,
@@ -453,6 +459,8 @@ class SignalingServer:
                     )
                 )
             await self._send_item_result(client, True, "use", self_message, item.id)
+            if delayed_wheel_result is not None:
+                asyncio.create_task(self._broadcast_wheel_result_after_delay(delayed_wheel_result))
             return
 
         if isinstance(packet, ItemUpdatePacket):

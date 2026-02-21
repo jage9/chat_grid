@@ -114,6 +114,7 @@ const SYSTEM_SOUND_URLS = {
   notify: withBase('sounds/notify.ogg'),
 } as const;
 const FOOTSTEP_SOUND_URLS = Array.from({ length: 11 }, (_, index) => withBase(`sounds/step-${index + 1}.ogg`));
+const FOOTSTEP_GAIN = 0.7;
 const WALL_SOUND_URL = withBase('sounds/wall.ogg');
 
 const state = createInitialState();
@@ -805,7 +806,7 @@ function handleMovement(): void {
   state.player.y = nextY;
   persistPlayerPosition();
   state.player.lastMoveTime = now;
-  void audio.playSample(randomFootstepUrl(), 1);
+  void audio.playSample(randomFootstepUrl(), FOOTSTEP_GAIN);
   signaling.send({ type: 'update_position', x: nextX, y: nextY });
 
   const namesOnTile = getPeerNamesAtPosition(nextX, nextY);
@@ -1049,7 +1050,11 @@ async function onMessage(message: IncomingMessage): Promise<void> {
       }
       peerManager.setPeerPosition(message.id, message.x, message.y);
       if (peer) {
-        void audio.playSpatialSample(randomFootstepUrl(), { x: peer.x - state.player.x, y: peer.y - state.player.y }, 1);
+        void audio.playSpatialSample(
+          randomFootstepUrl(),
+          { x: peer.x - state.player.x, y: peer.y - state.player.y },
+          FOOTSTEP_GAIN,
+        );
       }
       break;
     }
@@ -1433,7 +1438,7 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
     return;
   }
 
-  if (code === 'Quote') {
+  if (code === 'Slash' && !shiftKey) {
     state.mode = 'chat';
     state.nicknameInput = '';
     state.cursorPos = 0;
