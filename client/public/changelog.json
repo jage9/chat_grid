@@ -1,16 +1,25 @@
 {
   "sections": [
     {
+      "date": "February 21, 2026",
+      "items": [
+        "Changed the E effect key to open a menu list for choosing effects.",
+        "Moved chat key from apostrophe to slash.",
+        "Added simple first-letter navigation for menus and lists.",
+        "Added Channel property for radio items (stereo, mono, left, right).",
+        "Added new wheel item type with configurable spaces and spin results.",
+        "Added and updated movement/teleport sounds."
+      ]
+    },
+    {
       "date": "February 20, 2026",
       "items": [
-        "Fixed reconnect failure paths so bad saved position or signaling errors do not leave connect stuck, and hardened websocket message parsing.",
-        "Unified voice effects under a shared effect model for users and radio stations, including loopback monitoring.",
-        "Added global item use cooldown support on the server with per-item-type override capability.",
-        "Added Shift+O inspector mode to read all item properties, including global and non-editable values.",
-        "Added paste support for canvas text-entry modes (chat and field editors).",
-        "Expanded character/arrow review announcements to include common punctuation names.",
-        "Persisted player position across refresh/unload so reconnect restores the previous grid location.",
-        "Added the deploy helper script for quick client publish plus service restart workflow."
+        "Added Shift+O inspector mode to read all item properties.",
+        "Added paste support for chat and text-entry fields.",
+        "Expanded punctuation announcements while editing text.",
+        "Persisted player position across refresh/reconnect.",
+        "Added loopback monitoring toggle for hearing your own effect.",
+        "Improved reconnect flow and connection error handling."
       ]
     }
   ]
