@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const itemSchema = z.object({
   id: z.string(),
-  type: z.enum(['radio_station', 'dice']),
+  type: z.enum(['radio_station', 'dice', 'wheel']),
   title: z.string(),
   x: z.number().int(),
   y: z.number().int(),
@@ -129,7 +129,7 @@ export type OutgoingMessage =
   | { type: 'update_nickname'; nickname: string }
   | { type: 'chat_message'; message: string }
   | { type: 'ping'; clientSentAt: number }
-  | { type: 'item_add'; itemType: 'radio_station' | 'dice' }
+  | { type: 'item_add'; itemType: 'radio_station' | 'dice' | 'wheel' }
   | { type: 'item_pickup'; itemId: string }
   | { type: 'item_drop'; itemId: string; x: number; y: number }
   | { type: 'item_delete'; itemId: string }

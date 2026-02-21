@@ -76,11 +76,11 @@ export class CanvasRenderer {
   private drawItem(item: WorldItem): void {
     const drawX = item.x * this.squarePixelSize;
     const drawY = this.canvas.height - (item.y * this.squarePixelSize) - this.squarePixelSize;
-    this.ctx.fillStyle = item.type === 'radio_station' ? '#fbbf24' : '#60a5fa';
+    this.ctx.fillStyle = item.type === 'radio_station' ? '#fbbf24' : item.type === 'wheel' ? '#f97316' : '#60a5fa';
     this.ctx.fillRect(drawX, drawY, this.squarePixelSize, this.squarePixelSize);
     this.ctx.fillStyle = '#111827';
     this.ctx.font = 'bold 12px Courier New';
     this.ctx.textAlign = 'center';
-    this.ctx.fillText(item.type === 'radio_station' ? 'R' : 'D', drawX + this.squarePixelSize / 2, drawY + 13);
+    this.ctx.fillText(item.type === 'radio_station' ? 'R' : item.type === 'wheel' ? 'W' : 'D', drawX + this.squarePixelSize / 2, drawY + 13);
   }
 }

@@ -83,10 +83,11 @@ const APP_VERSION = String(window.CHGRID_WEB_VERSION ?? '').trim();
 dom.appVersion.textContent = APP_VERSION
   ? `Another AI experiment with Jage. Version ${APP_VERSION}`
   : 'Another AI experiment with Jage. Version unknown';
-const ITEM_TYPE_SEQUENCE: ItemType[] = ['radio_station', 'dice'];
+const ITEM_TYPE_SEQUENCE: ItemType[] = ['radio_station', 'dice', 'wheel'];
 const ITEM_TYPE_GLOBAL_PROPERTIES: Record<ItemType, Record<string, string | number | boolean>> = {
   radio_station: { useCooldownMs: 1000 },
   dice: { useCooldownMs: 1000 },
+  wheel: { useCooldownMs: 4000 },
 };
 const EDITABLE_ITEM_PROPERTY_KEYS = new Set([
   'title',
@@ -95,6 +96,7 @@ const EDITABLE_ITEM_PROPERTY_KEYS = new Set([
   'volume',
   'effect',
   'effectValue',
+  'spaces',
   'sides',
   'number',
 ]);
@@ -111,6 +113,8 @@ const SYSTEM_SOUND_URLS = {
   logout: withBase('sounds/logout.ogg'),
   notify: withBase('sounds/notify.ogg'),
 } as const;
+const FOOTSTEP_SOUND_URLS = Array.from({ length: 11 }, (_, index) => withBase(`sounds/step-${index + 1}.ogg`));
+const WALL_SOUND_URL = withBase('sounds/wall.ogg');
 
 const state = createInitialState();
 const renderer = new CanvasRenderer(dom.canvas);
@@ -312,7 +316,8 @@ function getPeerNamesAtPosition(x: number, y: number): string[] {
 }
 
 function itemTypeLabel(type: ItemType): string {
-  return type === 'radio_station' ? 'radio' : type;
+  if (type === 'radio_station') return 'radio';
+  return type;
 }
 
 function itemLabel(item: WorldItem): string {
@@ -348,6 +353,8 @@ function getEditableItemPropertyKeys(item: WorldItem): string[] {
     keys.push('streamUrl', 'enabled', 'volume', 'effect', 'effectValue');
   } else if (item.type === 'dice') {
     keys.push('sides', 'number');
+  } else if (item.type === 'wheel') {
+    keys.push('spaces');
   }
   return keys;
 }
@@ -758,6 +765,10 @@ function persistPlayerPosition(): void {
   }
 }
 
+function randomFootstepUrl(): string {
+  return FOOTSTEP_SOUND_URLS[Math.floor(Math.random() * FOOTSTEP_SOUND_URLS.length)];
+}
+
 function gameLoop(): void {
   if (!state.running) return;
   handleMovement();
@@ -784,13 +795,17 @@ function handleMovement(): void {
 
   const nextX = state.player.x + dx;
   const nextY = state.player.y + dy;
-  if (nextX < 0 || nextY < 0 || nextX >= GRID_SIZE || nextY >= GRID_SIZE) return;
+  if (nextX < 0 || nextY < 0 || nextX >= GRID_SIZE || nextY >= GRID_SIZE) {
+    state.player.lastMoveTime = now;
+    void audio.playSample(WALL_SOUND_URL, 1);
+    return;
+  }
 
   state.player.x = nextX;
   state.player.y = nextY;
   persistPlayerPosition();
   state.player.lastMoveTime = now;
-  audio.sfxMove(state.player);
+  void audio.playSample(randomFootstepUrl(), 1);
   signaling.send({ type: 'update_position', x: nextX, y: nextY });
 
   const namesOnTile = getPeerNamesAtPosition(nextX, nextY);
@@ -1034,7 +1049,7 @@ async function onMessage(message: IncomingMessage): Promise<void> {
       }
       peerManager.setPeerPosition(message.id, message.x, message.y);
       if (peer) {
-        audio.sfxPeerMove({ x: peer.x - state.player.x, y: peer.y - state.player.y });
+        void audio.playSpatialSample(randomFootstepUrl(), { x: peer.x - state.player.x, y: peer.y - state.player.y }, 1);
       }
       break;
     }
@@ -1773,6 +1788,27 @@ function handleItemPropertyEditModeInput(code: string, key: string): void {
         return;
       }
       signaling.send({ type: 'item_update', itemId, params: { effectValue: clampEffectLevel(parsed) } });
+    } else if (propertyKey === 'spaces') {
+      const spaces = value
+        .split(',')
+        .map((token) => token.trim())
+        .filter((token) => token.length > 0);
+      if (spaces.length === 0) {
+        updateStatus('spaces must include at least one comma-delimited value.');
+        audio.sfxUiCancel();
+        return;
+      }
+      if (spaces.length > 100) {
+        updateStatus('spaces supports up to 100 values.');
+        audio.sfxUiCancel();
+        return;
+      }
+      if (spaces.some((token) => token.length > 80)) {
+        updateStatus('each space must be 80 chars or less.');
+        audio.sfxUiCancel();
+        return;
+      }
+      signaling.send({ type: 'item_update', itemId, params: { spaces: spaces.join(', ') } });
     } else if (propertyKey === 'sides' || propertyKey === 'number') {
       const parsed = Number(value);
       if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {

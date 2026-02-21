@@ -388,7 +388,7 @@ class SignalingServer:
             if item.carrierId is None and (item.x != client.x or item.y != client.y):
                 await self._send_item_result(client, False, "use", "Item is not on your square.", item.id)
                 return
-            if item.type != "dice":
+            if item.type not in {"dice", "wheel"}:
                 await self._send_item_result(client, False, "use", "This item cannot be used yet.", item.id)
                 return
             now_ms = self.item_service.now_ms()
@@ -405,18 +405,39 @@ class SignalingServer:
                 )
                 return
             self.item_last_use_ms[item.id] = now_ms
-            try:
-                sides = max(1, min(100, int(item.params.get("sides", 6))))
-                number = max(1, min(100, int(item.params.get("number", 2))))
-            except (TypeError, ValueError):
-                sides = 6
-                number = 2
-            rolls = [random.randint(1, sides) for _ in range(number)]
-            total = sum(rolls)
-            others_message = (
-                f"{client.nickname} rolled {item.title}: {', '.join(str(value) for value in rolls)} (total {total})."
-            )
-            self_message = f"You rolled {item.title}: {', '.join(str(value) for value in rolls)} (total {total})."
+            if item.type == "dice":
+                try:
+                    sides = max(1, min(100, int(item.params.get("sides", 6))))
+                    number = max(1, min(100, int(item.params.get("number", 2))))
+                except (TypeError, ValueError):
+                    sides = 6
+                    number = 2
+                rolls = [random.randint(1, sides) for _ in range(number)]
+                total = sum(rolls)
+                others_message = (
+                    f"{client.nickname} rolled {item.title}: {', '.join(str(value) for value in rolls)} (total {total})."
+                )
+                self_message = f"You rolled {item.title}: {', '.join(str(value) for value in rolls)} (total {total})."
+            else:
+                spaces_raw = item.params.get("spaces", "")
+                if isinstance(spaces_raw, str):
+                    spaces = [token.strip() for token in spaces_raw.split(",") if token.strip()]
+                elif isinstance(spaces_raw, list):
+                    spaces = [str(token).strip() for token in spaces_raw if str(token).strip()]
+                else:
+                    spaces = []
+                if not spaces:
+                    await self._send_item_result(
+                        client,
+                        False,
+                        "use",
+                        "wheel spaces must contain at least one comma-delimited value.",
+                        item.id,
+                    )
+                    return
+                landed = random.choice(spaces)
+                others_message = f"{client.nickname} spins {item.title} and it lands on {landed}."
+                self_message = others_message
             await self._broadcast(
                 BroadcastChatMessagePacket(type="chat_message", message=others_message, system=True),
                 exclude=client.websocket,
@@ -467,6 +488,30 @@ class SignalingServer:
                         return
                     next_params["sides"] = sides
                     next_params["number"] = number
+                if item.type == "wheel":
+                    spaces_raw = next_params.get("spaces", "")
+                    if not isinstance(spaces_raw, str):
+                        await self._send_item_result(
+                            client, False, "update", "spaces must be a comma-delimited string.", item.id
+                        )
+                        return
+                    spaces = [token.strip() for token in spaces_raw.split(",") if token.strip()]
+                    if not spaces:
+                        await self._send_item_result(
+                            client,
+                            False,
+                            "update",
+                            "spaces must include at least one value, separated by commas.",
+                            item.id,
+                        )
+                        return
+                    if len(spaces) > 100:
+                        await self._send_item_result(client, False, "update", "spaces supports up to 100 values.", item.id)
+                        return
+                    if any(len(token) > 80 for token in spaces):
+                        await self._send_item_result(client, False, "update", "each space must be 80 chars or less.", item.id)
+                        return
+                    next_params["spaces"] = ", ".join(spaces)
                 if item.type == "radio_station":
                     stream_url = str(next_params.get("streamUrl", "")).strip()
                     previous_stream_url = str(item.params.get("streamUrl", "")).strip()

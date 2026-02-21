@@ -25,7 +25,7 @@ class ItemService:
     def now_ms() -> int:
         return int(time.time() * 1000)
 
-    def default_item(self, client: ClientConnection, item_type: Literal["radio_station", "dice"]) -> WorldItem:
+    def default_item(self, client: ClientConnection, item_type: Literal["radio_station", "dice", "wheel"]) -> WorldItem:
         item_def = get_item_definition(item_type)
         now = self.now_ms()
         return WorldItem(

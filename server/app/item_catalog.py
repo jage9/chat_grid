@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-ItemType = Literal["radio_station", "dice"]
+ItemType = Literal["radio_station", "dice", "wheel"]
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,13 @@ ITEM_DEFINITIONS: dict[ItemType, ItemDefinition] = {
         capabilities=("editable", "carryable", "deletable", "usable"),
         use_sound="sounds/roll.ogg",
         default_params={"sides": 6, "number": 2},
+    ),
+    "wheel": ItemDefinition(
+        default_title="wheel",
+        capabilities=("editable", "carryable", "deletable", "usable"),
+        use_sound="sounds/spin.ogg",
+        default_params={"spaces": "yes, no"},
+        use_cooldown_ms=4000,
     ),
 }
 

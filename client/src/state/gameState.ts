@@ -1,8 +1,8 @@
 export const GRID_SIZE = 40;
 export const HEARING_RADIUS = 15;
-export const MOVE_COOLDOWN_MS = 100;
+export const MOVE_COOLDOWN_MS = 200;
 
-export type ItemType = 'radio_station' | 'dice';
+export type ItemType = 'radio_station' | 'dice' | 'wheel';
 
 export type WorldItem = {
   id: string;

@@ -226,15 +226,6 @@ export class AudioEngine {
     }
   }
 
-  sfxMove(player: { x: number; y: number }): void {
-    void player;
-    this.playSound({ freq: 165, duration: 0.05, type: 'triangle', gain: 0.13 });
-  }
-
-  sfxPeerMove(peer: { x: number; y: number }): void {
-    this.playSound({ freq: 330, duration: 0.05, type: 'triangle', gain: 0.12, sourcePosition: peer });
-  }
-
   sfxLocate(peer: { x: number; y: number }): void {
     this.playSound({ freq: 880, duration: 0.2, type: 'sine', gain: 0.5, sourcePosition: peer });
   }
