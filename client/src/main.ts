@@ -7,7 +7,17 @@ import {
   type EffectId,
 } from './audio/effects';
 import { RADIO_CHANNEL_OPTIONS, RadioStationRuntime, normalizeRadioChannel, normalizeRadioEffect, normalizeRadioEffectValue } from './audio/radioStationRuntime';
-import { applyTextInput } from './input/textInput';
+import {
+  applyPastedText,
+  applyTextInput,
+  describeBackspaceDeletedCharacter,
+  describeCursorCharacter,
+  describeCursorWordOrCharacter,
+  mapTextInputKey,
+  moveCursorWordLeft,
+  moveCursorWordRight,
+  shouldReplaceCurrentText,
+} from './input/textInput';
 import { type IncomingMessage, type OutgoingMessage } from './network/protocol';
 import { SignalingClient } from './network/signalingClient';
 import { CanvasRenderer } from './render/canvasRenderer';
@@ -512,23 +522,6 @@ function openItemPropertyOptionSelect(item: WorldItem, key: string): void {
   audio.sfxUiBlip();
 }
 
-function shouldReplaceCurrentText(code: string, key: string): boolean {
-  if (!replaceTextOnNextType) return false;
-  if (code === 'ArrowLeft' || code === 'ArrowRight' || code === 'Home' || code === 'End') {
-    replaceTextOnNextType = false;
-    return false;
-  }
-  if (code === 'Backspace' || code === 'Delete') {
-    replaceTextOnNextType = false;
-    return false;
-  }
-  if (key.length === 1) {
-    replaceTextOnNextType = false;
-    return true;
-  }
-  return false;
-}
-
 function textInputMaxLengthForMode(mode: typeof state.mode): number | null {
   if (mode === 'nickname') return NICKNAME_MAX_LENGTH;
   if (mode === 'chat') return 500;
@@ -536,39 +529,16 @@ function textInputMaxLengthForMode(mode: typeof state.mode): number | null {
   return null;
 }
 
-function normalizePastedText(raw: string): string {
-  return raw
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .replace(/\n/g, ' ')
-    .replace(/[\u0000-\u0008\u000B-\u001F\u007F]/g, '');
-}
-
 function pasteIntoActiveTextInput(raw: string): boolean {
   const maxLength = textInputMaxLengthForMode(state.mode);
   if (maxLength === null) {
     return false;
   }
-  const text = normalizePastedText(raw);
-  if (!text) {
-    return true;
-  }
-  if (replaceTextOnNextType) {
-    const replacement = text.slice(0, maxLength);
-    state.nicknameInput = replacement;
-    state.cursorPos = replacement.length;
-    replaceTextOnNextType = false;
-    return true;
-  }
-  const available = Math.max(0, maxLength - state.nicknameInput.length);
-  if (available <= 0) {
-    return true;
-  }
-  const insert = text.slice(0, available);
-  state.nicknameInput =
-    state.nicknameInput.slice(0, state.cursorPos) + insert + state.nicknameInput.slice(state.cursorPos);
-  state.cursorPos += insert.length;
-  replaceTextOnNextType = false;
+  const result = applyPastedText(raw, state.nicknameInput, state.cursorPos, maxLength, replaceTextOnNextType);
+  if (!result.handled) return false;
+  state.nicknameInput = result.newString;
+  state.cursorPos = result.newCursorPos;
+  replaceTextOnNextType = result.replaceTextOnNextType;
   return true;
 }
 
@@ -591,58 +561,6 @@ function isTextEditingMode(mode: typeof state.mode): boolean {
   return mode === 'nickname' || mode === 'chat' || mode === 'itemPropertyEdit';
 }
 
-function mapTextInputKey(code: string, key: string): string {
-  if (code === 'ArrowLeft') return 'arrowleft';
-  if (code === 'ArrowRight') return 'arrowright';
-  if (code === 'Backspace') return 'backspace';
-  if (code === 'Home') return 'home';
-  if (code === 'End') return 'end';
-  return key;
-}
-
-function isWordCharacter(ch: string): boolean {
-  return /[A-Za-z0-9_]/.test(ch);
-}
-
-function moveCursorWordLeft(text: string, cursorPos: number): number {
-  if (cursorPos <= 0) return 0;
-  let pos = cursorPos - 1;
-  while (pos > 0 && !isWordCharacter(text[pos])) pos -= 1;
-  while (pos > 0 && isWordCharacter(text[pos - 1])) pos -= 1;
-  return pos;
-}
-
-function moveCursorWordRight(text: string, cursorPos: number): number {
-  let pos = cursorPos;
-  while (pos < text.length && isWordCharacter(text[pos])) pos += 1;
-  while (pos < text.length && !isWordCharacter(text[pos])) pos += 1;
-  return pos;
-}
-
-function wordAtCursor(text: string, cursorPos: number): string | null {
-  if (cursorPos < 0 || cursorPos >= text.length || !isWordCharacter(text[cursorPos])) {
-    return null;
-  }
-  let start = cursorPos;
-  while (start > 0 && isWordCharacter(text[start - 1])) start -= 1;
-  let end = cursorPos + 1;
-  while (end < text.length && isWordCharacter(text[end])) end += 1;
-  return text.slice(start, end);
-}
-
-function announceCursorWordOrCharacter(text: string, cursorPos: number): void {
-  if (cursorPos === text.length) {
-    updateStatus('space');
-    return;
-  }
-  const word = wordAtCursor(text, cursorPos);
-  if (word) {
-    updateStatus(word);
-    return;
-  }
-  announceCursorCharacter(text, cursorPos);
-}
-
 function applyTextInputEdit(code: string, key: string, maxLength: number, ctrlKey = false, allowReplaceOnNextType = false): void {
   if (ctrlKey && code === 'KeyA') {
     replaceTextOnNextType = true;
@@ -652,12 +570,14 @@ function applyTextInputEdit(code: string, key: string, maxLength: number, ctrlKe
   }
   if (ctrlKey && code === 'ArrowLeft') {
     state.cursorPos = moveCursorWordLeft(state.nicknameInput, state.cursorPos);
-    announceCursorWordOrCharacter(state.nicknameInput, state.cursorPos);
+    const spoken = describeCursorWordOrCharacter(state.nicknameInput, state.cursorPos);
+    if (spoken) updateStatus(spoken);
     return;
   }
   if (ctrlKey && code === 'ArrowRight') {
     state.cursorPos = moveCursorWordRight(state.nicknameInput, state.cursorPos);
-    announceCursorWordOrCharacter(state.nicknameInput, state.cursorPos);
+    const spoken = describeCursorWordOrCharacter(state.nicknameInput, state.cursorPos);
+    if (spoken) updateStatus(spoken);
     return;
   }
 
@@ -665,7 +585,9 @@ function applyTextInputEdit(code: string, key: string, maxLength: number, ctrlKe
   const beforeCursor = state.cursorPos;
   const mappedKey = mapTextInputKey(code, key);
 
-  if (allowReplaceOnNextType && shouldReplaceCurrentText(code, key)) {
+  const replaceDecision = shouldReplaceCurrentText(code, key, replaceTextOnNextType);
+  replaceTextOnNextType = replaceDecision.replaceTextOnNextType;
+  if (allowReplaceOnNextType && replaceDecision.shouldReplace) {
     state.nicknameInput = key;
     state.cursorPos = key.length;
     return;
@@ -675,49 +597,13 @@ function applyTextInputEdit(code: string, key: string, maxLength: number, ctrlKe
   state.nicknameInput = result.newString;
   state.cursorPos = result.newCursorPos;
   if (code === 'Backspace') {
-    announceBackspaceDeletedCharacter(beforeText, beforeCursor);
+    const spoken = describeBackspaceDeletedCharacter(beforeText, beforeCursor);
+    if (spoken) updateStatus(spoken);
   }
   if (code === 'ArrowLeft' || code === 'ArrowRight' || code === 'Home' || code === 'End') {
-    announceCursorCharacter(state.nicknameInput, state.cursorPos);
+    const spoken = describeCursorCharacter(state.nicknameInput, state.cursorPos);
+    if (spoken) updateStatus(spoken);
   }
-}
-
-function describeCharacter(ch: string): string {
-  if (ch === ' ') return 'space';
-  if (ch === '\t') return 'tab';
-  if (ch === '.') return 'period';
-  if (ch === ',') return 'comma';
-  if (ch === ':') return 'colon';
-  if (ch === ';') return 'semicolon';
-  if (ch === '!') return 'exclamation mark';
-  if (ch === '?') return 'question mark';
-  if (ch === "'") return 'apostrophe';
-  if (ch === '"') return 'quote';
-  if (ch === '/') return 'slash';
-  if (ch === '\\') return 'backslash';
-  if (ch === '-') return 'dash';
-  if (ch === '_') return 'underscore';
-  if (ch === '=') return 'equals';
-  if (ch === '+') return 'plus';
-  if (ch === '*') return 'asterisk';
-  if (ch === '&') return 'ampersand';
-  if (ch === '@') return 'at sign';
-  if (ch === '#') return 'hash';
-  if (ch === '%') return 'percent';
-  if (ch === '$') return 'dollar sign';
-  if (ch === '^') return 'caret';
-  if (ch === '|') return 'pipe';
-  if (ch === '~') return 'tilde';
-  if (ch === '`') return 'backtick';
-  if (ch === '(') return 'left parenthesis';
-  if (ch === ')') return 'right parenthesis';
-  if (ch === '[') return 'left bracket';
-  if (ch === ']') return 'right bracket';
-  if (ch === '{') return 'left brace';
-  if (ch === '}') return 'right brace';
-  if (ch === '<') return 'less than';
-  if (ch === '>') return 'greater than';
-  return ch;
 }
 
 function getItemPropertyValue(item: WorldItem, key: string): string {
@@ -739,22 +625,6 @@ function getItemPropertyValue(item: WorldItem, key: string): string {
   const globalValue = ITEM_TYPE_GLOBAL_PROPERTIES[item.type]?.[key];
   if (globalValue !== undefined) return String(globalValue);
   return String(item.params[key] ?? '');
-}
-
-function announceCursorCharacter(text: string, cursorPos: number): void {
-  if (cursorPos < 0 || cursorPos > text.length) {
-    return;
-  }
-  if (cursorPos === text.length) {
-    updateStatus('space');
-    return;
-  }
-  updateStatus(describeCharacter(text[cursorPos]));
-}
-
-function announceBackspaceDeletedCharacter(text: string, cursorPos: number): void {
-  if (cursorPos <= 0 || cursorPos > text.length) return;
-  updateStatus(describeCharacter(text[cursorPos - 1]));
 }
 
 function squareWord(distance: number): string {
