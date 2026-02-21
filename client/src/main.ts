@@ -1513,7 +1513,7 @@ function handleChatModeInput(code: string, key: string): void {
   applyTextInputEdit(code, key, 500);
 }
 
-function handleListModeInput(code: string): void {
+function handleListModeInput(code: string, key: string): void {
   if (state.sortedPeerIds.length === 0) {
     state.mode = 'normal';
     return;
@@ -1530,6 +1530,23 @@ function handleListModeInput(code: string): void {
     updateStatus(
       `${peer.nickname}, ${distance} ${squareWord(distance)} ${getDirection(state.player.x, state.player.y, peer.x, peer.y)}, ${peer.x}, ${peer.y}`,
     );
+    return;
+  }
+  const nextByInitial = findNextIndexByInitial(
+    state.sortedPeerIds,
+    state.listIndex,
+    key,
+    (peerId) => state.peers.get(peerId)?.nickname ?? '',
+  );
+  if (nextByInitial >= 0) {
+    state.listIndex = nextByInitial;
+    const peer = state.peers.get(state.sortedPeerIds[state.listIndex]);
+    if (!peer) return;
+    const distance = Math.round(Math.hypot(peer.x - state.player.x, peer.y - state.player.y));
+    updateStatus(
+      `${peer.nickname}, ${distance} ${squareWord(distance)} ${getDirection(state.player.x, state.player.y, peer.x, peer.y)}, ${peer.x}, ${peer.y}`,
+    );
+    audio.sfxUiBlip();
     return;
   }
 
@@ -1553,7 +1570,7 @@ function handleListModeInput(code: string): void {
   }
 }
 
-function handleListItemsModeInput(code: string): void {
+function handleListItemsModeInput(code: string, key: string): void {
   if (state.sortedItemIds.length === 0) {
     state.mode = 'normal';
     return;
@@ -1569,6 +1586,26 @@ function handleListItemsModeInput(code: string): void {
     updateStatus(
       `${itemLabel(item)}, ${distance} ${squareWord(distance)} ${getDirection(state.player.x, state.player.y, item.x, item.y)}, ${item.x}, ${item.y}`,
     );
+    return;
+  }
+  const nextByInitial = findNextIndexByInitial(
+    state.sortedItemIds,
+    state.itemListIndex,
+    key,
+    (itemId) => {
+      const item = state.items.get(itemId);
+      return item ? itemLabel(item) : '';
+    },
+  );
+  if (nextByInitial >= 0) {
+    state.itemListIndex = nextByInitial;
+    const item = state.items.get(state.sortedItemIds[state.itemListIndex]);
+    if (!item) return;
+    const distance = Math.round(Math.hypot(item.x - state.player.x, item.y - state.player.y));
+    updateStatus(
+      `${itemLabel(item)}, ${distance} ${squareWord(distance)} ${getDirection(state.player.x, state.player.y, item.x, item.y)}, ${item.x}, ${item.y}`,
+    );
+    audio.sfxUiBlip();
     return;
   }
   if (code === 'Enter') {
@@ -1590,12 +1627,24 @@ function handleListItemsModeInput(code: string): void {
   }
 }
 
-function handleAddItemModeInput(code: string): void {
+function handleAddItemModeInput(code: string, key: string): void {
   if (code === 'ArrowDown' || code === 'ArrowUp') {
     state.addItemTypeIndex =
       code === 'ArrowDown'
         ? (state.addItemTypeIndex + 1) % ITEM_TYPE_SEQUENCE.length
         : (state.addItemTypeIndex - 1 + ITEM_TYPE_SEQUENCE.length) % ITEM_TYPE_SEQUENCE.length;
+    updateStatus(`${itemTypeLabel(ITEM_TYPE_SEQUENCE[state.addItemTypeIndex])}.`);
+    audio.sfxUiBlip();
+    return;
+  }
+  const nextByInitial = findNextIndexByInitial(
+    ITEM_TYPE_SEQUENCE,
+    state.addItemTypeIndex,
+    key,
+    (itemType) => itemTypeLabel(itemType),
+  );
+  if (nextByInitial >= 0) {
+    state.addItemTypeIndex = nextByInitial;
     updateStatus(`${itemTypeLabel(ITEM_TYPE_SEQUENCE[state.addItemTypeIndex])}.`);
     audio.sfxUiBlip();
     return;
@@ -1612,7 +1661,7 @@ function handleAddItemModeInput(code: string): void {
   }
 }
 
-function handleSelectItemModeInput(code: string): void {
+function handleSelectItemModeInput(code: string, key: string): void {
   if (state.selectedItemIds.length === 0) {
     state.mode = 'normal';
     state.selectionContext = null;
@@ -1623,6 +1672,24 @@ function handleSelectItemModeInput(code: string): void {
       code === 'ArrowDown'
         ? (state.selectedItemIndex + 1) % state.selectedItemIds.length
         : (state.selectedItemIndex - 1 + state.selectedItemIds.length) % state.selectedItemIds.length;
+    const current = state.items.get(state.selectedItemIds[state.selectedItemIndex]);
+    if (current) {
+      updateStatus(itemLabel(current));
+      audio.sfxUiBlip();
+    }
+    return;
+  }
+  const nextByInitial = findNextIndexByInitial(
+    state.selectedItemIds,
+    state.selectedItemIndex,
+    key,
+    (itemId) => {
+      const item = state.items.get(itemId);
+      return item ? itemLabel(item) : '';
+    },
+  );
+  if (nextByInitial >= 0) {
+    state.selectedItemIndex = nextByInitial;
     const current = state.items.get(state.selectedItemIds[state.selectedItemIndex]);
     if (current) {
       updateStatus(itemLabel(current));
@@ -1670,7 +1737,7 @@ function handleSelectItemModeInput(code: string): void {
   }
 }
 
-function handleItemPropertiesModeInput(code: string): void {
+function handleItemPropertiesModeInput(code: string, key: string): void {
   const itemId = state.selectedItemId;
   if (!itemId) {
     state.mode = 'normal';
@@ -1697,6 +1764,20 @@ function handleItemPropertiesModeInput(code: string): void {
     const key = state.itemPropertyKeys[state.itemPropertyIndex];
     const value = getItemPropertyValue(item, key);
     updateStatus(`${key}: ${value}`);
+    audio.sfxUiBlip();
+    return;
+  }
+  const nextByInitial = findNextIndexByInitial(
+    state.itemPropertyKeys,
+    state.itemPropertyIndex,
+    key,
+    (propertyKey) => propertyKey,
+  );
+  if (nextByInitial >= 0) {
+    state.itemPropertyIndex = nextByInitial;
+    const selectedKey = state.itemPropertyKeys[state.itemPropertyIndex];
+    const value = getItemPropertyValue(item, selectedKey);
+    updateStatus(`${selectedKey}: ${value}`);
     audio.sfxUiBlip();
     return;
   }
@@ -1844,7 +1925,7 @@ function handleItemPropertyEditModeInput(code: string, key: string): void {
   applyTextInputEdit(code, key, 500, true);
 }
 
-function handleItemPropertyOptionSelectModeInput(code: string): void {
+function handleItemPropertyOptionSelectModeInput(code: string, key: string): void {
   const itemId = state.selectedItemId;
   const propertyKey = state.editingPropertyKey;
   if (!itemId || !propertyKey || state.itemPropertyOptionValues.length === 0) {
@@ -1860,6 +1941,18 @@ function handleItemPropertyOptionSelectModeInput(code: string): void {
       code === 'ArrowDown'
         ? (state.itemPropertyOptionIndex + 1) % state.itemPropertyOptionValues.length
         : (state.itemPropertyOptionIndex - 1 + state.itemPropertyOptionValues.length) % state.itemPropertyOptionValues.length;
+    updateStatus(state.itemPropertyOptionValues[state.itemPropertyOptionIndex]);
+    audio.sfxUiBlip();
+    return;
+  }
+  const nextByInitial = findNextIndexByInitial(
+    state.itemPropertyOptionValues,
+    state.itemPropertyOptionIndex,
+    key,
+    (value) => value,
+  );
+  if (nextByInitial >= 0) {
+    state.itemPropertyOptionIndex = nextByInitial;
     updateStatus(state.itemPropertyOptionValues[state.itemPropertyOptionIndex]);
     audio.sfxUiBlip();
     return;
@@ -1916,6 +2009,26 @@ function isTypingKey(code: string): boolean {
   return code.startsWith('Key') || code === 'Space';
 }
 
+function findNextIndexByInitial<T>(
+  entries: readonly T[],
+  currentIndex: number,
+  key: string,
+  labelFor: (entry: T) => string,
+): number {
+  if (entries.length === 0 || key.length !== 1 || !/[a-z]/i.test(key)) {
+    return -1;
+  }
+  const target = key.toLowerCase();
+  for (let step = 1; step <= entries.length; step += 1) {
+    const candidateIndex = (currentIndex + step) % entries.length;
+    const label = labelFor(entries[candidateIndex]).trim().toLowerCase();
+    if (label.startsWith(target)) {
+      return candidateIndex;
+    }
+  }
+  return -1;
+}
+
 function setupInputHandlers(): void {
   document.addEventListener('keydown', (event) => {
     const code = event.code;
@@ -1940,19 +2053,19 @@ function setupInputHandlers(): void {
     } else if (state.mode === 'chat') {
       handleChatModeInput(code, event.key);
     } else if (state.mode === 'listUsers') {
-      handleListModeInput(code);
+      handleListModeInput(code, event.key);
     } else if (state.mode === 'listItems') {
-      handleListItemsModeInput(code);
+      handleListItemsModeInput(code, event.key);
     } else if (state.mode === 'addItem') {
-      handleAddItemModeInput(code);
+      handleAddItemModeInput(code, event.key);
     } else if (state.mode === 'selectItem') {
-      handleSelectItemModeInput(code);
+      handleSelectItemModeInput(code, event.key);
     } else if (state.mode === 'itemProperties') {
-      handleItemPropertiesModeInput(code);
+      handleItemPropertiesModeInput(code, event.key);
     } else if (state.mode === 'itemPropertyEdit') {
       handleItemPropertyEditModeInput(code, event.key);
     } else if (state.mode === 'itemPropertyOptionSelect') {
-      handleItemPropertyOptionSelectModeInput(code);
+      handleItemPropertyOptionSelectModeInput(code, event.key);
     } else {
       handleNormalModeInput(code, event.shiftKey);
     }
