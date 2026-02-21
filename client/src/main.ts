@@ -685,7 +685,6 @@ function updateRadioStationSpatialAudio(): void {
     const normalizedVolume = Number.isFinite(volume) ? Math.max(0, Math.min(100, volume)) / 100 : 0.5;
     const effect = normalizeRadioEffect(item.params.effect);
     const effectValue = normalizeRadioEffectValue(item.params.effectValue);
-    const channel = normalizeRadioChannel(item.params.channel);
     applyRadioEffect(output, audioCtx, effect, effectValue);
     if (!streamUrl || !enabled) {
       output.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
@@ -704,10 +703,7 @@ function updateRadioStationSpatialAudio(): void {
     }
     output.gain.gain.linearRampToValueAtTime(gainValue * normalizedVolume, audioCtx.currentTime + 0.1);
     if (output.panner) {
-      let resolvedPan = Math.max(-1, Math.min(1, panValue));
-      if (channel !== 'stereo') {
-        resolvedPan = 0;
-      }
+      const resolvedPan = Math.max(-1, Math.min(1, panValue));
       output.panner.pan.linearRampToValueAtTime(resolvedPan, audioCtx.currentTime + 0.1);
     }
   }
