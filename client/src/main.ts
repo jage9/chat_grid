@@ -115,7 +115,7 @@ const SYSTEM_SOUND_URLS = {
 } as const;
 const FOOTSTEP_SOUND_URLS = Array.from({ length: 11 }, (_, index) => withBase(`sounds/step-${index + 1}.ogg`));
 const FOOTSTEP_GAIN = 0.7;
-const TELEPORT_SOUND_URL = withBase('sounds/step-1.ogg');
+const TELEPORT_SOUND_URL = withBase('sounds/teleport.ogg');
 const WALL_SOUND_URL = withBase('sounds/wall.ogg');
 
 const state = createInitialState();
