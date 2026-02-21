@@ -98,7 +98,7 @@ export function mapTextInputKey(code: string, key: string): string {
 }
 
 function isWordCharacter(ch: string): boolean {
-  return /[A-Za-z0-9_]/.test(ch);
+  return /[A-Za-z0-9_'\u2019]/.test(ch);
 }
 
 export function moveCursorWordLeft(text: string, cursorPos: number): number {
