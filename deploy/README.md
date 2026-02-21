@@ -76,6 +76,7 @@ Logs:
 
 ```bash
 journalctl -u chat-grid.service -f
+tail -f /home/bestmidi/chgrid/server/runtime/server.log
 ```
 
 If you previously used `chgrid-signaling.service`, migrate once:

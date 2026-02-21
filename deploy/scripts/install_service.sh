@@ -12,6 +12,9 @@ if [[ ! -f "$SRC_UNIT" ]]; then
 fi
 
 sudo cp "$SRC_UNIT" "$DST_UNIT"
+sudo install -d -m 0755 -o bestmidi -g bestmidi "$REPO_ROOT/server/runtime"
+sudo touch "$REPO_ROOT/server/runtime/server.log"
+sudo chown bestmidi:bestmidi "$REPO_ROOT/server/runtime/server.log"
 sudo systemctl daemon-reload
 sudo systemctl enable --now "$UNIT_NAME"
 sudo systemctl restart "$UNIT_NAME"

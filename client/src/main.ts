@@ -29,12 +29,14 @@ const AUDIO_OUTPUT_STORAGE_KEY = 'chatGridAudioOutputDeviceId';
 const AUDIO_INPUT_NAME_STORAGE_KEY = 'chatGridAudioInputDeviceName';
 const AUDIO_OUTPUT_NAME_STORAGE_KEY = 'chatGridAudioOutputDeviceName';
 const AUDIO_OUTPUT_MODE_STORAGE_KEY = 'chatGridAudioOutputMode';
+const DEFAULT_DISPLAY_TIME_ZONE = 'America/Detroit';
 const NICKNAME_STORAGE_KEY = 'spatialChatNickname';
 const NICKNAME_MAX_LENGTH = 32;
 
 declare global {
   interface Window {
     CHGRID_WEB_VERSION?: string;
+    CHGRID_TIME_ZONE?: string;
   }
 }
 
@@ -92,6 +94,7 @@ type ChangelogData = {
 };
 
 const APP_VERSION = String(window.CHGRID_WEB_VERSION ?? '').trim();
+const DISPLAY_TIME_ZONE = resolveDisplayTimeZone();
 dom.appVersion.textContent = APP_VERSION
   ? `Another AI experiment with Jage. Version ${APP_VERSION}`
   : 'Another AI experiment with Jage. Version unknown';
@@ -176,6 +179,41 @@ function requiredById<T extends HTMLElement>(id: string): T {
     throw new Error(`Missing element: ${id}`);
   }
   return found as T;
+}
+
+function resolveDisplayTimeZone(): string {
+  const configured = String(window.CHGRID_TIME_ZONE ?? '').trim();
+  if (configured) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: configured }).format(new Date());
+      return configured;
+    } catch {
+      // Fall back when configured timezone is invalid.
+    }
+  }
+  return DEFAULT_DISPLAY_TIME_ZONE;
+}
+
+function formatTimestampMs(value: unknown): string {
+  const raw = Number(value);
+  if (!Number.isFinite(raw)) {
+    return String(value ?? '');
+  }
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) {
+    return String(value ?? '');
+  }
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: DISPLAY_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const pick = (type: Intl.DateTimeFormatPartTypes): string => parts.find((part) => part.type === type)?.value ?? '00';
+  return `${pick('year')}-${pick('month')}-${pick('day')} ${pick('hour')}:${pick('minute')}`;
 }
 
 function setUpdatesExpanded(expanded: boolean): void {
@@ -603,8 +641,8 @@ function getItemPropertyValue(item: WorldItem, key: string): string {
   if (key === 'carrierId') return item.carrierId ?? 'none';
   if (key === 'version') return String(item.version);
   if (key === 'createdBy') return item.createdBy;
-  if (key === 'createdAt') return String(item.createdAt);
-  if (key === 'updatedAt') return String(item.updatedAt);
+  if (key === 'createdAt') return formatTimestampMs(item.createdAt);
+  if (key === 'updatedAt') return formatTimestampMs(item.updatedAt);
   if (key === 'capabilities') return item.capabilities.join(', ') || 'none';
   if (key === 'useSound') return item.useSound ?? 'none';
   if (key === 'enabled') return item.params.enabled === false ? 'off' : 'on';

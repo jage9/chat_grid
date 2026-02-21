@@ -139,7 +139,12 @@ class SignalingServer:
                 for item in self.item_service.drop_carried_items_for_disconnect(disconnected):
                     await self._broadcast_item(item)
                 self.item_service.save_state()
-                LOGGER.info("client disconnected id=%s total=%d", disconnected.id, len(self.clients))
+                LOGGER.info(
+                    "client disconnected id=%s nickname=%s total=%d",
+                    disconnected.id,
+                    disconnected.nickname,
+                    len(self.clients),
+                )
                 await self._broadcast(UserLeftPacket(type="user_left", id=disconnected.id), exclude=websocket)
                 await self._broadcast(
                     BroadcastChatMessagePacket(
@@ -249,6 +254,10 @@ class SignalingServer:
                 )
                 return
             client.nickname = requested_nickname
+            if old_nickname == "user...":
+                LOGGER.info("user login id=%s nickname=%s", client.id, client.nickname)
+            else:
+                LOGGER.info("nickname change id=%s old=%s new=%s", client.id, old_nickname, client.nickname)
             await self._send(
                 client.websocket,
                 NicknameResultPacket(
@@ -319,6 +328,15 @@ class SignalingServer:
             self.item_service.add_item(item)
             await self._broadcast_item(item)
             self.item_service.save_state()
+            LOGGER.info(
+                "item created by=%s item_id=%s type=%s title=%s x=%d y=%d",
+                client.nickname,
+                item.id,
+                item.type,
+                item.title,
+                item.x,
+                item.y,
+            )
             item_text = f"{item.title} ({self._item_type_label(item)})"
             await self._broadcast(
                 BroadcastChatMessagePacket(
@@ -389,6 +407,13 @@ class SignalingServer:
             if item.carrierId is None and (item.x != client.x or item.y != client.y):
                 await self._send_item_result(client, False, "delete", "Item is not on your square.", item.id)
                 return
+            LOGGER.info(
+                "item deleted by=%s item_id=%s type=%s title=%s",
+                client.nickname,
+                item.id,
+                item.type,
+                item.title,
+            )
             self.item_service.remove_item(item.id)
             self.item_last_use_ms.pop(item.id, None)
             await self._broadcast(ItemRemovePacket(type="item_remove", itemId=item.id))
