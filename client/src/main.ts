@@ -115,6 +115,7 @@ const SYSTEM_SOUND_URLS = {
 } as const;
 const FOOTSTEP_SOUND_URLS = Array.from({ length: 11 }, (_, index) => withBase(`sounds/step-${index + 1}.ogg`));
 const FOOTSTEP_GAIN = 0.7;
+const TELEPORT_SOUND_URL = withBase('sounds/step-1.ogg');
 const WALL_SOUND_URL = withBase('sounds/wall.ogg');
 
 const state = createInitialState();
@@ -735,7 +736,7 @@ function getItemPropertyValue(item: WorldItem, key: string): string {
   if (key === 'effect') return normalizeRadioEffect(item.params.effect);
   if (key === 'effectValue') return String(normalizeRadioEffectValue(item.params.effectValue));
   const globalValue = ITEM_TYPE_GLOBAL_PROPERTIES[item.type]?.[key];
-  if (globalValue !== undefined) return `${String(globalValue)} (global)`;
+  if (globalValue !== undefined) return String(globalValue);
   return String(item.params[key] ?? '');
 }
 
@@ -1044,14 +1045,18 @@ async function onMessage(message: IncomingMessage): Promise<void> {
 
     case 'update_position': {
       const peer = state.peers.get(message.id);
+      const prevX = peer?.x ?? message.x;
+      const prevY = peer?.y ?? message.y;
       if (peer) {
         peer.x = message.x;
         peer.y = message.y;
       }
       peerManager.setPeerPosition(message.id, message.x, message.y);
       if (peer) {
+        const movementDelta = Math.hypot(message.x - prevX, message.y - prevY);
+        const soundUrl = movementDelta > 1.5 ? TELEPORT_SOUND_URL : randomFootstepUrl();
         void audio.playSpatialSample(
-          randomFootstepUrl(),
+          soundUrl,
           { x: peer.x - state.player.x, y: peer.y - state.player.y },
           FOOTSTEP_GAIN,
         );
@@ -1534,6 +1539,7 @@ function handleListModeInput(code: string): void {
     state.player.x = peer.x;
     state.player.y = peer.y;
     persistPlayerPosition();
+    void audio.playSample(TELEPORT_SOUND_URL, FOOTSTEP_GAIN);
     signaling.send({ type: 'update_position', x: peer.x, y: peer.y });
     state.mode = 'normal';
     updateStatus(`Moved to ${peer.nickname}.`);
@@ -1572,6 +1578,7 @@ function handleListItemsModeInput(code: string): void {
     state.player.x = item.x;
     state.player.y = item.y;
     persistPlayerPosition();
+    void audio.playSample(TELEPORT_SOUND_URL, FOOTSTEP_GAIN);
     signaling.send({ type: 'update_position', x: item.x, y: item.y });
     state.mode = 'normal';
     updateStatus(`Moved to ${itemLabel(item)}.`);
