@@ -215,7 +215,7 @@ export class RadioStationRuntime {
       }
       output.gain.gain.linearRampToValueAtTime(gainValue * normalizedVolume, audioCtx.currentTime + 0.1);
       if (output.panner) {
-        const resolvedPan = Math.max(-1, Math.min(1, panValue));
+        const resolvedPan = this.audio.getOutputMode() === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
         output.panner.pan.linearRampToValueAtTime(resolvedPan, audioCtx.currentTime + 0.1);
       }
     }
