@@ -82,3 +82,38 @@ async def test_radio_use_toggles_enabled(monkeypatch: pytest.MonkeyPatch) -> Non
     assert send_payloads[-1].ok is True
 
     assert any(getattr(packet, "type", "") == "item_upsert" for packet in broadcast_payloads)
+
+
+@pytest.mark.asyncio
+async def test_radio_channel_update_validates(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    server.clients[ws] = client
+    item = server.item_service.default_item(client, "radio_station")
+    server.item_service.add_item(item)
+
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+        return
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "item_update", "itemId": item.id, "params": {"channel": "left"}}),
+    )
+    assert send_payloads[-1].ok is True
+    assert item.params.get("channel") == "left"
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "item_update", "itemId": item.id, "params": {"channel": "invalid"}}),
+    )
+    assert send_payloads[-1].ok is False
+    assert "channel must be one of" in send_payloads[-1].message.lower()

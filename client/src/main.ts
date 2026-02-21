@@ -93,6 +93,7 @@ const EDITABLE_ITEM_PROPERTY_KEYS = new Set([
   'title',
   'streamUrl',
   'enabled',
+  'channel',
   'volume',
   'effect',
   'effectValue',
@@ -100,8 +101,11 @@ const EDITABLE_ITEM_PROPERTY_KEYS = new Set([
   'sides',
   'number',
 ]);
+const RADIO_CHANNEL_OPTIONS = ['stereo', 'mono', 'left', 'right'] as const;
+type RadioChannelMode = (typeof RADIO_CHANNEL_OPTIONS)[number];
 const OPTION_ITEM_PROPERTY_VALUES: Partial<Record<string, string[]>> = {
   effect: EFFECT_SEQUENCE.map((effect) => effect.id),
+  channel: [...RADIO_CHANNEL_OPTIONS],
 };
 const APP_BASE_URL = import.meta.env.BASE_URL || '/';
 function withBase(path: string): string {
@@ -352,7 +356,7 @@ function beginItemSelection(context: 'pickup' | 'delete' | 'edit' | 'use' | 'ins
 function getEditableItemPropertyKeys(item: WorldItem): string[] {
   const keys = ['title'];
   if (item.type === 'radio_station') {
-    keys.push('streamUrl', 'enabled', 'volume', 'effect', 'effectValue');
+    keys.push('streamUrl', 'enabled', 'channel', 'volume', 'effect', 'effectValue');
   } else if (item.type === 'dice') {
     keys.push('sides', 'number');
   } else if (item.type === 'wheel') {
@@ -486,6 +490,12 @@ function normalizeRadioEffectValue(effectValue: unknown): number {
   return clampEffectLevel(effectValue);
 }
 
+function normalizeRadioChannel(channel: unknown): RadioChannelMode {
+  if (typeof channel !== 'string') return 'stereo';
+  const normalized = channel.trim().toLowerCase() as RadioChannelMode;
+  return (RADIO_CHANNEL_OPTIONS as readonly string[]).includes(normalized) ? normalized : 'stereo';
+}
+
 function applyRadioEffect(
   output: ItemRadioOutput,
   audioCtx: AudioContext,
@@ -575,6 +585,7 @@ function updateRadioStationSpatialAudio(): void {
     const normalizedVolume = Number.isFinite(volume) ? Math.max(0, Math.min(100, volume)) / 100 : 0.5;
     const effect = normalizeRadioEffect(item.params.effect);
     const effectValue = normalizeRadioEffectValue(item.params.effectValue);
+    const channel = normalizeRadioChannel(item.params.channel);
     applyRadioEffect(output, audioCtx, effect, effectValue);
     if (!streamUrl || !enabled) {
       output.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
@@ -593,7 +604,15 @@ function updateRadioStationSpatialAudio(): void {
     }
     output.gain.gain.linearRampToValueAtTime(gainValue * normalizedVolume, audioCtx.currentTime + 0.1);
     if (output.panner) {
-      output.panner.pan.linearRampToValueAtTime(Math.max(-1, Math.min(1, panValue)), audioCtx.currentTime + 0.1);
+      let resolvedPan = Math.max(-1, Math.min(1, panValue));
+      if (channel === 'mono') {
+        resolvedPan = 0;
+      } else if (channel === 'left') {
+        resolvedPan = -1;
+      } else if (channel === 'right') {
+        resolvedPan = 1;
+      }
+      output.panner.pan.linearRampToValueAtTime(resolvedPan, audioCtx.currentTime + 0.1);
     }
   }
 }
@@ -733,6 +752,7 @@ function getItemPropertyValue(item: WorldItem, key: string): string {
   if (key === 'capabilities') return item.capabilities.join(', ') || 'none';
   if (key === 'useSound') return item.useSound ?? 'none';
   if (key === 'enabled') return item.params.enabled === false ? 'off' : 'on';
+  if (key === 'channel') return normalizeRadioChannel(item.params.channel);
   if (key === 'effect') return normalizeRadioEffect(item.params.effect);
   if (key === 'effectValue') return String(normalizeRadioEffectValue(item.params.effectValue));
   const globalValue = ITEM_TYPE_GLOBAL_PROPERTIES[item.type]?.[key];

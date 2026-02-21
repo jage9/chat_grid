@@ -49,6 +49,7 @@ LOGGER = logging.getLogger("chgrid.server")
 PACKET_LOGGER = logging.getLogger("chgrid.server.packet")
 CLIENT_PACKET_ADAPTER = TypeAdapter(ClientPacket)
 RADIO_EFFECT_IDS = {"reverb", "echo", "flanger", "high_pass", "low_pass", "off"}
+RADIO_CHANNEL_IDS = {"stereo", "mono", "left", "right"}
 
 
 class SignalingServer:
@@ -614,6 +615,18 @@ class SignalingServer:
                         )
                         return
                     next_params["effect"] = effect
+
+                    channel = str(next_params.get("channel", "stereo")).strip().lower()
+                    if channel not in RADIO_CHANNEL_IDS:
+                        await self._send_item_result(
+                            client,
+                            False,
+                            "update",
+                            "channel must be one of stereo, mono, left, right.",
+                            item.id,
+                        )
+                        return
+                    next_params["channel"] = channel
 
                     try:
                         effect_value = int(next_params.get("effectValue", 50))
