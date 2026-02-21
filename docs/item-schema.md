@@ -5,7 +5,7 @@
 ```json
 {
   "id": "string",
-  "type": "radio_station | dice",
+  "type": "radio_station | dice | wheel",
   "title": "string",
   "x": 0,
   "y": 0,
@@ -22,13 +22,14 @@
 
 - `useSound`: optional client-played sound path when item `use` succeeds; global item field and not user-editable in V1.
 - `capabilities` and `useSound` are derived from global item-type definitions at runtime (not stored per-instance in persisted state).
+- `useCooldownMs`: global per item type (`radio_station=1000`, `dice=1000`, `wheel=4000`), not per-instance editable.
 
 ## Persisted Item State (`server/runtime/items.json`)
 
 ```json
 {
   "id": "string",
-  "type": "radio_station | dice",
+  "type": "radio_station | dice | wheel",
   "title": "string",
   "x": 0,
   "y": 0,
@@ -52,7 +53,10 @@
 {
   "streamUrl": "",
   "enabled": true,
-  "volume": 50
+  "channel": "stereo",
+  "volume": 50,
+  "effect": "off",
+  "effectValue": 50
 }
 ```
 
@@ -60,6 +64,9 @@
 - `enabled`: boolean on/off flag.
   - UI behavior: in property menu, `Enter` toggles on/off directly.
 - `volume`: integer, range `0-100`, default `50`.
+- `channel`: one of `stereo | mono | left | right`, default `stereo`.
+- `effect`: one of `reverb | echo | flanger | high_pass | low_pass | off`, default `off`.
+- `effectValue`: number, range `0-100`, precision `0.1`.
 
 ### `dice`
 
@@ -72,6 +79,20 @@
 
 - `sides`: integer, range `1-100`.
 - `number`: integer, range `1-100`.
+
+### `wheel`
+
+```json
+{
+  "spaces": "yes, no"
+}
+```
+
+- `spaces`: comma-delimited string of values.
+- Server validation:
+  - must include at least 1 value
+  - max 100 values
+  - each value max 80 chars
 
 ## Packet Shapes
 
