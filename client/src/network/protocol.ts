@@ -11,6 +11,7 @@ export const itemSchema = z.object({
   updatedAt: z.number().int(),
   version: z.number().int(),
   capabilities: z.array(z.string()),
+  useSound: z.string().optional(),
   emitSound: z.string().optional(),
   params: z.record(z.string(), z.unknown()),
   carrierId: z.string().nullable().optional(),

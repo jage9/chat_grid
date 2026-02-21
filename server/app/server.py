@@ -548,12 +548,12 @@ class SignalingServer:
                 BroadcastChatMessagePacket(type="chat_message", message=others_message, system=True),
                 exclude=client.websocket,
             )
-            if item.emitSound:
+            if item.useSound:
                 await self._broadcast(
                     ItemUseSoundPacket(
                         type="item_use_sound",
                         itemId=item.id,
-                        sound=item.emitSound,
+                        sound=item.useSound,
                         x=item.x,
                         y=item.y,
                     )

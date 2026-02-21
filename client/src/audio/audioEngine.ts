@@ -169,6 +169,10 @@ export class AudioEngine {
     return this.outputMode;
   }
 
+  getOutputMode(): OutputMode {
+    return this.outputMode;
+  }
+
   toggleLoopback(): boolean {
     this.loopbackEnabled = !this.loopbackEnabled;
     this.rebuildOutboundEffectGraph();

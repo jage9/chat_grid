@@ -14,14 +14,16 @@
   "updatedAt": 1735689600000,
   "version": 1,
   "capabilities": ["editable", "carryable", "deletable", "usable"],
-  "emitSound": "sounds/roll.ogg",
+  "useSound": "sounds/roll.ogg",
+  "emitSound": "sounds/clock.ogg",
   "params": {},
   "carrierId": null
 }
 ```
 
-- `emitSound`: optional client-played sound path when item `use` succeeds; global item field and not user-editable in V1.
-- `capabilities` and `emitSound` are derived from global item-type definitions at runtime (not stored per-instance in persisted state).
+- `useSound`: optional client-played one-shot sound when item `use` succeeds; global item field and not user-editable in V1.
+- `emitSound`: optional continuously-looping spatial sound emitted from the item on the grid; global item field and not user-editable in V1.
+- `capabilities`, `useSound`, and `emitSound` are derived from global item-type definitions at runtime (not stored per-instance in persisted state).
 - `useCooldownMs`: global per item type (`radio_station=1000`, `dice=1000`, `wheel=4000`, `clock=1000`), not per-instance editable.
 
 ## Persisted Item State (`server/runtime/items.json`)
@@ -115,6 +117,7 @@
   `Europe/London`, `Europe/Moscow`, `Pacific/Apia`, `Pacific/Auckland`, `Pacific/Chatham`,
   `Pacific/Honolulu`, `Pacific/Kiritimati`, `Pacific/Noumea`, `Pacific/Pago_Pago`, `UTC`.
 - `use24Hour`: boolean (or `on/off` in updates), default `false`.
+- Global defaults: `useSound=none`, `emitSound=sounds/clock.ogg`.
 
 ## Packet Shapes
 

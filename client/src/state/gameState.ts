@@ -15,6 +15,7 @@ export type WorldItem = {
   updatedAt: number;
   version: number;
   capabilities: string[];
+  useSound?: string;
   emitSound?: string;
   params: Record<string, unknown>;
   carrierId?: string | null;

@@ -53,6 +53,7 @@ CLOCK_TIME_ZONE_OPTIONS: tuple[str, ...] = (
 class ItemDefinition:
     default_title: str
     capabilities: tuple[str, ...]
+    use_sound: str | None
     emit_sound: str | None
     default_params: dict
     use_cooldown_ms: int = 1000
@@ -62,25 +63,29 @@ ITEM_DEFINITIONS: dict[ItemType, ItemDefinition] = {
     "radio_station": ItemDefinition(
         default_title="radio",
         capabilities=("editable", "carryable", "deletable", "usable"),
+        use_sound=None,
         emit_sound=None,
         default_params={"streamUrl": "", "enabled": True, "channel": "stereo", "volume": 50, "effect": "off", "effectValue": 50},
     ),
     "dice": ItemDefinition(
         default_title="Dice",
         capabilities=("editable", "carryable", "deletable", "usable"),
-        emit_sound="sounds/roll.ogg",
+        use_sound="sounds/roll.ogg",
+        emit_sound=None,
         default_params={"sides": 6, "number": 2},
     ),
     "wheel": ItemDefinition(
         default_title="wheel",
         capabilities=("editable", "carryable", "deletable", "usable"),
-        emit_sound="sounds/spin.ogg",
+        use_sound="sounds/spin.ogg",
+        emit_sound=None,
         default_params={"spaces": "yes, no"},
         use_cooldown_ms=4000,
     ),
     "clock": ItemDefinition(
         default_title="clock",
         capabilities=("editable", "carryable", "deletable", "usable"),
+        use_sound=None,
         emit_sound="sounds/clock.ogg",
         default_params={"timeZone": CLOCK_DEFAULT_TIME_ZONE, "use24Hour": False},
     ),

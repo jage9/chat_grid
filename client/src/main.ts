@@ -7,6 +7,7 @@ import {
   type EffectId,
 } from './audio/effects';
 import { RADIO_CHANNEL_OPTIONS, RadioStationRuntime, normalizeRadioChannel, normalizeRadioEffect, normalizeRadioEffectValue } from './audio/radioStationRuntime';
+import { ItemEmitRuntime } from './audio/itemEmitRuntime';
 import {
   applyPastedText,
   applyTextInput,
@@ -152,10 +153,10 @@ dom.appVersion.textContent = APP_VERSION
   : 'Another AI experiment with Jage. Version unknown';
 const ITEM_TYPE_SEQUENCE: ItemType[] = ['clock', 'dice', 'radio_station', 'wheel'];
 const ITEM_TYPE_GLOBAL_PROPERTIES: Record<ItemType, Record<string, string | number | boolean>> = {
-  radio_station: { emitSound: 'none', useCooldownMs: 1000 },
-  dice: { emitSound: 'sounds/roll.ogg', useCooldownMs: 1000 },
-  wheel: { emitSound: 'sounds/spin.ogg', useCooldownMs: 4000 },
-  clock: { emitSound: 'sounds/clock.ogg', useCooldownMs: 1000 },
+  radio_station: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000 },
+  dice: { useSound: 'sounds/roll.ogg', emitSound: 'none', useCooldownMs: 1000 },
+  wheel: { useSound: 'sounds/spin.ogg', emitSound: 'none', useCooldownMs: 4000 },
+  clock: { useSound: 'none', emitSound: 'sounds/clock.ogg', useCooldownMs: 1000 },
 };
 const EDITABLE_ITEM_PROPERTY_KEYS = new Set([
   'title',
@@ -210,6 +211,7 @@ let connecting = false;
 const messageBuffer: string[] = [];
 let messageCursor = -1;
 const radioRuntime = new RadioStationRuntime(audio);
+const itemEmitRuntime = new ItemEmitRuntime(audio, resolveIncomingSoundUrl);
 let internalClipboardText = '';
 let replaceTextOnNextType = false;
 let pendingEscapeDisconnect = false;
@@ -510,7 +512,19 @@ function getInspectItemPropertyKeys(item: WorldItem): string[] {
   const seen = new Set(editableKeys);
   const allKeys: string[] = [...editableKeys];
 
-  const baseKeys = ['type', 'x', 'y', 'carrierId', 'version', 'createdBy', 'createdAt', 'updatedAt', 'capabilities', 'emitSound'];
+  const baseKeys = [
+    'type',
+    'x',
+    'y',
+    'carrierId',
+    'version',
+    'createdBy',
+    'createdAt',
+    'updatedAt',
+    'capabilities',
+    'useSound',
+    'emitSound',
+  ];
   for (const key of baseKeys) {
     if (seen.has(key)) continue;
     seen.add(key);
@@ -666,6 +680,7 @@ function getItemPropertyValue(item: WorldItem, key: string): string {
   if (key === 'createdAt') return formatTimestampMs(item.createdAt);
   if (key === 'updatedAt') return formatTimestampMs(item.updatedAt);
   if (key === 'capabilities') return item.capabilities.join(', ') || 'none';
+  if (key === 'useSound') return item.useSound ?? 'none';
   if (key === 'emitSound') return item.emitSound ?? 'none';
   if (key === 'enabled') return item.params.enabled === false ? 'off' : 'on';
   if (key === 'timeZone') return String(item.params.timeZone ?? CLOCK_TIME_ZONE_OPTIONS[0]);
@@ -709,6 +724,7 @@ function gameLoop(): void {
   handleMovement();
   audio.updateSpatialAudio(peerManager.getPeers(), { x: state.player.x, y: state.player.y });
   radioRuntime.updateSpatialAudio(state.items, { x: state.player.x, y: state.player.y });
+  itemEmitRuntime.updateSpatialAudio(state.items, { x: state.player.x, y: state.player.y });
   state.cursorVisible = Math.floor(Date.now() / 500) % 2 === 0;
   renderer.draw(state);
   requestAnimationFrame(gameLoop);
@@ -897,6 +913,7 @@ function disconnect(): void {
 
   peerManager.cleanupAll();
   radioRuntime.cleanupAll();
+  itemEmitRuntime.cleanupAll();
   state.running = false;
   state.keysPressed = {};
   state.peers.clear();
@@ -961,6 +978,7 @@ async function onMessage(message: IncomingMessage): Promise<void> {
         });
       }
       await radioRuntime.sync(state.items.values());
+      await itemEmitRuntime.sync(state.items.values());
 
       gameLoop();
       break;
@@ -1064,6 +1082,7 @@ async function onMessage(message: IncomingMessage): Promise<void> {
         }
       }
       await radioRuntime.sync(state.items.values());
+      await itemEmitRuntime.sync(state.items.values());
       break;
     }
 
@@ -1071,6 +1090,7 @@ async function onMessage(message: IncomingMessage): Promise<void> {
       state.items.delete(message.itemId);
       state.carriedItemId = getCarriedItem()?.id ?? null;
       radioRuntime.cleanup(message.itemId);
+      itemEmitRuntime.cleanup(message.itemId);
       break;
     }
 
@@ -1079,7 +1099,7 @@ async function onMessage(message: IncomingMessage): Promise<void> {
         if (message.action === 'use') {
           pushChatMessage(message.message);
           const item = message.itemId ? state.items.get(message.itemId) : null;
-          if (!item?.emitSound && item) {
+          if (!item?.useSound && item) {
             audio.sfxLocate({ x: item.x - state.player.x, y: item.y - state.player.y });
           }
         } else if (message.action !== 'update') {

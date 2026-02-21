@@ -120,7 +120,7 @@ async def test_radio_channel_update_validates(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.asyncio
-async def test_clock_use_reports_time_and_emits_sound(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_clock_use_reports_time_without_use_sound_packet(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
     client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
@@ -146,7 +146,7 @@ async def test_clock_use_reports_time_and_emits_sound(monkeypatch: pytest.Monkey
 
     assert send_payloads[-1].ok is True
     assert send_payloads[-1].message == f"{item.title} says 2:15 PM."
-    assert any(getattr(packet, "type", "") == "item_use_sound" for packet in broadcast_payloads)
+    assert not any(getattr(packet, "type", "") == "item_use_sound" for packet in broadcast_payloads)
 
 
 @pytest.mark.asyncio

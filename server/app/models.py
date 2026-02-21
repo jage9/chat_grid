@@ -161,6 +161,7 @@ class WorldItem(BaseModel):
     updatedAt: int
     version: int
     capabilities: list[str]
+    useSound: str | None = None
     emitSound: str | None = None
     params: dict
     carrierId: str | None = None
