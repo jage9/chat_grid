@@ -7,7 +7,6 @@ import asyncio
 from datetime import datetime
 import json
 import logging
-import random
 import ssl
 import uuid
 from pathlib import Path
@@ -20,6 +19,7 @@ from websockets.asyncio.server import ServerConnection, serve
 from .client import ClientConnection
 from .config import load_config
 from .item_catalog import CLOCK_DEFAULT_TIME_ZONE, CLOCK_TIME_ZONE_OPTIONS, get_item_use_cooldown_ms
+from .item_type_handlers import get_item_type_handler
 from .item_service import ItemService
 from .models import (
     BroadcastChatMessagePacket,
@@ -52,8 +52,6 @@ from .models import (
 LOGGER = logging.getLogger("chgrid.server")
 PACKET_LOGGER = logging.getLogger("chgrid.server.packet")
 CLIENT_PACKET_ADAPTER = TypeAdapter(ClientPacket)
-RADIO_EFFECT_IDS = {"reverb", "echo", "flanger", "high_pass", "low_pass", "off"}
-RADIO_CHANNEL_IDS = {"stereo", "mono", "left", "right"}
 
 
 class SignalingServer:
@@ -520,9 +518,7 @@ class SignalingServer:
             if item.carrierId is None and (item.x != client.x or item.y != client.y):
                 await self._send_item_result(client, False, "use", "Item is not on your square.", item.id)
                 return
-            if item.type not in {"radio_station", "dice", "wheel", "clock"}:
-                await self._send_item_result(client, False, "use", "This item cannot be used yet.", item.id)
-                return
+            handler = get_item_type_handler(item.type)
             now_ms = self.item_service.now_ms()
             cooldown_ms = get_item_use_cooldown_ms(item.type)
             last_use_ms = self.item_last_use_ms.get(item.id)
@@ -537,68 +533,21 @@ class SignalingServer:
                     item.id,
                 )
                 return
-            delayed_wheel_self_result: str | None = None
-            delayed_wheel_others_result: str | None = None
-            if item.type == "radio_station":
-                enabled_value = item.params.get("enabled", True)
-                if isinstance(enabled_value, bool):
-                    currently_enabled = enabled_value
-                elif isinstance(enabled_value, (int, float)):
-                    currently_enabled = bool(enabled_value)
-                elif isinstance(enabled_value, str):
-                    currently_enabled = enabled_value.strip().lower() in {"on", "true", "1", "yes"}
-                else:
-                    currently_enabled = True
-                next_enabled = not currently_enabled
-                item.params = {**item.params, "enabled": next_enabled}
+            try:
+                use_result = handler.use(item, client.nickname, self._format_clock_display_time)
+            except ValueError as exc:
+                await self._send_item_result(client, False, "use", str(exc), item.id)
+                return
+
+            if use_result.updated_params is not None:
+                item.params = use_result.updated_params
                 item.updatedAt = now_ms
                 self.item_service.save_state()
                 await self._broadcast_item(item)
-                state_text = "on" if next_enabled else "off"
-                others_message = f"{client.nickname} turns {state_text} {item.title}."
-                self_message = f"You turn {state_text} {item.title}."
-            elif item.type == "dice":
-                try:
-                    sides = max(1, min(100, int(item.params.get("sides", 6))))
-                    number = max(1, min(100, int(item.params.get("number", 2))))
-                except (TypeError, ValueError):
-                    sides = 6
-                    number = 2
-                rolls = [random.randint(1, sides) for _ in range(number)]
-                total = sum(rolls)
-                others_message = (
-                    f"{client.nickname} rolled {item.title}: {', '.join(str(value) for value in rolls)} (total {total})."
-                )
-                self_message = f"You rolled {item.title}: {', '.join(str(value) for value in rolls)} (total {total})."
-            elif item.type == "wheel":
-                spaces_raw = item.params.get("spaces", "")
-                if isinstance(spaces_raw, str):
-                    spaces = [token.strip() for token in spaces_raw.split(",") if token.strip()]
-                elif isinstance(spaces_raw, list):
-                    spaces = [str(token).strip() for token in spaces_raw if str(token).strip()]
-                else:
-                    spaces = []
-                if not spaces:
-                    await self._send_item_result(
-                        client,
-                        False,
-                        "use",
-                        "wheel spaces must contain at least one comma-delimited value.",
-                        item.id,
-                    )
-                    return
-                landed = random.choice(spaces)
-                others_message = f"{client.nickname} spins {item.title}."
-                self_message = f"You spin {item.title}."
-                delayed_wheel_self_result = str(landed)
-                delayed_wheel_others_result = str(landed)
-            else:
-                display_time = self._format_clock_display_time(item.params)
-                others_message = f"{client.nickname} checks {item.title}. {item.title} says {display_time}."
-                self_message = f"{item.title} says {display_time}."
+
             self.item_last_use_ms[item.id] = now_ms
             await self._broadcast(
-                BroadcastChatMessagePacket(type="chat_message", message=others_message, system=True),
+                BroadcastChatMessagePacket(type="chat_message", message=use_result.others_message, system=True),
                 exclude=client.websocket,
             )
             if item.useSound:
@@ -611,13 +560,13 @@ class SignalingServer:
                         y=item.y,
                     )
                 )
-            await self._send_item_result(client, True, "use", self_message, item.id)
-            if delayed_wheel_self_result is not None and delayed_wheel_others_result is not None:
+            await self._send_item_result(client, True, "use", use_result.self_message, item.id)
+            if use_result.delayed_self_message is not None and use_result.delayed_others_message is not None:
                 asyncio.create_task(
                     self._broadcast_wheel_result_after_delay(
                         client=client,
-                        self_message=delayed_wheel_self_result,
-                        others_message=delayed_wheel_others_result,
+                        self_message=use_result.delayed_self_message,
+                        others_message=use_result.delayed_others_message,
                     )
                 )
             return
@@ -641,145 +590,12 @@ class SignalingServer:
                 item.title = title[:80]
             if packet.params:
                 next_params = {**item.params, **packet.params}
-                if item.type == "dice":
-                    try:
-                        sides = int(next_params.get("sides", 6))
-                        number = int(next_params.get("number", 2))
-                    except (TypeError, ValueError):
-                        await self._send_item_result(client, False, "update", "Dice values must be numbers.", item.id)
-                        return
-                    if not (1 <= sides <= 100 and 1 <= number <= 100):
-                        await self._send_item_result(
-                            client, False, "update", "Dice sides and number must be between 1 and 100.", item.id
-                        )
-                        return
-                    next_params["sides"] = sides
-                    next_params["number"] = number
-                if item.type == "wheel":
-                    spaces_raw = next_params.get("spaces", "")
-                    if not isinstance(spaces_raw, str):
-                        await self._send_item_result(
-                            client, False, "update", "spaces must be a comma-delimited string.", item.id
-                        )
-                        return
-                    spaces = [token.strip() for token in spaces_raw.split(",") if token.strip()]
-                    if not spaces:
-                        await self._send_item_result(
-                            client,
-                            False,
-                            "update",
-                            "spaces must include at least one value, separated by commas.",
-                            item.id,
-                        )
-                        return
-                    if len(spaces) > 100:
-                        await self._send_item_result(client, False, "update", "spaces supports up to 100 values.", item.id)
-                        return
-                    if any(len(token) > 80 for token in spaces):
-                        await self._send_item_result(client, False, "update", "each space must be 80 chars or less.", item.id)
-                        return
-                    next_params["spaces"] = ", ".join(spaces)
-                if item.type == "radio_station":
-                    stream_url = str(next_params.get("streamUrl", "")).strip()
-                    previous_stream_url = str(item.params.get("streamUrl", "")).strip()
-                    next_params["streamUrl"] = stream_url
-                    enabled_value = next_params.get("enabled", True)
-                    if isinstance(enabled_value, bool):
-                        enabled = enabled_value
-                    elif isinstance(enabled_value, (int, float)):
-                        enabled = bool(enabled_value)
-                    elif isinstance(enabled_value, str):
-                        token = enabled_value.strip().lower()
-                        if token in {"on", "true", "1", "yes"}:
-                            enabled = True
-                        elif token in {"off", "false", "0", "no"}:
-                            enabled = False
-                        else:
-                            await self._send_item_result(
-                                client, False, "update", "enabled must be true/false or on/off.", item.id
-                            )
-                            return
-                    else:
-                        await self._send_item_result(
-                            client, False, "update", "enabled must be true/false or on/off.", item.id
-                        )
-                        return
-                    if stream_url and stream_url != previous_stream_url:
-                        enabled = True
-                    if not stream_url:
-                        enabled = False
-                    next_params["enabled"] = enabled
-
-                    try:
-                        volume = int(next_params.get("volume", 50))
-                    except (TypeError, ValueError):
-                        await self._send_item_result(client, False, "update", "volume must be a number.", item.id)
-                        return
-                    if not (0 <= volume <= 100):
-                        await self._send_item_result(
-                            client, False, "update", "volume must be between 0 and 100.", item.id
-                        )
-                        return
-                    next_params["volume"] = volume
-
-                    effect = str(next_params.get("effect", "off")).strip().lower()
-                    if effect not in RADIO_EFFECT_IDS:
-                        await self._send_item_result(
-                            client,
-                            False,
-                            "update",
-                            "effect must be one of reverb, echo, flanger, high_pass, low_pass, off.",
-                            item.id,
-                        )
-                        return
-                    next_params["effect"] = effect
-
-                    channel = str(next_params.get("channel", "stereo")).strip().lower()
-                    if channel not in RADIO_CHANNEL_IDS:
-                        await self._send_item_result(
-                            client,
-                            False,
-                            "update",
-                            "channel must be one of stereo, mono, left, right.",
-                            item.id,
-                        )
-                        return
-                    next_params["channel"] = channel
-
-                    try:
-                        effect_value = float(next_params.get("effectValue", 50))
-                    except (TypeError, ValueError):
-                        await self._send_item_result(client, False, "update", "effectValue must be a number.", item.id)
-                        return
-                    if not (0 <= effect_value <= 100):
-                        await self._send_item_result(
-                            client, False, "update", "effectValue must be between 0 and 100.", item.id
-                        )
-                        return
-                    next_params["effectValue"] = round(effect_value, 1)
-                if item.type == "clock":
-                    time_zone = str(next_params.get("timeZone", CLOCK_DEFAULT_TIME_ZONE)).strip()
-                    if time_zone not in CLOCK_TIME_ZONE_OPTIONS:
-                        await self._send_item_result(
-                            client,
-                            False,
-                            "update",
-                            f"timeZone must be one of {', '.join(CLOCK_TIME_ZONE_OPTIONS)}.",
-                            item.id,
-                        )
-                        return
-                    use_24_hour = self._parse_clock_use_24_hour(next_params.get("use24Hour"))
-                    if use_24_hour is None:
-                        await self._send_item_result(
-                            client,
-                            False,
-                            "update",
-                            "use24Hour must be on/off.",
-                            item.id,
-                        )
-                        return
-                    next_params["timeZone"] = time_zone
-                    next_params["use24Hour"] = use_24_hour
+                handler = get_item_type_handler(item.type)
+                try:
+                    next_params = handler.validate_update(item, next_params)
+                except ValueError as exc:
+                    await self._send_item_result(client, False, "update", str(exc), item.id)
+                    return
                 item.params = next_params
             item.updatedAt = self.item_service.now_ms()
             item.version += 1

@@ -95,3 +95,28 @@ This is behavior-focused documentation for item types and their defaults.
 ### Validation
 - `timeZone`: one of `CLOCK_TIME_ZONE_OPTIONS` in `server/app/item_catalog.py`
 - `use24Hour`: boolean or on/off style input
+
+## Adding A New Item Type (Registry V1)
+
+Item types are currently code-registered on both server and client so new types are additive instead of editing one large branch.
+
+1. Server catalog: add global defaults in `server/app/item_catalog.py` (`ITEM_DEFINITIONS`).
+2. Server handlers: add `validate_update` + `use` logic in `server/app/item_type_handlers.py` and register it in `ITEM_TYPE_HANDLERS`.
+3. Server models: extend `ItemType` literals in `server/app/models.py` and any packet enums that list item types.
+4. Client registry: add type metadata in `client/src/items/itemRegistry.ts` (`ITEM_TYPE_SEQUENCE`, editable properties, and global property hints).
+5. Client protocol types: update item-type unions in `client/src/network/protocol.ts` and `client/src/state/gameState.ts`.
+6. Tests: add or update server tests under `server/tests/` for use/update validation and cooldown behavior.
+
+### Example Shape
+
+A minimal new item type usually needs:
+
+- Catalog defaults:
+  - `default_title`
+  - `default_params`
+  - `use_sound` / `emit_sound`
+  - `use_cooldown_ms`
+- Handler behavior:
+  - validate params on update
+  - build self/others use messages
+  - optionally return delayed result text

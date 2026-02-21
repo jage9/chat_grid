@@ -6,7 +6,7 @@ import {
   clampEffectLevel,
   type EffectId,
 } from './audio/effects';
-import { RADIO_CHANNEL_OPTIONS, RadioStationRuntime, normalizeRadioChannel, normalizeRadioEffect, normalizeRadioEffectValue } from './audio/radioStationRuntime';
+import { RadioStationRuntime, normalizeRadioChannel, normalizeRadioEffect, normalizeRadioEffectValue } from './audio/radioStationRuntime';
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
 import {
   applyPastedText,
@@ -29,9 +29,19 @@ import {
   getDirection,
   getNearestItem,
   getNearestPeer,
-  type ItemType,
   type WorldItem,
 } from './state/gameState';
+import {
+  CLOCK_TIME_ZONE_OPTIONS,
+  EDITABLE_ITEM_PROPERTY_KEYS,
+  ITEM_TYPE_GLOBAL_PROPERTIES,
+  ITEM_TYPE_SEQUENCE,
+  getEditableItemPropertyKeys,
+  getInspectItemPropertyKeys,
+  getItemPropertyOptionValues,
+  itemPropertyLabel,
+  itemTypeLabel,
+} from './items/itemRegistry';
 import { PeerManager } from './webrtc/peerManager';
 
 const EFFECT_LEVELS_STORAGE_KEY = 'chatGridEffectLevels';
@@ -128,77 +138,9 @@ type AudioLayerState = {
 
 const APP_VERSION = String(window.CHGRID_WEB_VERSION ?? '').trim();
 const DISPLAY_TIME_ZONE = resolveDisplayTimeZone();
-const CLOCK_TIME_ZONE_OPTIONS = [
-  'America/Anchorage',
-  'America/Argentina/Buenos_Aires',
-  'America/Chicago',
-  'America/Detroit',
-  'America/Halifax',
-  'America/Indiana/Indianapolis',
-  'America/Kentucky/Louisville',
-  'America/Los_Angeles',
-  'America/St_Johns',
-  'Asia/Bangkok',
-  'Asia/Dhaka',
-  'Asia/Dubai',
-  'Asia/Hong_Kong',
-  'Asia/Kabul',
-  'Asia/Karachi',
-  'Asia/Kathmandu',
-  'Asia/Kolkata',
-  'Asia/Seoul',
-  'Asia/Singapore',
-  'Asia/Tehran',
-  'Asia/Tokyo',
-  'Asia/Yangon',
-  'Atlantic/Azores',
-  'Atlantic/South_Georgia',
-  'Australia/Brisbane',
-  'Australia/Darwin',
-  'Australia/Eucla',
-  'Australia/Lord_Howe',
-  'Europe/Berlin',
-  'Europe/Helsinki',
-  'Europe/London',
-  'Europe/Moscow',
-  'Pacific/Apia',
-  'Pacific/Auckland',
-  'Pacific/Chatham',
-  'Pacific/Honolulu',
-  'Pacific/Kiritimati',
-  'Pacific/Noumea',
-  'Pacific/Pago_Pago',
-  'UTC',
-] as const;
 dom.appVersion.textContent = APP_VERSION
   ? `Another AI experiment with Jage. Version ${APP_VERSION}`
   : 'Another AI experiment with Jage. Version unknown';
-const ITEM_TYPE_SEQUENCE: ItemType[] = ['clock', 'dice', 'radio_station', 'wheel'];
-const ITEM_TYPE_GLOBAL_PROPERTIES: Record<ItemType, Record<string, string | number | boolean>> = {
-  radio_station: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000 },
-  dice: { useSound: 'sounds/roll.ogg', emitSound: 'none', useCooldownMs: 1000 },
-  wheel: { useSound: 'sounds/spin.ogg', emitSound: 'none', useCooldownMs: 4000 },
-  clock: { useSound: 'none', emitSound: 'sounds/clock.ogg', useCooldownMs: 1000 },
-};
-const EDITABLE_ITEM_PROPERTY_KEYS = new Set([
-  'title',
-  'streamUrl',
-  'enabled',
-  'channel',
-  'volume',
-  'effect',
-  'effectValue',
-  'spaces',
-  'sides',
-  'number',
-  'timeZone',
-  'use24Hour',
-]);
-const OPTION_ITEM_PROPERTY_VALUES: Partial<Record<string, string[]>> = {
-  effect: EFFECT_SEQUENCE.map((effect) => effect.id),
-  channel: [...RADIO_CHANNEL_OPTIONS],
-  timeZone: [...CLOCK_TIME_ZONE_OPTIONS],
-};
 const APP_BASE_URL = import.meta.env.BASE_URL || '/';
 function withBase(path: string): string {
   const normalizedBase = APP_BASE_URL.endsWith('/') ? APP_BASE_URL : `${APP_BASE_URL}/`;
@@ -574,18 +516,8 @@ function getPeerNamesAtPosition(x: number, y: number): string[] {
     .map((peer) => peer.nickname);
 }
 
-function itemTypeLabel(type: ItemType): string {
-  if (type === 'radio_station') return 'radio';
-  return type;
-}
-
 function itemLabel(item: WorldItem): string {
   return `${item.title} (${itemTypeLabel(item.type)})`;
-}
-
-function itemPropertyLabel(key: string): string {
-  if (key === 'use24Hour') return 'use 24 hour format';
-  return key;
 }
 
 function openHelpViewer(): void {
@@ -623,61 +555,6 @@ function beginItemSelection(context: 'pickup' | 'delete' | 'edit' | 'use' | 'ins
   audio.sfxUiBlip();
 }
 
-function getEditableItemPropertyKeys(item: WorldItem): string[] {
-  const keys = ['title'];
-  if (item.type === 'radio_station') {
-    keys.push('streamUrl', 'enabled', 'channel', 'volume', 'effect', 'effectValue');
-  } else if (item.type === 'dice') {
-    keys.push('sides', 'number');
-  } else if (item.type === 'wheel') {
-    keys.push('spaces');
-  } else if (item.type === 'clock') {
-    keys.push('timeZone', 'use24Hour');
-  }
-  return keys;
-}
-
-function getInspectItemPropertyKeys(item: WorldItem): string[] {
-  const editableKeys = getEditableItemPropertyKeys(item);
-  const seen = new Set(editableKeys);
-  const allKeys: string[] = [...editableKeys];
-
-  const baseKeys = [
-    'type',
-    'x',
-    'y',
-    'carrierId',
-    'version',
-    'createdBy',
-    'createdAt',
-    'updatedAt',
-    'capabilities',
-    'useSound',
-    'emitSound',
-  ];
-  for (const key of baseKeys) {
-    if (seen.has(key)) continue;
-    seen.add(key);
-    allKeys.push(key);
-  }
-
-  const paramKeys = Object.keys(item.params).sort((a, b) => a.localeCompare(b));
-  for (const key of paramKeys) {
-    if (seen.has(key)) continue;
-    seen.add(key);
-    allKeys.push(key);
-  }
-
-  const globalKeys = Object.keys(ITEM_TYPE_GLOBAL_PROPERTIES[item.type] ?? {}).sort((a, b) => a.localeCompare(b));
-  for (const key of globalKeys) {
-    if (seen.has(key)) continue;
-    seen.add(key);
-    allKeys.push(key);
-  }
-
-  return allKeys;
-}
-
 function beginItemProperties(item: WorldItem, showAll = false): void {
   state.selectedItemId = item.id;
   state.mode = 'itemProperties';
@@ -701,7 +578,7 @@ function useItem(item: WorldItem): void {
 }
 
 function openItemPropertyOptionSelect(item: WorldItem, key: string): void {
-  const options = OPTION_ITEM_PROPERTY_VALUES[key];
+  const options = getItemPropertyOptionValues(key);
   if (!options || options.length === 0) {
     return;
   }
@@ -1999,7 +1876,7 @@ function handleItemPropertiesModeInput(code: string, key: string): void {
       audio.sfxUiBlip();
       return;
     }
-    if (OPTION_ITEM_PROPERTY_VALUES[key]) {
+    if (getItemPropertyOptionValues(key)) {
       openItemPropertyOptionSelect(item, key);
       return;
     }
