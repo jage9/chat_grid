@@ -163,9 +163,23 @@ class SignalingServer:
         )
         await self._send(client.websocket, packet)
 
-    async def _broadcast_wheel_result_after_delay(self, message: str, delay_seconds: float = 3.0) -> None:
+    async def _broadcast_wheel_result_after_delay(
+        self,
+        client: ClientConnection,
+        self_message: str,
+        others_message: str,
+        delay_seconds: float = 3.0,
+    ) -> None:
         await asyncio.sleep(delay_seconds)
-        await self._broadcast(BroadcastChatMessagePacket(type="chat_message", message=message, system=True))
+        await self._broadcast(
+            BroadcastChatMessagePacket(type="chat_message", message=others_message, system=True),
+            exclude=client.websocket,
+        )
+        if client.websocket in self.clients:
+            await self._send(
+                client.websocket,
+                BroadcastChatMessagePacket(type="chat_message", message=self_message, system=True),
+            )
 
     async def _handle_message(self, client: ClientConnection, raw_message: str) -> None:
         try:
@@ -409,7 +423,8 @@ class SignalingServer:
                 )
                 return
             self.item_last_use_ms[item.id] = now_ms
-            delayed_wheel_result: str | None = None
+            delayed_wheel_self_result: str | None = None
+            delayed_wheel_others_result: str | None = None
             if item.type == "radio_station":
                 enabled_value = item.params.get("enabled", True)
                 if isinstance(enabled_value, bool):
@@ -427,7 +442,7 @@ class SignalingServer:
                 await self._broadcast_item(item)
                 state_text = "on" if next_enabled else "off"
                 others_message = f"{client.nickname} turns {state_text} {item.title}."
-                self_message = others_message
+                self_message = f"You turn {state_text} {item.title}."
             elif item.type == "dice":
                 try:
                     sides = max(1, min(100, int(item.params.get("sides", 6))))
@@ -460,8 +475,9 @@ class SignalingServer:
                     return
                 landed = random.choice(spaces)
                 others_message = f"{client.nickname} spins {item.title}."
-                self_message = others_message
-                delayed_wheel_result = str(landed)
+                self_message = f"You spin {item.title}."
+                delayed_wheel_self_result = str(landed)
+                delayed_wheel_others_result = f"{client.nickname}: {landed}"
             await self._broadcast(
                 BroadcastChatMessagePacket(type="chat_message", message=others_message, system=True),
                 exclude=client.websocket,
@@ -477,8 +493,14 @@ class SignalingServer:
                     )
                 )
             await self._send_item_result(client, True, "use", self_message, item.id)
-            if delayed_wheel_result is not None:
-                asyncio.create_task(self._broadcast_wheel_result_after_delay(delayed_wheel_result))
+            if delayed_wheel_self_result is not None and delayed_wheel_others_result is not None:
+                asyncio.create_task(
+                    self._broadcast_wheel_result_after_delay(
+                        client=client,
+                        self_message=delayed_wheel_self_result,
+                        others_message=delayed_wheel_others_result,
+                    )
+                )
             return
 
         if isinstance(packet, ItemUpdatePacket):

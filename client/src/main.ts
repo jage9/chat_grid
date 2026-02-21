@@ -1543,7 +1543,6 @@ function handleListModeInput(code: string): void {
     signaling.send({ type: 'update_position', x: peer.x, y: peer.y });
     state.mode = 'normal';
     updateStatus(`Moved to ${peer.nickname}.`);
-    audio.sfxUiConfirm();
     return;
   }
 
@@ -1582,7 +1581,6 @@ function handleListItemsModeInput(code: string): void {
     signaling.send({ type: 'update_position', x: item.x, y: item.y });
     state.mode = 'normal';
     updateStatus(`Moved to ${itemLabel(item)}.`);
-    audio.sfxUiConfirm();
     return;
   }
   if (code === 'Escape') {
