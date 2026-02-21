@@ -1,52 +1,135 @@
 {
   "sections": [
     {
-      "title": "Movement",
+      "title": "Chat Grid Help (press Escape to exit)",
       "items": [
-        { "keys": "Arrow Keys", "description": "Move" },
-        { "keys": "Question Mark", "description": "Open help viewer" },
-        { "keys": "C", "description": "Speak coordinates" },
-        { "keys": "Escape", "description": "Disconnect/cancel" }
+        {
+          "keys": "Arrow Keys",
+          "description": "Move on the grid"
+        },
+        {
+          "keys": "C",
+          "description": "Speak your coordinates"
+        },
+        {
+          "keys": "N",
+          "description": "Change nickname"
+        },
+        {
+          "keys": "Escape",
+          "description": "Disconnect/cancel"
+        }
       ]
     },
     {
-      "title": "Users, Nickname, and Chat",
+      "title": "Users, and Chat",
       "items": [
-        { "keys": "L", "description": "Locate nearest user" },
-        { "keys": "Shift+L", "description": "List users" },
-        { "keys": "Shift+U", "description": "Speak connected users" },
-        { "keys": "N", "description": "Change nickname" },
-        { "keys": "Slash", "description": "Start chat" },
-        { "keys": "Comma / Period", "description": "Previous/next message" },
-        { "keys": "Less Than / Greater Than", "description": "First/last message" }
+        {
+          "keys": "L",
+          "description": "Locate nearest user"
+        },
+        {
+          "keys": "Shift+L",
+          "description": "List users; Enter teleports to that user"
+        },
+        {
+          "keys": "Shift+U",
+          "description": "Speak connected users"
+        },
+        {
+          "keys": "Slash",
+          "description": "Start chat"
+        },
+        {
+          "keys": "Comma / Period",
+          "description": "Previous/next message"
+        },
+        {
+          "keys": "Less Than / Greater Than",
+          "description": "First/last message"
+        }
       ]
     },
     {
       "title": "Items",
       "items": [
-        { "keys": "I", "description": "Locate nearest item" },
-        { "keys": "Shift+I", "description": "List items" },
-        { "keys": "A", "description": "Add item" },
-        { "keys": "O", "description": "Edit item properties" },
-        { "keys": "Shift+O", "description": "Read all item properties" },
-        { "keys": "D", "description": "Pick up/drop item" },
-        { "keys": "Shift+D", "description": "Delete item" },
-        { "keys": "U", "description": "Use item" }
+        {
+          "keys": "I",
+          "description": "Locate nearest item"
+        },
+        {
+          "keys": "Shift+I",
+          "description": "List items; Enter teleports to that item"
+        },
+        {
+          "keys": "A",
+          "description": "Add item"
+        },
+        {
+          "keys": "O",
+          "description": "Edit item properties"
+        },
+        {
+          "keys": "Shift+O",
+          "description": "Read all item properties"
+        },
+        {
+          "keys": "D",
+          "description": "Pick up/drop item"
+        },
+        {
+          "keys": "Shift+D",
+          "description": "Delete item"
+        },
+        {
+          "keys": "U",
+          "description": "Use item"
+        }
       ]
     },
     {
       "title": "Audio",
       "items": [
-        { "keys": "P", "description": "Ping server" },
-        { "keys": "M", "description": "Mute/unmute yourself" },
-        { "keys": "Shift+M", "description": "Toggle stereo/mono output" },
-        { "keys": "! (Shift+1)", "description": "Toggle loopback monitor" },
-        { "keys": "1", "description": "Toggle voice layer" },
-        { "keys": "2", "description": "Toggle item sounds layer" },
-        { "keys": "3", "description": "Toggle media layer" },
-        { "keys": "4", "description": "Toggle world layer (other users)" },
-        { "keys": "E", "description": "Select voice effect" },
-        { "keys": "Dash or Equals", "description": "Lower/raise active effect value" }
+        {
+          "keys": "P",
+          "description": "Ping server"
+        },
+        {
+          "keys": "M",
+          "description": "Mute/unmute yourself"
+        },
+        {
+          "keys": "Shift+M",
+          "description": "Toggle stereo/mono output"
+        },
+        {
+          "keys": "! (Shift+1)",
+          "description": "Toggle loopback monitor"
+        },
+        {
+          "keys": "1",
+          "description": "Toggle voice layer"
+        },
+        {
+          "keys": "2",
+          "description": "Toggle item sounds layer"
+        },
+        {
+          "keys": "3",
+          "description": "Toggle media layer"
+        },
+        {
+          "keys": "4",
+          "description": "Toggle world layer"
+        },
+        {
+          "keys": "E",
+          "description": "Select voice effect"
+        },
+        {
+          "keys": "Dash or Equals",
+          "description": "Lower/raise active effect value"
+        }
       ]
     }
   ]
