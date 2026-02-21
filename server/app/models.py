@@ -40,7 +40,7 @@ class PingPacket(BasePacket):
 
 class ItemAddPacket(BasePacket):
     type: Literal["item_add"]
-    itemType: Literal["radio_station", "dice", "wheel"]
+    itemType: Literal["radio_station", "dice", "wheel", "clock"]
 
 
 class ItemPickupPacket(BasePacket):
@@ -152,7 +152,7 @@ class NicknameResultPacket(BasePacket):
 
 class WorldItem(BaseModel):
     id: str
-    type: Literal["radio_station", "dice", "wheel"]
+    type: Literal["radio_station", "dice", "wheel", "clock"]
     title: str
     x: int
     y: int
@@ -161,7 +161,7 @@ class WorldItem(BaseModel):
     updatedAt: int
     version: int
     capabilities: list[str]
-    useSound: str | None = None
+    emitSound: str | None = None
     params: dict
     carrierId: str | None = None
 
@@ -169,7 +169,7 @@ class WorldItem(BaseModel):
 class PersistedWorldItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
-    type: Literal["radio_station", "dice", "wheel"]
+    type: Literal["radio_station", "dice", "wheel", "clock"]
     title: str
     x: int
     y: int

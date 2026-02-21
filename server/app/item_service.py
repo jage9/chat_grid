@@ -25,7 +25,7 @@ class ItemService:
     def now_ms() -> int:
         return int(time.time() * 1000)
 
-    def default_item(self, client: ClientConnection, item_type: Literal["radio_station", "dice", "wheel"]) -> WorldItem:
+    def default_item(self, client: ClientConnection, item_type: Literal["radio_station", "dice", "wheel", "clock"]) -> WorldItem:
         item_def = get_item_definition(item_type)
         now = self.now_ms()
         return WorldItem(
@@ -39,7 +39,7 @@ class ItemService:
             updatedAt=now,
             version=1,
             capabilities=list(item_def.capabilities),
-            useSound=item_def.use_sound,
+            emitSound=item_def.emit_sound,
             params=deepcopy(item_def.default_params),
             carrierId=None,
         )
@@ -95,7 +95,7 @@ class ItemService:
                     updatedAt=persisted.updatedAt,
                     version=persisted.version,
                     capabilities=list(item_def.capabilities),
-                    useSound=item_def.use_sound,
+                    emitSound=item_def.emit_sound,
                     params=persisted.params,
                     carrierId=persisted.carrierId,
                 )

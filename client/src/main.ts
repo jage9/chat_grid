@@ -105,14 +105,21 @@ type ChangelogData = {
 
 const APP_VERSION = String(window.CHGRID_WEB_VERSION ?? '').trim();
 const DISPLAY_TIME_ZONE = resolveDisplayTimeZone();
+const CLOCK_TIME_ZONE_OPTIONS = [
+  'America/Detroit',
+  'America/New_York',
+  'America/Indiana/Indianapolis',
+  'America/Kentucky/Louisville',
+] as const;
 dom.appVersion.textContent = APP_VERSION
   ? `Another AI experiment with Jage. Version ${APP_VERSION}`
   : 'Another AI experiment with Jage. Version unknown';
-const ITEM_TYPE_SEQUENCE: ItemType[] = ['radio_station', 'dice', 'wheel'];
+const ITEM_TYPE_SEQUENCE: ItemType[] = ['radio_station', 'dice', 'wheel', 'clock'];
 const ITEM_TYPE_GLOBAL_PROPERTIES: Record<ItemType, Record<string, string | number | boolean>> = {
-  radio_station: { useCooldownMs: 1000 },
-  dice: { useCooldownMs: 1000 },
-  wheel: { useCooldownMs: 4000 },
+  radio_station: { emitSound: 'none', useCooldownMs: 1000 },
+  dice: { emitSound: 'sounds/roll.ogg', useCooldownMs: 1000 },
+  wheel: { emitSound: 'sounds/spin.ogg', useCooldownMs: 4000 },
+  clock: { emitSound: 'sounds/clock.ogg', useCooldownMs: 1000 },
 };
 const EDITABLE_ITEM_PROPERTY_KEYS = new Set([
   'title',
@@ -125,10 +132,14 @@ const EDITABLE_ITEM_PROPERTY_KEYS = new Set([
   'spaces',
   'sides',
   'number',
+  'timeZone',
+  'use24Hour',
 ]);
 const OPTION_ITEM_PROPERTY_VALUES: Partial<Record<string, string[]>> = {
   effect: EFFECT_SEQUENCE.map((effect) => effect.id),
   channel: [...RADIO_CHANNEL_OPTIONS],
+  timeZone: [...CLOCK_TIME_ZONE_OPTIONS],
+  use24Hour: ['off', 'on'],
 };
 const APP_BASE_URL = import.meta.env.BASE_URL || '/';
 function withBase(path: string): string {
@@ -452,6 +463,8 @@ function getEditableItemPropertyKeys(item: WorldItem): string[] {
     keys.push('sides', 'number');
   } else if (item.type === 'wheel') {
     keys.push('spaces');
+  } else if (item.type === 'clock') {
+    keys.push('timeZone', 'use24Hour');
   }
   return keys;
 }
@@ -461,7 +474,7 @@ function getInspectItemPropertyKeys(item: WorldItem): string[] {
   const seen = new Set(editableKeys);
   const allKeys: string[] = [...editableKeys];
 
-  const baseKeys = ['type', 'x', 'y', 'carrierId', 'version', 'createdBy', 'createdAt', 'updatedAt', 'capabilities', 'useSound'];
+  const baseKeys = ['type', 'x', 'y', 'carrierId', 'version', 'createdBy', 'createdAt', 'updatedAt', 'capabilities', 'emitSound'];
   for (const key of baseKeys) {
     if (seen.has(key)) continue;
     seen.add(key);
@@ -617,8 +630,10 @@ function getItemPropertyValue(item: WorldItem, key: string): string {
   if (key === 'createdAt') return formatTimestampMs(item.createdAt);
   if (key === 'updatedAt') return formatTimestampMs(item.updatedAt);
   if (key === 'capabilities') return item.capabilities.join(', ') || 'none';
-  if (key === 'useSound') return item.useSound ?? 'none';
+  if (key === 'emitSound') return item.emitSound ?? 'none';
   if (key === 'enabled') return item.params.enabled === false ? 'off' : 'on';
+  if (key === 'timeZone') return String(item.params.timeZone ?? CLOCK_TIME_ZONE_OPTIONS[0]);
+  if (key === 'use24Hour') return item.params.use24Hour === true ? 'on' : 'off';
   if (key === 'channel') return normalizeRadioChannel(item.params.channel);
   if (key === 'effect') return normalizeRadioEffect(item.params.effect);
   if (key === 'effectValue') return String(normalizeRadioEffectValue(item.params.effectValue));
@@ -1028,7 +1043,7 @@ async function onMessage(message: IncomingMessage): Promise<void> {
         if (message.action === 'use') {
           pushChatMessage(message.message);
           const item = message.itemId ? state.items.get(message.itemId) : null;
-          if (!item?.useSound && item) {
+          if (!item?.emitSound && item) {
             audio.sfxLocate({ x: item.x - state.player.x, y: item.y - state.player.y });
           }
         } else if (message.action !== 'update') {

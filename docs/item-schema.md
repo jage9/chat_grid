@@ -5,7 +5,7 @@
 ```json
 {
   "id": "string",
-  "type": "radio_station | dice | wheel",
+  "type": "radio_station | dice | wheel | clock",
   "title": "string",
   "x": 0,
   "y": 0,
@@ -14,22 +14,22 @@
   "updatedAt": 1735689600000,
   "version": 1,
   "capabilities": ["editable", "carryable", "deletable", "usable"],
-  "useSound": "sounds/roll.ogg",
+  "emitSound": "sounds/roll.ogg",
   "params": {},
   "carrierId": null
 }
 ```
 
-- `useSound`: optional client-played sound path when item `use` succeeds; global item field and not user-editable in V1.
-- `capabilities` and `useSound` are derived from global item-type definitions at runtime (not stored per-instance in persisted state).
-- `useCooldownMs`: global per item type (`radio_station=1000`, `dice=1000`, `wheel=4000`), not per-instance editable.
+- `emitSound`: optional client-played sound path when item `use` succeeds; global item field and not user-editable in V1.
+- `capabilities` and `emitSound` are derived from global item-type definitions at runtime (not stored per-instance in persisted state).
+- `useCooldownMs`: global per item type (`radio_station=1000`, `dice=1000`, `wheel=4000`, `clock=1000`), not per-instance editable.
 
 ## Persisted Item State (`server/runtime/items.json`)
 
 ```json
 {
   "id": "string",
-  "type": "radio_station | dice | wheel",
+  "type": "radio_station | dice | wheel | clock",
   "title": "string",
   "x": 0,
   "y": 0,
@@ -93,6 +93,18 @@
   - must include at least 1 value
   - max 100 values
   - each value max 80 chars
+
+### `clock`
+
+```json
+{
+  "timeZone": "America/Detroit",
+  "use24Hour": false
+}
+```
+
+- `timeZone`: one of `America/Detroit | America/New_York | America/Indiana/Indianapolis | America/Kentucky/Louisville`.
+- `use24Hour`: boolean (or `on/off` in updates), default `false`.
 
 ## Packet Shapes
 

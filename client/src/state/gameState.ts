@@ -2,7 +2,7 @@ export const GRID_SIZE = 41;
 export const HEARING_RADIUS = 15;
 export const MOVE_COOLDOWN_MS = 200;
 
-export type ItemType = 'radio_station' | 'dice' | 'wheel';
+export type ItemType = 'radio_station' | 'dice' | 'wheel' | 'clock';
 
 export type WorldItem = {
   id: string;
@@ -15,7 +15,7 @@ export type WorldItem = {
   updatedAt: number;
   version: number;
   capabilities: string[];
-  useSound?: string;
+  emitSound?: string;
   params: Record<string, unknown>;
   carrierId?: string | null;
 };

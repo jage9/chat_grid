@@ -117,3 +117,68 @@ async def test_radio_channel_update_validates(monkeypatch: pytest.MonkeyPatch) -
     )
     assert send_payloads[-1].ok is False
     assert "channel must be one of" in send_payloads[-1].message.lower()
+
+
+@pytest.mark.asyncio
+async def test_clock_use_reports_time_and_emits_sound(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    server.clients[ws] = client
+    item = server.item_service.default_item(client, "clock")
+    server.item_service.add_item(item)
+
+    send_payloads: list[object] = []
+    broadcast_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+        broadcast_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+    monkeypatch.setattr(server.item_service, "now_ms", lambda: 30_000)
+    monkeypatch.setattr(server, "_format_clock_display_time", lambda _params: "2:15 PM")
+
+    await server._handle_message(client, json.dumps({"type": "item_use", "itemId": item.id}))
+
+    assert send_payloads[-1].ok is True
+    assert send_payloads[-1].message == f"{item.title} says 2:15 PM."
+    assert any(getattr(packet, "type", "") == "item_use_sound" for packet in broadcast_payloads)
+
+
+@pytest.mark.asyncio
+async def test_clock_timezone_update_validates(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    server.clients[ws] = client
+    item = server.item_service.default_item(client, "clock")
+    server.item_service.add_item(item)
+
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+        return
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "item_update", "itemId": item.id, "params": {"timeZone": "America/New_York"}}),
+    )
+    assert send_payloads[-1].ok is True
+    assert item.params.get("timeZone") == "America/New_York"
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "item_update", "itemId": item.id, "params": {"timeZone": "Invalid/Zone"}}),
+    )
+    assert send_payloads[-1].ok is False
+    assert "timezone must be one of" in send_payloads[-1].message.lower()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from datetime import datetime
 import json
 import logging
 import random
@@ -9,13 +10,14 @@ import ssl
 import uuid
 from pathlib import Path
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError, TypeAdapter
 from websockets.asyncio.server import ServerConnection, serve
 
 from .client import ClientConnection
 from .config import load_config
-from .item_catalog import get_item_use_cooldown_ms
+from .item_catalog import CLOCK_DEFAULT_TIME_ZONE, CLOCK_TIME_ZONE_OPTIONS, get_item_use_cooldown_ms
 from .item_service import ItemService
 from .models import (
     BroadcastChatMessagePacket,
@@ -89,6 +91,39 @@ class SignalingServer:
     @staticmethod
     def _item_type_label(item: WorldItem) -> str:
         return "radio" if item.type == "radio_station" else item.type
+
+    @staticmethod
+    def _normalize_clock_timezone(value: object) -> str:
+        token = str(value or "").strip()
+        if token in CLOCK_TIME_ZONE_OPTIONS:
+            return token
+        return CLOCK_DEFAULT_TIME_ZONE
+
+    @staticmethod
+    def _parse_clock_use_24_hour(value: object) -> bool | None:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            token = value.strip().lower()
+            if token in {"on", "true", "1", "yes"}:
+                return True
+            if token in {"off", "false", "0", "no"}:
+                return False
+        return None
+
+    @classmethod
+    def _format_clock_display_time(cls, params: dict) -> str:
+        tz_name = cls._normalize_clock_timezone(params.get("timeZone"))
+        use_24_hour = cls._parse_clock_use_24_hour(params.get("use24Hour"))
+        if use_24_hour is None:
+            use_24_hour = False
+        now = datetime.now(ZoneInfo(tz_name))
+        if use_24_hour:
+            return now.strftime("%H:%M")
+        hour_12 = now.hour % 12 or 12
+        return f"{hour_12}:{now.minute:02d} {'AM' if now.hour < 12 else 'PM'}"
 
     async def _send_item_result(
         self,
@@ -432,7 +467,7 @@ class SignalingServer:
             if item.carrierId is None and (item.x != client.x or item.y != client.y):
                 await self._send_item_result(client, False, "use", "Item is not on your square.", item.id)
                 return
-            if item.type not in {"radio_station", "dice", "wheel"}:
+            if item.type not in {"radio_station", "dice", "wheel", "clock"}:
                 await self._send_item_result(client, False, "use", "This item cannot be used yet.", item.id)
                 return
             now_ms = self.item_service.now_ms()
@@ -483,7 +518,7 @@ class SignalingServer:
                     f"{client.nickname} rolled {item.title}: {', '.join(str(value) for value in rolls)} (total {total})."
                 )
                 self_message = f"You rolled {item.title}: {', '.join(str(value) for value in rolls)} (total {total})."
-            else:
+            elif item.type == "wheel":
                 spaces_raw = item.params.get("spaces", "")
                 if isinstance(spaces_raw, str):
                     spaces = [token.strip() for token in spaces_raw.split(",") if token.strip()]
@@ -505,16 +540,20 @@ class SignalingServer:
                 self_message = f"You spin {item.title}."
                 delayed_wheel_self_result = str(landed)
                 delayed_wheel_others_result = str(landed)
+            else:
+                display_time = self._format_clock_display_time(item.params)
+                others_message = f"{client.nickname} checks {item.title}. {item.title} says {display_time}."
+                self_message = f"{item.title} says {display_time}."
             await self._broadcast(
                 BroadcastChatMessagePacket(type="chat_message", message=others_message, system=True),
                 exclude=client.websocket,
             )
-            if item.useSound:
+            if item.emitSound:
                 await self._broadcast(
                     ItemUseSoundPacket(
                         type="item_use_sound",
                         itemId=item.id,
-                        sound=item.useSound,
+                        sound=item.emitSound,
                         x=item.x,
                         y=item.y,
                     )
@@ -665,6 +704,29 @@ class SignalingServer:
                         )
                         return
                     next_params["effectValue"] = round(effect_value, 1)
+                if item.type == "clock":
+                    time_zone = str(next_params.get("timeZone", CLOCK_DEFAULT_TIME_ZONE)).strip()
+                    if time_zone not in CLOCK_TIME_ZONE_OPTIONS:
+                        await self._send_item_result(
+                            client,
+                            False,
+                            "update",
+                            f"timeZone must be one of {', '.join(CLOCK_TIME_ZONE_OPTIONS)}.",
+                            item.id,
+                        )
+                        return
+                    use_24_hour = self._parse_clock_use_24_hour(next_params.get("use24Hour"))
+                    if use_24_hour is None:
+                        await self._send_item_result(
+                            client,
+                            False,
+                            "update",
+                            "use24Hour must be on/off.",
+                            item.id,
+                        )
+                        return
+                    next_params["timeZone"] = time_zone
+                    next_params["use24Hour"] = use_24_hour
                 item.params = next_params
             item.updatedAt = self.item_service.now_ms()
             item.version += 1
