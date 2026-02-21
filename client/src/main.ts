@@ -1474,6 +1474,10 @@ function handleListModeInput(code: string, key: string): void {
   if (code === 'Enter') {
     const peer = state.peers.get(state.sortedPeerIds[state.listIndex]);
     if (!peer) return;
+    if (state.player.x === peer.x && state.player.y === peer.y) {
+      updateStatus('Already here.');
+      return;
+    }
     state.player.x = peer.x;
     state.player.y = peer.y;
     persistPlayerPosition();
@@ -1530,6 +1534,10 @@ function handleListItemsModeInput(code: string, key: string): void {
   if (code === 'Enter') {
     const item = state.items.get(state.sortedItemIds[state.itemListIndex]);
     if (!item) return;
+    if (state.player.x === item.x && state.player.y === item.y) {
+      updateStatus('Already here.');
+      return;
+    }
     state.player.x = item.x;
     state.player.y = item.y;
     persistPlayerPosition();
