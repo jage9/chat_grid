@@ -8,7 +8,7 @@
         "Added simple first-letter navigation for menus and lists.",
         "Added Channel property for radio items (stereo, mono, left, right).",
         "Added new wheel item type with configurable spaces and spin results.",
-        "Added and updated movement/teleport sounds."
+        "Added movement/teleport sounds."
       ]
     },
     {
@@ -16,10 +16,8 @@
       "items": [
         "Added Shift+O inspector mode to read all item properties.",
         "Added paste support for chat and text-entry fields.",
-        "Expanded punctuation announcements while editing text.",
         "Persisted player position across refresh/reconnect.",
-        "Added loopback monitoring toggle for hearing your own effect.",
-        "Improved reconnect flow and connection error handling."
+        "Added loopback monitoring toggle for hearing your own effect."
       ]
     }
   ]
