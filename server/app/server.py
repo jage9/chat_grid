@@ -67,6 +67,7 @@ class SignalingServer:
         ssl_key: str | None,
         max_message_size: int = 2_000_000,
         state_file: Path | None = None,
+        grid_size: int = 41,
     ):
         """Initialize runtime state, TLS context, and item service."""
 
@@ -77,6 +78,7 @@ class SignalingServer:
         self.clients: dict[ServerConnection, ClientConnection] = {}
         self.item_service = ItemService(state_file=state_file)
         self.item_last_use_ms: dict[str, int] = {}
+        self.grid_size = max(1, grid_size)
 
     @property
     def items(self) -> dict[str, WorldItem]:
@@ -105,6 +107,11 @@ class SignalingServer:
         """Return user-facing item type wording for chat/status strings."""
 
         return "radio" if item.type == "radio_station" else item.type
+
+    def _is_in_bounds(self, x: int, y: int) -> bool:
+        """Check whether a coordinate is inside server-authoritative world bounds."""
+
+        return 0 <= x < self.grid_size and 0 <= y < self.grid_size
 
     @staticmethod
     def _normalize_clock_timezone(value: object) -> str:
@@ -270,6 +277,15 @@ class SignalingServer:
             return
 
         if isinstance(packet, UpdatePositionPacket):
+            if not self._is_in_bounds(packet.x, packet.y):
+                PACKET_LOGGER.warning(
+                    "out-of-bounds position ignored id=%s x=%d y=%d grid_size=%d",
+                    client.id,
+                    packet.x,
+                    packet.y,
+                    self.grid_size,
+                )
+                return
             client.x = packet.x
             client.y = packet.y
             await self._broadcast(
@@ -456,6 +472,9 @@ class SignalingServer:
             if item.carrierId != client.id:
                 await self._send_item_result(client, False, "drop", "You are not carrying that item.", item.id)
                 return
+            if not self._is_in_bounds(packet.x, packet.y):
+                await self._send_item_result(client, False, "drop", "Drop position is out of bounds.", item.id)
+                return
             item.carrierId = None
             item.x = packet.x
             item.y = packet.y
@@ -518,7 +537,6 @@ class SignalingServer:
                     item.id,
                 )
                 return
-            self.item_last_use_ms[item.id] = now_ms
             delayed_wheel_self_result: str | None = None
             delayed_wheel_others_result: str | None = None
             if item.type == "radio_station":
@@ -578,6 +596,7 @@ class SignalingServer:
                 display_time = self._format_clock_display_time(item.params)
                 others_message = f"{client.nickname} checks {item.title}. {item.title} says {display_time}."
                 self_message = f"{item.title} says {display_time}."
+            self.item_last_use_ms[item.id] = now_ms
             await self._broadcast(
                 BroadcastChatMessagePacket(type="chat_message", message=others_message, system=True),
                 exclude=client.websocket,
@@ -790,10 +809,10 @@ class SignalingServer:
     async def _broadcast(self, packet: object, exclude: ServerConnection | None = None) -> None:
         """Broadcast one packet to all clients except an optional websocket."""
 
-        for websocket in list(self.clients.keys()):
-            if websocket is exclude:
-                continue
-            await self._send(websocket, packet)
+        recipients = [websocket for websocket in self.clients if websocket is not exclude]
+        if not recipients:
+            return
+        await asyncio.gather(*(self._send(websocket, packet) for websocket in recipients))
 
     async def _send(self, websocket: ServerConnection, packet: object) -> None:
         """Send one packet to one websocket, swallowing per-client send failures."""
@@ -875,5 +894,6 @@ def run() -> None:
         ssl_key,
         max_message_size=config.network.max_message_bytes,
         state_file=state_file,
+        grid_size=config.world.grid_size,
     )
     asyncio.run(server.start())

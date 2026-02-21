@@ -182,3 +182,35 @@ async def test_clock_timezone_update_validates(monkeypatch: pytest.MonkeyPatch) 
     )
     assert send_payloads[-1].ok is False
     assert "timezone must be one of" in send_payloads[-1].message.lower()
+
+
+@pytest.mark.asyncio
+async def test_failed_wheel_use_does_not_consume_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    server.clients[ws] = client
+    item = server.item_service.default_item(client, "wheel")
+    item.params["spaces"] = ",,,"
+    server.item_service.add_item(item)
+
+    send_payloads: list[object] = []
+    now_ms = 40_000
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+        return
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+    monkeypatch.setattr(server.item_service, "now_ms", lambda: now_ms)
+
+    await server._handle_message(client, json.dumps({"type": "item_use", "itemId": item.id}))
+    assert send_payloads[-1].ok is False
+    assert "spaces" in send_payloads[-1].message.lower()
+
+    item.params["spaces"] = "a,b,c"
+    await server._handle_message(client, json.dumps({"type": "item_use", "itemId": item.id}))
+    assert send_payloads[-1].ok is True

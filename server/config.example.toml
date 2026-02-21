@@ -21,3 +21,7 @@ level = "INFO"
 [storage]
 # Item persistence file. Relative paths are resolved from this config file directory.
 state_file = "runtime/items.json"
+
+[world]
+# Grid width/height in cells. Valid coordinates are 0..grid_size-1.
+grid_size = 41

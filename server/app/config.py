@@ -41,6 +41,12 @@ class StorageConfigSection(BaseModel):
     state_file: str = "runtime/items.json"
 
 
+class WorldConfigSection(BaseModel):
+    """Authoritative world geometry options."""
+
+    grid_size: int = Field(default=41, ge=1)
+
+
 class AppConfig(BaseModel):
     """Top-level application configuration document."""
 
@@ -49,6 +55,7 @@ class AppConfig(BaseModel):
     tls: TlsConfigSection = TlsConfigSection()
     logging: LoggingConfigSection = LoggingConfigSection()
     storage: StorageConfigSection = StorageConfigSection()
+    world: WorldConfigSection = WorldConfigSection()
 
 
 def load_config(path: Path | None) -> AppConfig:

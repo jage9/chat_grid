@@ -10,6 +10,7 @@ def test_load_config_defaults_when_path_none() -> None:
     assert cfg.server.bind_ip == "127.0.0.1"
     assert cfg.network.allow_insecure_ws is True
     assert cfg.storage.state_file == "runtime/items.json"
+    assert cfg.world.grid_size == 41
 
 
 def test_load_config_requires_tls_when_insecure_disabled(tmp_path: Path) -> None:
