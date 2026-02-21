@@ -111,8 +111,9 @@ const CLOCK_TIME_ZONE_OPTIONS = [
   'America/Argentina/Buenos_Aires',
   'America/Chicago',
   'America/Detroit',
-  'America/Indiana/Indianapolis',
   'America/Halifax',
+  'America/Indiana/Indianapolis',
+  'America/Kentucky/Louisville',
   'America/Los_Angeles',
   'America/St_Johns',
   'Asia/Bangkok',
@@ -136,7 +137,6 @@ const CLOCK_TIME_ZONE_OPTIONS = [
   'Australia/Lord_Howe',
   'Europe/Berlin',
   'Europe/Helsinki',
-  'America/Kentucky/Louisville',
   'Europe/London',
   'Europe/Moscow',
   'Pacific/Auckland',
@@ -176,7 +176,6 @@ const OPTION_ITEM_PROPERTY_VALUES: Partial<Record<string, string[]>> = {
   effect: EFFECT_SEQUENCE.map((effect) => effect.id),
   channel: [...RADIO_CHANNEL_OPTIONS],
   timeZone: [...CLOCK_TIME_ZONE_OPTIONS],
-  use24Hour: ['off', 'on'],
 };
 const APP_BASE_URL = import.meta.env.BASE_URL || '/';
 function withBase(path: string): string {
@@ -470,6 +469,11 @@ function itemLabel(item: WorldItem): string {
   return `${item.title} (${itemTypeLabel(item.type)})`;
 }
 
+function itemPropertyLabel(key: string): string {
+  if (key === 'use24Hour') return 'use 24 hour format';
+  return key;
+}
+
 function getItemsAtPosition(x: number, y: number): WorldItem[] {
   return Array.from(state.items.values()).filter((item) => !item.carrierId && item.x === x && item.y === y);
 }
@@ -562,7 +566,7 @@ function beginItemProperties(item: WorldItem, showAll = false): void {
   state.itemPropertyIndex = 0;
   const key = state.itemPropertyKeys[0];
   const value = getItemPropertyValue(item, key);
-  updateStatus(`${key}: ${value}`);
+  updateStatus(`${itemPropertyLabel(key)}: ${value}`);
   audio.sfxUiBlip();
 }
 
@@ -581,7 +585,7 @@ function openItemPropertyOptionSelect(item: WorldItem, key: string): void {
   const currentValue = getItemPropertyValue(item, key);
   const currentIndex = options.indexOf(currentValue);
   state.itemPropertyOptionIndex = currentIndex >= 0 ? currentIndex : 0;
-  updateStatus(`Select ${key}: ${state.itemPropertyOptionValues[state.itemPropertyOptionIndex]}`);
+  updateStatus(`Select ${itemPropertyLabel(key)}: ${state.itemPropertyOptionValues[state.itemPropertyOptionIndex]}`);
   audio.sfxUiBlip();
 }
 
@@ -1078,7 +1082,7 @@ async function onMessage(message: IncomingMessage): Promise<void> {
       if (state.mode === 'itemProperties' && state.selectedItemId === message.item.id) {
         const key = state.itemPropertyKeys[state.itemPropertyIndex];
         if (key) {
-          updateStatus(`${key}: ${getItemPropertyValue(message.item, key)}`);
+          updateStatus(`${itemPropertyLabel(key)}: ${getItemPropertyValue(message.item, key)}`);
         }
       }
       await radioRuntime.sync(state.items.values());
@@ -1761,7 +1765,7 @@ function handleItemPropertiesModeInput(code: string, key: string): void {
         : (state.itemPropertyIndex - 1 + state.itemPropertyKeys.length) % state.itemPropertyKeys.length;
     const key = state.itemPropertyKeys[state.itemPropertyIndex];
     const value = getItemPropertyValue(item, key);
-    updateStatus(`${key}: ${value}`);
+    updateStatus(`${itemPropertyLabel(key)}: ${value}`);
     audio.sfxUiBlip();
     return;
   }
@@ -1775,14 +1779,14 @@ function handleItemPropertiesModeInput(code: string, key: string): void {
     state.itemPropertyIndex = nextByInitial;
     const selectedKey = state.itemPropertyKeys[state.itemPropertyIndex];
     const value = getItemPropertyValue(item, selectedKey);
-    updateStatus(`${selectedKey}: ${value}`);
+    updateStatus(`${itemPropertyLabel(selectedKey)}: ${value}`);
     audio.sfxUiBlip();
     return;
   }
   if (code === 'Enter') {
     const key = state.itemPropertyKeys[state.itemPropertyIndex];
     if (!EDITABLE_ITEM_PROPERTY_KEYS.has(key)) {
-      updateStatus(`${key} is not editable.`);
+      updateStatus(`${itemPropertyLabel(key)} is not editable.`);
       audio.sfxUiCancel();
       return;
     }
@@ -1790,6 +1794,13 @@ function handleItemPropertiesModeInput(code: string, key: string): void {
       const nextEnabled = item.params.enabled === false;
       signaling.send({ type: 'item_update', itemId, params: { enabled: nextEnabled } });
       updateStatus(`enabled: ${nextEnabled ? 'on' : 'off'}`);
+      audio.sfxUiBlip();
+      return;
+    }
+    if (key === 'use24Hour') {
+      const nextUse24Hour = item.params.use24Hour !== true;
+      signaling.send({ type: 'item_update', itemId, params: { use24Hour: nextUse24Hour } });
+      updateStatus(`${itemPropertyLabel(key)}: ${nextUse24Hour ? 'on' : 'off'}`);
       audio.sfxUiBlip();
       return;
     }
@@ -1809,7 +1820,7 @@ function handleItemPropertiesModeInput(code: string, key: string): void {
           : String(item.params[key] ?? '');
     state.cursorPos = state.nicknameInput.length;
     replaceTextOnNextType = true;
-    updateStatus(`Edit ${key}: ${state.nicknameInput}`);
+    updateStatus(`Edit ${itemPropertyLabel(key)}: ${state.nicknameInput}`);
     audio.sfxUiBlip();
     return;
   }
