@@ -23,11 +23,19 @@
 ## Coding Style & Naming Conventions
 - TypeScript: strict typing, `camelCase`, small focused modules.
 - Python: PEP 8, 4 spaces, `snake_case`, typed Pydantic models.
+- Python docstrings: for `server/app` changes, include module docstring, class docstring, and docstrings for public functions/methods where behavior/contracts matter.
 - Keep protocol changes synced in `client/src/network/protocol.ts` and `server/app/models.py`.
+
+## Documentation Maintenance
+- Keep behavior docs in sync in the same change when features change.
+- Controls/keybindings changes: update `docs/controls.md`.
+- Item behavior/defaults/validation changes: update `docs/item-types.md` and `docs/item-schema.md`.
+- Runtime/protocol behavior changes: update `docs/runtime-flow.md` and/or `docs/protocol-notes.md`.
 
 ## Versioning & Configuration
 - Bump `client/public/version.js` on every user-visible change using `YYYY.MM.DD Rn`.
 - Commit each completed logical change; include the version bump in that same commit when client behavior changes.
+- Docs-only changes do not require a version bump unless explicitly requested.
 - Do not duplicate version constants elsewhere in client code.
 - `server/config.toml` is deployment-local and must not be committed.
 - Production should use TLS (`network.allow_insecure_ws = false`).
