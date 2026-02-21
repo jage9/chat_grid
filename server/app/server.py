@@ -440,11 +440,12 @@ class SignalingServer:
             last_use_ms = self.item_last_use_ms.get(item.id)
             if last_use_ms is not None and now_ms - last_use_ms < cooldown_ms:
                 remaining_ms = cooldown_ms - (now_ms - last_use_ms)
+                remaining_seconds = max(0.1, round(remaining_ms / 1000, 1))
                 await self._send_item_result(
                     client,
                     False,
                     "use",
-                    f"{item.title} is on cooldown for {max(1, remaining_ms)} ms.",
+                    f"{item.title} is on cooldown for {remaining_seconds:.1f} s.",
                     item.id,
                 )
                 return

@@ -1,4 +1,4 @@
-export const GRID_SIZE = 40;
+export const GRID_SIZE = 41;
 export const HEARING_RADIUS = 15;
 export const MOVE_COOLDOWN_MS = 200;
 

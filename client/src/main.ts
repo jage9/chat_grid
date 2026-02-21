@@ -596,6 +596,7 @@ function applyTextInputEdit(code: string, key: string, maxLength: number, allowR
 }
 
 function describeCharacter(ch: string): string {
+  if (ch.length === 1 && /[A-Z]/.test(ch)) return `capital ${ch}`;
   if (ch === ' ') return 'space';
   if (ch === '\t') return 'tab';
   if (ch === '.') return 'period';
