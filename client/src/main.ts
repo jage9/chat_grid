@@ -771,6 +771,11 @@ function describeItemPropertyHelp(item: WorldItem, key: string): string {
   if (metadata?.range) {
     const stepText = metadata.range.step !== undefined ? ` step ${metadata.range.step}` : '';
     parts.push(`Range: ${metadata.range.min} to ${metadata.range.max}${stepText}.`);
+  } else {
+    const options = getItemPropertyOptionValues(key);
+    if (options && options.length > 0) {
+      parts.push(`Options: ${options.join(', ')}.`);
+    }
   }
 
   parts.push(EDITABLE_ITEM_PROPERTY_KEYS.has(key) ? 'Editable.' : 'Read only.');

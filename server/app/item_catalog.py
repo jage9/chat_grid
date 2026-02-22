@@ -151,7 +151,7 @@ ITEM_TYPE_PROPERTY_METADATA: dict[ItemType, dict[str, dict[str, object]]] = {
         "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item."},
         "streamUrl": {"valueType": "text", "tooltip": "Audio stream URL used by this radio."},
         "enabled": {"valueType": "boolean", "tooltip": "Turns playback on or off for this radio."},
-        "channel": {"valueType": "list", "tooltip": "Select stereo, mono, left-only, or right-only channel mix."},
+        "channel": {"valueType": "list", "tooltip": "Select how the station audio channels are rendered."},
         "volume": {
             "valueType": "number",
             "tooltip": "Playback volume percent for this radio.",
