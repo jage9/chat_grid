@@ -210,7 +210,7 @@ let audioLayers: AudioLayerState = {
 
 const signalingProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const signalingUrl = `${signalingProtocol}://${window.location.host}/ws`;
-const signaling = new SignalingClient(signalingUrl, updateStatus);
+const signaling = new SignalingClient(signalingUrl, handleSignalingStatus);
 
 const peerManager = new PeerManager(
   audio,
@@ -488,6 +488,11 @@ function toggleAudioLayer(layer: keyof AudioLayerState): void {
   void applyAudioLayerState();
   updateStatus(`${layer} layer ${audioLayers[layer] ? 'on' : 'off'}.`);
   audio.sfxUiBlip();
+}
+
+/** Routes signaling transport status messages through chat buffer + status output. */
+function handleSignalingStatus(message: string): void {
+  pushChatMessage(message);
 }
 
 /** Appends a chat/system line to the bounded status history buffer. */
@@ -1081,7 +1086,7 @@ async function reconnectAfterHeartbeatTimeout(): Promise<void> {
   if (reconnectInFlight || !state.running) return;
   reconnectInFlight = true;
   stopHeartbeat();
-  updateStatus('Connection stale. Reconnecting...');
+  pushChatMessage('Connection stale. Reconnecting...');
   disconnect();
   try {
     await connect();
@@ -1205,7 +1210,7 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   }
   await onAppMessage(message);
   if (restartAnnouncement) {
-    updateStatus(restartAnnouncement);
+    pushChatMessage(restartAnnouncement);
     audio.sfxUiConfirm();
   }
 }
