@@ -4,7 +4,8 @@
       "date": "February 22, 2026",
       "items": [
         "Added support for Dropbox links and HTTP streams for item sounds and radio stations.",
-        "You will no longer repeatedly hit walls."
+        "You will no longer repeatedly hit walls.",
+        "Added user volume control and calibration."
       ]
     },
     {

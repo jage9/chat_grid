@@ -132,7 +132,7 @@
         },
         {
           "keys": "V",
-          "description": "Set volume"
+          "description": "Set microphone gain"
         },
         {
           "keys": "Shift+V",

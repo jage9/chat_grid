@@ -1524,7 +1524,7 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
     state.nicknameInput = formatSteppedNumber(audio.getOutboundInputGain(), MIC_INPUT_GAIN_STEP);
     state.cursorPos = state.nicknameInput.length;
     replaceTextOnNextType = true;
-    updateStatus(`Set volume: ${state.nicknameInput}`);
+    updateStatus(`Set microphone gain: ${state.nicknameInput}`);
     audio.sfxUiBlip();
     return;
   }
@@ -1886,7 +1886,7 @@ function handleMicGainEditModeInput(code: string, key: string, ctrlKey: boolean)
     persistMicInputGain(applied);
     state.mode = 'normal';
     replaceTextOnNextType = false;
-    updateStatus(`Volume set to ${formatSteppedNumber(applied, MIC_INPUT_GAIN_STEP)}.`);
+    updateStatus(`Microphone gain set to ${formatSteppedNumber(applied, MIC_INPUT_GAIN_STEP)}.`);
     audio.sfxUiConfirm();
     return;
   }
