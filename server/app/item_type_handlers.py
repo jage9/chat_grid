@@ -104,6 +104,14 @@ def _validate_radio_update(item: WorldItem, next_params: dict) -> dict:
     if not (0 <= effect_value <= 100):
         raise ValueError("effectValue must be between 0 and 100.")
     next_params["effectValue"] = round(effect_value, 1)
+
+    try:
+        facing = float(next_params.get("facing", item.params.get("facing", 0)))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("facing must be a number between 0 and 360.") from exc
+    if not (0 <= facing <= 360):
+        raise ValueError("facing must be between 0 and 360.")
+    next_params["facing"] = round(facing, 1)
     return next_params
 
 

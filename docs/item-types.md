@@ -10,6 +10,8 @@ This is behavior-focused documentation for item types and their defaults.
   - `useSound`
   - `emitSound`
   - `useCooldownMs` (from item catalog)
+  - `emitRange` (spatial range in squares)
+  - `directional` (directional attenuation enabled)
 - Instance fields are persisted in `server/runtime/items.json`.
 
 ## `radio_station`
@@ -23,10 +25,13 @@ This is behavior-focused documentation for item types and their defaults.
   - `volume=50`
   - `effect="off"`
   - `effectValue=50`
+  - `facing=0`
 - Global:
   - `useSound=none`
   - `emitSound=none`
   - `useCooldownMs=1000`
+  - `emitRange=20`
+  - `directional=true`
 
 ### Use
 - `use` toggles `enabled` on/off and broadcasts chat status.
@@ -36,6 +41,7 @@ This is behavior-focused documentation for item types and their defaults.
 - `volume`: integer `0..100`
 - `effect`: `reverb | echo | flanger | high_pass | low_pass | off`
 - `effectValue`: number `0..100` with `0.1` precision
+- `facing`: number `0..360` with `0.1` precision
 
 ## `dice`
 
@@ -48,6 +54,8 @@ This is behavior-focused documentation for item types and their defaults.
   - `useSound=sounds/roll.ogg`
   - `emitSound=none`
   - `useCooldownMs=1000`
+  - `emitRange=15`
+  - `directional=false`
 
 ### Use
 - Rolls `number` dice with `sides` sides and reports values + total.
@@ -66,6 +74,8 @@ This is behavior-focused documentation for item types and their defaults.
   - `useSound=sounds/spin.ogg`
   - `emitSound=none`
   - `useCooldownMs=4000`
+  - `emitRange=15`
+  - `directional=false`
 
 ### Use
 - Announces spin immediately.
@@ -88,6 +98,8 @@ This is behavior-focused documentation for item types and their defaults.
   - `useSound=none`
   - `emitSound=sounds/clock.ogg`
   - `useCooldownMs=1000`
+  - `emitRange=10`
+  - `directional=false`
 
 ### Use
 - Reports current time from item timezone and format.

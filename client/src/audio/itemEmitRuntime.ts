@@ -10,6 +10,12 @@ type EmitOutput = {
   panner: StereoPannerNode | null;
 };
 
+type EmitSpatialConfig = {
+  range: number;
+  directional: boolean;
+  facingDeg: number;
+};
+
 const ITEM_EMIT_BASE_GAIN = 0.3;
 
 export class ItemEmitRuntime {
@@ -19,6 +25,7 @@ export class ItemEmitRuntime {
   constructor(
     private readonly audio: AudioEngine,
     private readonly resolveSoundUrl: (soundPath: string) => string,
+    private readonly getSpatialConfig: (item: WorldItem) => EmitSpatialConfig,
   ) {}
 
   cleanup(itemId: string): void {
@@ -108,14 +115,21 @@ export class ItemEmitRuntime {
         output.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
         continue;
       }
+      const spatialConfig = this.getSpatialConfig(item);
       const mix = resolveSpatialMix({
         dx: item.x - playerPosition.x,
         dy: item.y - playerPosition.y,
-        range: HEARING_RADIUS,
+        range: Math.max(1, spatialConfig.range || HEARING_RADIUS),
         baseGain: ITEM_EMIT_BASE_GAIN,
         nearFieldDistance: 1,
         nearFieldGain: 1,
         nearFieldCenterPan: true,
+        directional: {
+          enabled: spatialConfig.directional,
+          facingDeg: spatialConfig.facingDeg,
+          coneDeg: 120,
+          rearGain: 0.5,
+        },
       });
       const gainValue = mix?.gain ?? 0;
       const panValue = mix?.pan ?? 0;

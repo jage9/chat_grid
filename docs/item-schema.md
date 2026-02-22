@@ -25,6 +25,8 @@
 - `emitSound`: optional continuously-looping spatial sound emitted from the item on the grid; global item field and not user-editable in V1.
 - `capabilities`, `useSound`, and `emitSound` are derived from global item-type definitions at runtime (not stored per-instance in persisted state).
 - `useCooldownMs`: global per item type (`radio_station=1000`, `dice=1000`, `wheel=4000`, `clock=1000`), not per-instance editable.
+- `emitRange`: global spatial range per item type (`radio_station=20`, `dice=15`, `wheel=15`, `clock=10`), not per-instance editable.
+- `directional`: global directional attenuation flag per item type (`radio_station=true`, others `false`), not per-instance editable.
 
 ## Persisted Item State (`server/runtime/items.json`)
 
@@ -61,7 +63,8 @@
   "channel": "stereo",
   "volume": 50,
   "effect": "off",
-  "effectValue": 50
+  "effectValue": 50,
+  "facing": 0
 }
 ```
 
@@ -72,6 +75,7 @@
 - `channel`: one of `stereo | mono | left | right`, default `stereo`.
 - `effect`: one of `reverb | echo | flanger | high_pass | low_pass | off`, default `off`.
 - `effectValue`: number, range `0-100`, precision `0.1`.
+- `facing`: number, range `0-360`, precision `0.1` (used when `directional=true`).
 
 ### `dice`
 

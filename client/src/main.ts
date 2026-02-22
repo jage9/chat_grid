@@ -8,6 +8,7 @@ import {
 } from './audio/effects';
 import { RadioStationRuntime, normalizeRadioChannel, normalizeRadioEffect, normalizeRadioEffectValue } from './audio/radioStationRuntime';
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
+import { normalizeDegrees } from './audio/spatial';
 import {
   applyPastedText,
   applyTextInput,
@@ -175,8 +176,8 @@ let outputMode = localStorage.getItem(AUDIO_OUTPUT_MODE_STORAGE_KEY) === 'mono' 
 let connecting = false;
 const messageBuffer: string[] = [];
 let messageCursor = -1;
-const radioRuntime = new RadioStationRuntime(audio);
-const itemEmitRuntime = new ItemEmitRuntime(audio, resolveIncomingSoundUrl);
+const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig);
+const itemEmitRuntime = new ItemEmitRuntime(audio, resolveIncomingSoundUrl, getItemSpatialConfig);
 let internalClipboardText = '';
 let replaceTextOnNextType = false;
 let pendingEscapeDisconnect = false;
@@ -522,6 +523,16 @@ function itemLabel(item: WorldItem): string {
   return `${item.title} (${itemTypeLabel(item.type)})`;
 }
 
+function getItemSpatialConfig(item: WorldItem): { range: number; directional: boolean; facingDeg: number } {
+  const global = getItemTypeGlobalProperties(item.type);
+  const rawRange = Number(global.emitRange);
+  const range = Number.isFinite(rawRange) && rawRange > 0 ? rawRange : 15;
+  const directional = global.directional === true;
+  const rawFacing = Number(item.params.facing ?? 0);
+  const facingDeg = Number.isFinite(rawFacing) ? normalizeDegrees(rawFacing) : 0;
+  return { range, directional, facingDeg };
+}
+
 function openHelpViewer(): void {
   if (helpViewerLines.length === 0) {
     updateStatus('Help unavailable.');
@@ -697,6 +708,11 @@ function getItemPropertyValue(item: WorldItem, key: string): string {
   if (key === 'channel') return normalizeRadioChannel(item.params.channel);
   if (key === 'effect') return normalizeRadioEffect(item.params.effect);
   if (key === 'effectValue') return String(normalizeRadioEffectValue(item.params.effectValue));
+  if (key === 'facing') {
+    const parsed = Number(item.params.facing ?? 0);
+    if (!Number.isFinite(parsed)) return '0';
+    return String(Math.round(normalizeDegrees(parsed) * 10) / 10);
+  }
   const globalValue = getItemTypeGlobalProperties(item.type)?.[key];
   if (globalValue !== undefined) return String(globalValue);
   return String(item.params[key] ?? '');
@@ -1984,6 +2000,14 @@ function handleItemPropertyEditModeInput(code: string, key: string, ctrlKey: boo
         return;
       }
       signaling.send({ type: 'item_update', itemId, params: { effectValue: clampEffectLevel(parsed) } });
+    } else if (propertyKey === 'facing') {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 360) {
+        updateStatus('facing must be a number between 0 and 360.');
+        audio.sfxUiCancel();
+        return;
+      }
+      signaling.send({ type: 'item_update', itemId, params: { facing: Math.round(parsed * 10) / 10 } });
     } else if (propertyKey === 'spaces') {
       const spaces = value
         .split(',')

@@ -48,17 +48,17 @@ const DEFAULT_CLOCK_TIME_ZONE_OPTIONS = [
 const DEFAULT_ITEM_TYPE_SEQUENCE: ItemType[] = ['clock', 'dice', 'radio_station', 'wheel'];
 
 const DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES: Record<ItemType, string[]> = {
-  radio_station: ['title', 'streamUrl', 'enabled', 'channel', 'volume', 'effect', 'effectValue'],
+  radio_station: ['title', 'streamUrl', 'enabled', 'channel', 'volume', 'effect', 'effectValue', 'facing'],
   dice: ['title', 'sides', 'number'],
   wheel: ['title', 'spaces'],
   clock: ['title', 'timeZone', 'use24Hour'],
 };
 
 const DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES: Record<ItemType, Record<string, string | number | boolean>> = {
-  radio_station: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000 },
-  dice: { useSound: 'sounds/roll.ogg', emitSound: 'none', useCooldownMs: 1000 },
-  wheel: { useSound: 'sounds/spin.ogg', emitSound: 'none', useCooldownMs: 4000 },
-  clock: { useSound: 'none', emitSound: 'sounds/clock.ogg', useCooldownMs: 1000 },
+  radio_station: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000, emitRange: 20, directional: true },
+  dice: { useSound: 'sounds/roll.ogg', emitSound: 'none', useCooldownMs: 1000, emitRange: 15, directional: false },
+  wheel: { useSound: 'sounds/spin.ogg', emitSound: 'none', useCooldownMs: 4000, emitRange: 15, directional: false },
+  clock: { useSound: 'none', emitSound: 'sounds/clock.ogg', useCooldownMs: 1000, emitRange: 10, directional: false },
 };
 
 type UiDefinitionsPayload = {

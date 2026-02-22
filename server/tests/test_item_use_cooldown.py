@@ -118,6 +118,20 @@ async def test_radio_channel_update_validates(monkeypatch: pytest.MonkeyPatch) -
     assert send_payloads[-1].ok is False
     assert "channel must be one of" in send_payloads[-1].message.lower()
 
+    await server._handle_message(
+        client,
+        json.dumps({"type": "item_update", "itemId": item.id, "params": {"facing": 270}}),
+    )
+    assert send_payloads[-1].ok is True
+    assert item.params.get("facing") == 270
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "item_update", "itemId": item.id, "params": {"facing": 361}}),
+    )
+    assert send_payloads[-1].ok is False
+    assert "facing must be between 0 and 360" in send_payloads[-1].message.lower()
+
 
 @pytest.mark.asyncio
 async def test_clock_use_reports_time_without_use_sound_packet(monkeypatch: pytest.MonkeyPatch) -> None:

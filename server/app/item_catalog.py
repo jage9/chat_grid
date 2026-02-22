@@ -16,7 +16,7 @@ ITEM_TYPE_LABELS: dict[ItemType, str] = {
 RADIO_EFFECT_OPTIONS: tuple[str, ...] = ("reverb", "echo", "flanger", "high_pass", "low_pass", "off")
 RADIO_CHANNEL_OPTIONS: tuple[str, ...] = ("stereo", "mono", "left", "right")
 ITEM_TYPE_EDITABLE_PROPERTIES: dict[ItemType, tuple[str, ...]] = {
-    "radio_station": ("title", "streamUrl", "enabled", "channel", "volume", "effect", "effectValue"),
+    "radio_station": ("title", "streamUrl", "enabled", "channel", "volume", "effect", "effectValue", "facing"),
     "dice": ("title", "sides", "number"),
     "wheel": ("title", "spaces"),
     "clock": ("title", "timeZone", "use24Hour"),
@@ -76,6 +76,8 @@ class ItemDefinition:
     emit_sound: str | None
     default_params: dict
     use_cooldown_ms: int = 1000
+    emit_range: int = 15
+    directional: bool = False
 
 
 ITEM_DEFINITIONS: dict[ItemType, ItemDefinition] = {
@@ -84,7 +86,9 @@ ITEM_DEFINITIONS: dict[ItemType, ItemDefinition] = {
         capabilities=("editable", "carryable", "deletable", "usable"),
         use_sound=None,
         emit_sound=None,
-        default_params={"streamUrl": "", "enabled": True, "channel": "stereo", "volume": 50, "effect": "off", "effectValue": 50},
+        default_params={"streamUrl": "", "enabled": True, "channel": "stereo", "volume": 50, "effect": "off", "effectValue": 50, "facing": 0},
+        emit_range=20,
+        directional=True,
     ),
     "dice": ItemDefinition(
         default_title="Dice",
@@ -107,6 +111,7 @@ ITEM_DEFINITIONS: dict[ItemType, ItemDefinition] = {
         use_sound=None,
         emit_sound="sounds/clock.ogg",
         default_params={"timeZone": CLOCK_DEFAULT_TIME_ZONE, "use24Hour": False},
+        emit_range=10,
     ),
 }
 
@@ -133,7 +138,7 @@ def get_item_use_cooldown_ms(item_type: ItemType) -> int:
     return 1000
 
 
-def get_item_global_properties(item_type: ItemType) -> dict[str, str | int]:
+def get_item_global_properties(item_type: ItemType) -> dict[str, str | int | bool]:
     """Return non-editable global properties exposed in UI metadata."""
 
     definition = get_item_definition(item_type)
@@ -141,4 +146,6 @@ def get_item_global_properties(item_type: ItemType) -> dict[str, str | int]:
         "useSound": definition.use_sound or "none",
         "emitSound": definition.emit_sound or "none",
         "useCooldownMs": get_item_use_cooldown_ms(item_type),
+        "emitRange": definition.emit_range if isinstance(definition.emit_range, int) and definition.emit_range > 0 else 15,
+        "directional": bool(definition.directional),
     }
