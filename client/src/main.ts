@@ -42,7 +42,6 @@ import {
 } from './state/gameState';
 import {
   applyServerItemUiDefinitions,
-  EDITABLE_ITEM_PROPERTY_KEYS,
   getDefaultClockTimeZone,
   getItemTypeGlobalProperties,
   getItemTypeSequence,
@@ -794,6 +793,10 @@ function getFallbackInspectPropertyTooltip(key: string): string | undefined {
   return undefined;
 }
 
+function isItemPropertyEditable(item: WorldItem, key: string): boolean {
+  return getEditableItemPropertyKeys(item).includes(key);
+}
+
 function describeItemPropertyHelp(item: WorldItem, key: string): string {
   const metadata = getItemPropertyMetadata(item.type, key);
   const parts: string[] = [];
@@ -823,7 +826,7 @@ function describeItemPropertyHelp(item: WorldItem, key: string): string {
     parts.push(`Max length: ${metadata.maxLength} characters.`);
   }
 
-  parts.push(EDITABLE_ITEM_PROPERTY_KEYS.has(key) ? 'Editable.' : 'Read only.');
+  parts.push(isItemPropertyEditable(item, key) ? 'Editable.' : 'Read only.');
   return parts.join(' ');
 }
 
@@ -2056,7 +2059,7 @@ function handleItemPropertiesModeInput(code: string, key: string): void {
   }
   if (code === 'Enter') {
     const key = state.itemPropertyKeys[state.itemPropertyIndex];
-    if (!EDITABLE_ITEM_PROPERTY_KEYS.has(key)) {
+    if (!isItemPropertyEditable(item, key)) {
       updateStatus(`${itemPropertyLabel(key)} is not editable.`);
       audio.sfxUiCancel();
       return;
