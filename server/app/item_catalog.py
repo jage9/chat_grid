@@ -91,6 +91,16 @@ GLOBAL_ITEM_PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "useCooldownMs": {"valueType": "number", "tooltip": "Global cooldown in milliseconds between uses for this item type."},
     "emitRange": {"valueType": "number", "tooltip": "Maximum distance in squares where emitted audio can be heard."},
     "directional": {"valueType": "boolean", "tooltip": "Whether emitted audio favors the item's facing direction."},
+    "emitSoundSpeed": {
+        "valueType": "number",
+        "tooltip": "Global emitted sound speed/pitch percent. 50 is normal.",
+        "range": {"min": 0, "max": 100, "step": 1},
+    },
+    "emitSoundTempo": {
+        "valueType": "number",
+        "tooltip": "Global emitted sound tempo percent. 50 is normal.",
+        "range": {"min": 0, "max": 100, "step": 1},
+    },
 }
 
 ITEM_TYPE_PROPERTY_METADATA: dict[ItemType, dict[str, dict[str, object]]] = {
@@ -124,4 +134,6 @@ def get_item_global_properties(item_type: ItemType) -> dict[str, str | int | boo
         "useCooldownMs": get_item_use_cooldown_ms(item_type),
         "emitRange": definition.emit_range if isinstance(definition.emit_range, int) and definition.emit_range > 0 else 15,
         "directional": bool(definition.directional),
+        "emitSoundSpeed": 50,
+        "emitSoundTempo": 50,
     }

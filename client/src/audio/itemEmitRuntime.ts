@@ -1,4 +1,5 @@
 import { HEARING_RADIUS, type WorldItem } from '../state/gameState';
+import { getItemTypeGlobalProperties } from '../items/itemRegistry';
 import { AudioEngine } from './audioEngine';
 import { connectEffectChain, disconnectEffectRuntime, type EffectId, type EffectRuntime } from './effects';
 import { normalizeRadioEffect, normalizeRadioEffectValue } from './radioStationRuntime';
@@ -31,6 +32,26 @@ function resolveEmitPlaybackRate(raw: unknown): number {
     return 0.5 + (clamped / 50) * 0.5;
   }
   return 1 + ((clamped - 50) / 50) * 1;
+}
+
+function setElementPreservesPitch(element: HTMLAudioElement, enabled: boolean): void {
+  const target = element as HTMLAudioElement & {
+    preservesPitch?: boolean;
+    mozPreservesPitch?: boolean;
+    webkitPreservesPitch?: boolean;
+  };
+  if ('preservesPitch' in target) target.preservesPitch = enabled;
+  if ('mozPreservesPitch' in target) target.mozPreservesPitch = enabled;
+  if ('webkitPreservesPitch' in target) target.webkitPreservesPitch = enabled;
+}
+
+function resolveEmitRates(item: WorldItem): { playbackRate: number; preservePitch: boolean } {
+  const globals = getItemTypeGlobalProperties(item.type);
+  const speed = resolveEmitPlaybackRate(item.params.emitSoundSpeed ?? globals.emitSoundSpeed ?? 50);
+  const tempo = resolveEmitPlaybackRate(item.params.emitSoundTempo ?? globals.emitSoundTempo ?? 50);
+  const playbackRate = Math.max(0.25, Math.min(4, speed * tempo));
+  const preservePitch = Math.abs(speed - 1) < 0.001;
+  return { playbackRate, preservePitch };
 }
 
 export class ItemEmitRuntime {
@@ -110,7 +131,9 @@ export class ItemEmitRuntime {
       const effect = normalizeRadioEffect(item.params.emitEffect);
       const effectValue = normalizeRadioEffectValue(item.params.emitEffectValue);
       const effectRuntime = connectEffectChain(audioCtx, effectInput, gain, effect, effectValue);
-      element.playbackRate = resolveEmitPlaybackRate(item.params.emitSoundSpeed);
+      const initialRates = resolveEmitRates(item);
+      setElementPreservesPitch(element, initialRates.preservePitch);
+      element.playbackRate = initialRates.playbackRate;
       if (this.audio.supportsStereoPanner()) {
         panner = audioCtx.createStereoPanner();
         gain.connect(panner).connect(audioCtx.destination);
@@ -148,7 +171,9 @@ export class ItemEmitRuntime {
         output.effect = effect;
         output.effectValue = effectValue;
       }
-      const nextPlaybackRate = resolveEmitPlaybackRate(item.params.emitSoundSpeed);
+      const nextRates = resolveEmitRates(item);
+      setElementPreservesPitch(output.element, nextRates.preservePitch);
+      const nextPlaybackRate = nextRates.playbackRate;
       if (Math.abs(output.element.playbackRate - nextPlaybackRate) > 0.001) {
         output.element.playbackRate = nextPlaybackRate;
       }
