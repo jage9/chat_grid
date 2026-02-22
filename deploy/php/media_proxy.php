@@ -18,6 +18,24 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, HEAD, OPTIONS');
 header('Access-Control-Allow-Headers: Range');
 
+/**
+ * PHP-version-safe suffix check (avoid str_ends_with dependency).
+ */
+function host_matches_suffix(string $host, string $suffix): bool
+{
+    if ($suffix === '') {
+        return false;
+    }
+    if ($host === $suffix) {
+        return true;
+    }
+    $needle = '.' . $suffix;
+    if (strlen($host) < strlen($needle)) {
+        return false;
+    }
+    return substr($host, -strlen($needle)) === $needle;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;
@@ -78,7 +96,7 @@ if ($allowlistEnv !== false && trim($allowlistEnv) !== '') {
         if ($suffix === '') {
             continue;
         }
-        if ($host === $suffix || str_ends_with($host, '.' . $suffix)) {
+        if (host_matches_suffix($host, $suffix)) {
             $allowed = true;
             break;
         }
@@ -107,6 +125,13 @@ foreach ($resolved as $ip) {
         echo "resolved ip not allowed\n";
         exit;
     }
+}
+
+if (!function_exists('curl_init')) {
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo "curl extension is required\n";
+    exit;
 }
 
 $ch = curl_init($rawUrl);
