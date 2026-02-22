@@ -41,7 +41,9 @@ import {
   getEditableItemPropertyKeys,
   getInspectItemPropertyKeys,
   getItemPropertyOptionValues,
+  getItemPropertyMetadata,
   itemPropertyLabel,
+  getItemTypeTooltip,
   itemTypeLabel,
 } from './items/itemRegistry';
 import { PeerManager } from './webrtc/peerManager';
@@ -723,6 +725,90 @@ function getItemPropertyValue(item: WorldItem, key: string): string {
   const globalValue = getItemTypeGlobalProperties(item.type)?.[key];
   if (globalValue !== undefined) return String(globalValue);
   return String(item.params[key] ?? '');
+}
+
+function inferItemPropertyValueType(item: WorldItem, key: string): string | undefined {
+  if (key === 'useSound' || key === 'emitSound') return 'sound';
+  if (key === 'enabled' || key === 'use24Hour' || key === 'directional') return 'boolean';
+  if (key === 'channel' || key === 'effect' || key === 'timeZone') return 'list';
+  if (
+    key === 'x' ||
+    key === 'y' ||
+    key === 'version' ||
+    key === 'volume' ||
+    key === 'effectValue' ||
+    key === 'facing' ||
+    key === 'emitRange' ||
+    key === 'sides' ||
+    key === 'number' ||
+    key === 'useCooldownMs'
+  ) {
+    return 'number';
+  }
+  if (key in item.params || key in getItemTypeGlobalProperties(item.type)) {
+    const value = item.params[key] ?? getItemTypeGlobalProperties(item.type)?.[key];
+    if (typeof value === 'boolean') return 'boolean';
+    if (typeof value === 'number') return 'number';
+    if (typeof value === 'string') return 'text';
+  }
+  return 'text';
+}
+
+function describeItemPropertyHelp(item: WorldItem, key: string): string {
+  const metadata = getItemPropertyMetadata(item.type, key);
+  const parts: string[] = [];
+  if (metadata?.tooltip) {
+    parts.push(metadata.tooltip);
+  } else {
+    parts.push('No tooltip available.');
+  }
+
+  const valueType = metadata?.valueType ?? inferItemPropertyValueType(item, key);
+  if (valueType) {
+    parts.push(`Type: ${valueType}.`);
+  }
+
+  if (metadata?.range) {
+    const stepText = metadata.range.step !== undefined ? ` step ${metadata.range.step}` : '';
+    parts.push(`Range: ${metadata.range.min} to ${metadata.range.max}${stepText}.`);
+  } else {
+    const options = getItemPropertyOptionValues(key);
+    if (options && options.length > 0) {
+      parts.push(`Options: ${options.join(', ')}.`);
+    }
+  }
+
+  parts.push(EDITABLE_ITEM_PROPERTY_KEYS.has(key) ? 'Editable.' : 'Read only.');
+  return parts.join(' ');
+}
+
+function validateNumericItemPropertyInput(
+  item: WorldItem,
+  key: string,
+  rawValue: string,
+  requireInteger: boolean,
+): { ok: true; value: number } | { ok: false; message: string } {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return { ok: false, message: `${itemPropertyLabel(key)} must be a number.` };
+  }
+  if (requireInteger && !Number.isInteger(parsed)) {
+    return { ok: false, message: `${itemPropertyLabel(key)} must be an integer.` };
+  }
+  const range = getItemPropertyMetadata(item.type, key)?.range;
+  if (range && (parsed < range.min || parsed > range.max)) {
+    return { ok: false, message: `${itemPropertyLabel(key)} must be between ${range.min} and ${range.max}.` };
+  }
+  if (!range) {
+    return { ok: true, value: parsed };
+  }
+  const step = range.step;
+  if (step && step > 0) {
+    const normalized = Math.round((parsed - range.min) / step) * step + range.min;
+    const decimals = step >= 1 ? 0 : Math.ceil(Math.abs(Math.log10(step)));
+    return { ok: true, value: Number(normalized.toFixed(Math.min(6, decimals + 1))) };
+  }
+  return { ok: true, value: parsed };
 }
 
 function squareWord(distance: number): string {
@@ -1770,6 +1856,13 @@ function handleAddItemModeInput(code: string, key: string): void {
     audio.sfxUiBlip();
     return;
   }
+  if (code === 'Space') {
+    const itemType = itemTypeSequence[state.addItemTypeIndex];
+    const tooltip = getItemTypeTooltip(itemType);
+    updateStatus(tooltip ? tooltip : 'No tooltip available.');
+    audio.sfxUiBlip();
+    return;
+  }
   if (code === 'Enter') {
     signaling.send({ type: 'item_add', itemType: itemTypeSequence[state.addItemTypeIndex] });
     state.mode = 'normal';
@@ -1888,6 +1981,12 @@ function handleItemPropertiesModeInput(code: string, key: string): void {
     audio.sfxUiBlip();
     return;
   }
+  if (code === 'Space') {
+    const selectedKey = state.itemPropertyKeys[state.itemPropertyIndex];
+    updateStatus(describeItemPropertyHelp(item, selectedKey));
+    audio.sfxUiBlip();
+    return;
+  }
   const nextByInitial = findNextIndexByInitial(
     state.itemPropertyKeys,
     state.itemPropertyIndex,
@@ -1963,6 +2062,14 @@ function handleItemPropertyEditModeInput(code: string, key: string, ctrlKey: boo
     state.mode = 'normal';
     return;
   }
+  const item = state.items.get(itemId);
+  if (!item) {
+    state.mode = 'normal';
+    state.editingPropertyKey = null;
+    updateStatus('Item no longer exists.');
+    audio.sfxUiCancel();
+    return;
+  }
   if (code === 'Enter') {
     const value = state.nicknameInput.trim();
     if (propertyKey === 'title') {
@@ -1984,13 +2091,13 @@ function handleItemPropertyEditModeInput(code: string, key: string, ctrlKey: boo
       const enabled = ['on', 'true', '1', 'yes'].includes(normalized);
       signaling.send({ type: 'item_update', itemId, params: { enabled } });
     } else if (propertyKey === 'volume') {
-      const parsed = Number(value);
-      if (!Number.isInteger(parsed) || parsed < 0 || parsed > 100) {
-        updateStatus('volume must be an integer between 0 and 100.');
+      const parsed = validateNumericItemPropertyInput(item, propertyKey, value, true);
+      if (!parsed.ok) {
+        updateStatus(parsed.message);
         audio.sfxUiCancel();
         return;
       }
-      signaling.send({ type: 'item_update', itemId, params: { volume: parsed } });
+      signaling.send({ type: 'item_update', itemId, params: { volume: parsed.value } });
     } else if (propertyKey === 'effect') {
       const normalized = value.trim().toLowerCase() as EffectId;
       if (!EFFECT_IDS.has(normalized)) {
@@ -2000,29 +2107,29 @@ function handleItemPropertyEditModeInput(code: string, key: string, ctrlKey: boo
       }
       signaling.send({ type: 'item_update', itemId, params: { effect: normalized } });
     } else if (propertyKey === 'effectValue') {
-      const parsed = Number(value);
-      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
-        updateStatus('effectValue must be a number between 0 and 100.');
+      const parsed = validateNumericItemPropertyInput(item, propertyKey, value, false);
+      if (!parsed.ok) {
+        updateStatus(parsed.message);
         audio.sfxUiCancel();
         return;
       }
-      signaling.send({ type: 'item_update', itemId, params: { effectValue: clampEffectLevel(parsed) } });
+      signaling.send({ type: 'item_update', itemId, params: { effectValue: clampEffectLevel(parsed.value) } });
     } else if (propertyKey === 'facing') {
-      const parsed = Number(value);
-      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 360) {
-        updateStatus('facing must be a number between 0 and 360.');
+      const parsed = validateNumericItemPropertyInput(item, propertyKey, value, false);
+      if (!parsed.ok) {
+        updateStatus(parsed.message);
         audio.sfxUiCancel();
         return;
       }
-      signaling.send({ type: 'item_update', itemId, params: { facing: Math.round(parsed * 10) / 10 } });
+      signaling.send({ type: 'item_update', itemId, params: { facing: parsed.value } });
     } else if (propertyKey === 'emitRange') {
-      const parsed = Number(value);
-      if (!Number.isInteger(parsed) || parsed < 5 || parsed > 20) {
-        updateStatus('emit range must be an integer between 5 and 20.');
+      const parsed = validateNumericItemPropertyInput(item, propertyKey, value, true);
+      if (!parsed.ok) {
+        updateStatus(parsed.message);
         audio.sfxUiCancel();
         return;
       }
-      signaling.send({ type: 'item_update', itemId, params: { emitRange: parsed } });
+      signaling.send({ type: 'item_update', itemId, params: { emitRange: parsed.value } });
     } else if (propertyKey === 'spaces') {
       const spaces = value
         .split(',')
@@ -2045,13 +2152,13 @@ function handleItemPropertyEditModeInput(code: string, key: string, ctrlKey: boo
       }
       signaling.send({ type: 'item_update', itemId, params: { spaces: spaces.join(', ') } });
     } else if (propertyKey === 'sides' || propertyKey === 'number') {
-      const parsed = Number(value);
-      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 100) {
-        updateStatus(`${propertyKey} must be an integer between 1 and 100.`);
+      const parsed = validateNumericItemPropertyInput(item, propertyKey, value, true);
+      if (!parsed.ok) {
+        updateStatus(parsed.message);
         audio.sfxUiCancel();
         return;
       }
-      signaling.send({ type: 'item_update', itemId, params: { [propertyKey]: parsed } });
+      signaling.send({ type: 'item_update', itemId, params: { [propertyKey]: parsed.value } });
     }
     state.mode = 'itemProperties';
     state.editingPropertyKey = null;

@@ -61,13 +61,62 @@ const DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES: Record<ItemType, Record<string, strin
   clock: { useSound: 'none', emitSound: 'sounds/clock.ogg', useCooldownMs: 1000, emitRange: 10, directional: false },
 };
 
+export type ItemPropertyValueType = 'boolean' | 'text' | 'number' | 'list' | 'sound';
+
+export type ItemPropertyMetadata = {
+  valueType?: ItemPropertyValueType;
+  tooltip?: string;
+  range?: {
+    min: number;
+    max: number;
+    step?: number;
+  };
+};
+
+const DEFAULT_ITEM_TYPE_TOOLTIPS: Record<ItemType, string> = {
+  radio_station: 'Streams audio from a URL and can emit directional sound on the grid.',
+  dice: 'Roll one or more dice and report each value plus total.',
+  wheel: 'Spin a wheel from a comma-delimited list of spaces.',
+  clock: 'Speaks the current time using its configured timezone and format.',
+};
+
+const DEFAULT_ITEM_PROPERTY_METADATA: Record<ItemType, Record<string, ItemPropertyMetadata>> = {
+  radio_station: {
+    title: { valueType: 'text', tooltip: 'Display name spoken and shown for this item.' },
+    streamUrl: { valueType: 'text', tooltip: 'Audio stream URL used by this radio.' },
+    enabled: { valueType: 'boolean', tooltip: 'Turns playback on or off for this radio.' },
+    channel: { valueType: 'list', tooltip: 'Select stereo, mono, left-only, or right-only channel mix.' },
+    volume: { valueType: 'number', tooltip: 'Playback volume percent for this radio.', range: { min: 0, max: 100, step: 1 } },
+    effect: { valueType: 'list', tooltip: 'Select the active radio effect.' },
+    effectValue: { valueType: 'number', tooltip: 'Amount for the selected effect.', range: { min: 0, max: 100, step: 0.1 } },
+    facing: { valueType: 'number', tooltip: 'Facing direction in degrees used for directional emit.', range: { min: 0, max: 360, step: 0.1 } },
+    emitRange: { valueType: 'number', tooltip: "Maximum distance in squares for this radio's emitted audio.", range: { min: 5, max: 20, step: 1 } },
+  },
+  dice: {
+    title: { valueType: 'text', tooltip: 'Display name spoken and shown for this item.' },
+    sides: { valueType: 'number', tooltip: 'Number of sides on each die.', range: { min: 1, max: 100, step: 1 } },
+    number: { valueType: 'number', tooltip: 'How many dice to roll per use.', range: { min: 1, max: 100, step: 1 } },
+  },
+  wheel: {
+    title: { valueType: 'text', tooltip: 'Display name spoken and shown for this item.' },
+    spaces: { valueType: 'text', tooltip: 'Comma-delimited list of wheel spaces. Example: yes, no, maybe.' },
+  },
+  clock: {
+    title: { valueType: 'text', tooltip: 'Display name spoken and shown for this item.' },
+    timeZone: { valueType: 'list', tooltip: 'Timezone used when the clock speaks time.' },
+    use24Hour: { valueType: 'boolean', tooltip: 'Use 24 hour format instead of AM/PM.' },
+  },
+};
+
 type UiDefinitionsPayload = {
   itemTypeOrder?: ItemType[];
   itemTypes?: Array<{
     type: ItemType;
     label?: string;
+    tooltip?: string;
     editableProperties?: string[];
     propertyOptions?: Record<string, string[]>;
+    propertyMetadata?: Record<string, unknown>;
     globalProperties?: Record<string, unknown>;
   }>;
 };
@@ -78,6 +127,12 @@ let itemTypeLabels: Record<ItemType, string> = {
   dice: 'dice',
   wheel: 'wheel',
   clock: 'clock',
+};
+let itemTypeTooltips: Record<ItemType, string> = {
+  radio_station: DEFAULT_ITEM_TYPE_TOOLTIPS.radio_station,
+  dice: DEFAULT_ITEM_TYPE_TOOLTIPS.dice,
+  wheel: DEFAULT_ITEM_TYPE_TOOLTIPS.wheel,
+  clock: DEFAULT_ITEM_TYPE_TOOLTIPS.clock,
 };
 let itemTypeEditableProperties: Record<ItemType, string[]> = {
   radio_station: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.radio_station],
@@ -96,6 +151,12 @@ let optionItemPropertyValues: Partial<Record<string, string[]>> = {
   channel: [...RADIO_CHANNEL_OPTIONS],
   timeZone: [...DEFAULT_CLOCK_TIME_ZONE_OPTIONS],
 };
+let itemTypePropertyMetadata: Record<ItemType, Record<string, ItemPropertyMetadata>> = {
+  radio_station: { ...DEFAULT_ITEM_PROPERTY_METADATA.radio_station },
+  dice: { ...DEFAULT_ITEM_PROPERTY_METADATA.dice },
+  wheel: { ...DEFAULT_ITEM_PROPERTY_METADATA.wheel },
+  clock: { ...DEFAULT_ITEM_PROPERTY_METADATA.clock },
+};
 
 export let EDITABLE_ITEM_PROPERTY_KEYS = new Set<string>(
   Object.values(itemTypeEditableProperties).flatMap((keys) => keys),
@@ -103,6 +164,38 @@ export let EDITABLE_ITEM_PROPERTY_KEYS = new Set<string>(
 
 function rebuildEditablePropertyKeySet(): void {
   EDITABLE_ITEM_PROPERTY_KEYS = new Set<string>(Object.values(itemTypeEditableProperties).flatMap((keys) => keys));
+}
+
+function normalizePropertyMetadataRecord(raw: Record<string, unknown> | undefined): Record<string, ItemPropertyMetadata> {
+  if (!raw) return {};
+  const normalized: Record<string, ItemPropertyMetadata> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!value || typeof value !== 'object') continue;
+    const valueObj = value as Record<string, unknown>;
+    const metadata: ItemPropertyMetadata = {};
+    if (valueObj.valueType === 'boolean' || valueObj.valueType === 'text' || valueObj.valueType === 'number' || valueObj.valueType === 'list' || valueObj.valueType === 'sound') {
+      metadata.valueType = valueObj.valueType;
+    }
+    if (typeof valueObj.tooltip === 'string' && valueObj.tooltip.trim().length > 0) {
+      metadata.tooltip = valueObj.tooltip.trim();
+    }
+    const range = valueObj.range;
+    if (range && typeof range === 'object') {
+      const rangeObj = range as Record<string, unknown>;
+      const min = Number(rangeObj.min);
+      const max = Number(rangeObj.max);
+      const step = rangeObj.step === undefined ? undefined : Number(rangeObj.step);
+      if (Number.isFinite(min) && Number.isFinite(max)) {
+        metadata.range = {
+          min,
+          max,
+          ...(Number.isFinite(step) ? { step } : {}),
+        };
+      }
+    }
+    normalized[key] = metadata;
+  }
+  return normalized;
 }
 
 export function getClockTimeZoneOptions(): string[] {
@@ -119,6 +212,14 @@ export function getItemTypeSequence(): ItemType[] {
 
 export function getItemTypeGlobalProperties(itemType: ItemType): Record<string, string | number | boolean> {
   return itemTypeGlobalProperties[itemType] ?? {};
+}
+
+export function getItemTypeTooltip(itemType: ItemType): string | undefined {
+  return itemTypeTooltips[itemType];
+}
+
+export function getItemPropertyMetadata(itemType: ItemType, key: string): ItemPropertyMetadata | undefined {
+  return itemTypePropertyMetadata[itemType]?.[key];
 }
 
 export function getItemPropertyOptionValues(key: string): string[] | undefined {
@@ -193,9 +294,11 @@ export function applyServerItemUiDefinitions(uiDefinitions: UiDefinitionsPayload
   }
 
   const nextLabels = { ...itemTypeLabels };
+  const nextTooltips = { ...itemTypeTooltips };
   const nextEditable = { ...itemTypeEditableProperties };
   const nextGlobals = { ...itemTypeGlobalProperties };
   const nextOptions: Partial<Record<string, string[]>> = { ...optionItemPropertyValues };
+  const nextPropertyMetadata = { ...itemTypePropertyMetadata };
 
   for (const definition of uiDefinitions.itemTypes) {
     if (!definition || typeof definition.type !== 'string') continue;
@@ -203,8 +306,14 @@ export function applyServerItemUiDefinitions(uiDefinitions: UiDefinitionsPayload
     if (typeof definition.label === 'string' && definition.label.trim()) {
       nextLabels[itemType] = definition.label.trim();
     }
+    if (typeof definition.tooltip === 'string' && definition.tooltip.trim()) {
+      nextTooltips[itemType] = definition.tooltip.trim();
+    }
     if (Array.isArray(definition.editableProperties) && definition.editableProperties.length > 0) {
       nextEditable[itemType] = definition.editableProperties.filter((entry) => typeof entry === 'string');
+    }
+    if (definition.propertyMetadata && typeof definition.propertyMetadata === 'object') {
+      nextPropertyMetadata[itemType] = normalizePropertyMetadataRecord(definition.propertyMetadata);
     }
     if (definition.globalProperties && typeof definition.globalProperties === 'object') {
       const normalized: Record<string, string | number | boolean> = {};
@@ -227,8 +336,10 @@ export function applyServerItemUiDefinitions(uiDefinitions: UiDefinitionsPayload
   }
 
   itemTypeLabels = nextLabels;
+  itemTypeTooltips = nextTooltips;
   itemTypeEditableProperties = nextEditable;
   itemTypeGlobalProperties = nextGlobals;
   optionItemPropertyValues = nextOptions;
+  itemTypePropertyMetadata = nextPropertyMetadata;
   rebuildEditablePropertyKeySet();
 }

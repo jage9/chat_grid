@@ -61,6 +61,7 @@ Applies to effect select, user/item list modes, item selection, item property li
 - `ArrowUp` / `ArrowDown`: Move selection
 - `Enter`: Confirm selection
 - `Escape`: Exit/cancel
+- `Space`: Read tooltip/help for current option (where metadata is available)
 - First-letter navigation: jump to next matching entry
 
 ## Help Viewer Mode

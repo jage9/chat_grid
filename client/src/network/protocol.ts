@@ -41,8 +41,25 @@ export const welcomeMessageSchema = z.object({
         z.object({
           type: z.enum(['radio_station', 'dice', 'wheel', 'clock']),
           label: z.string().optional(),
+          tooltip: z.string().optional(),
           editableProperties: z.array(z.string()),
           propertyOptions: z.record(z.string(), z.array(z.string())).optional(),
+          propertyMetadata: z
+            .record(
+              z.string(),
+              z.object({
+                valueType: z.enum(['boolean', 'text', 'number', 'list', 'sound']).optional(),
+                tooltip: z.string().optional(),
+                range: z
+                  .object({
+                    min: z.number(),
+                    max: z.number(),
+                    step: z.number().optional(),
+                  })
+                  .optional(),
+              }),
+            )
+            .optional(),
           globalProperties: z.record(z.string(), z.unknown()).optional(),
         }),
       ),

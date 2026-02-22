@@ -24,7 +24,9 @@ from .item_catalog import (
     ITEM_PROPERTY_OPTIONS,
     ITEM_TYPE_EDITABLE_PROPERTIES,
     ITEM_TYPE_LABELS,
+    ITEM_TYPE_PROPERTY_METADATA,
     ITEM_TYPE_SEQUENCE,
+    ITEM_TYPE_TOOLTIPS,
     get_item_global_properties,
     get_item_use_cooldown_ms,
 )
@@ -265,8 +267,10 @@ class SignalingServer:
                 {
                     "type": item_type,
                     "label": ITEM_TYPE_LABELS.get(item_type, item_type),
+                    "tooltip": ITEM_TYPE_TOOLTIPS.get(item_type),
                     "editableProperties": editable,
                     "propertyOptions": property_options,
+                    "propertyMetadata": ITEM_TYPE_PROPERTY_METADATA.get(item_type, {}),
                     "globalProperties": get_item_global_properties(item_type),
                 }
             )

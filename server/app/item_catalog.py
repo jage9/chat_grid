@@ -130,6 +130,68 @@ ITEM_PROPERTY_OPTIONS: dict[str, tuple[str, ...]] = {
     "timeZone": CLOCK_TIME_ZONE_OPTIONS,
 }
 
+ITEM_TYPE_TOOLTIPS: dict[ItemType, str] = {
+    "radio_station": "Streams audio from a URL and can emit directional sound on the grid.",
+    "dice": "Roll one or more dice and report each value plus total.",
+    "wheel": "Spin a wheel from a comma-delimited list of spaces.",
+    "clock": "Speaks the current time using its configured timezone and format.",
+}
+
+ITEM_TYPE_PROPERTY_METADATA: dict[ItemType, dict[str, dict[str, object]]] = {
+    "radio_station": {
+        "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item."},
+        "streamUrl": {"valueType": "text", "tooltip": "Audio stream URL used by this radio."},
+        "enabled": {"valueType": "boolean", "tooltip": "Turns playback on or off for this radio."},
+        "channel": {"valueType": "list", "tooltip": "Select stereo, mono, left-only, or right-only channel mix."},
+        "volume": {
+            "valueType": "number",
+            "tooltip": "Playback volume percent for this radio.",
+            "range": {"min": 0, "max": 100, "step": 1},
+        },
+        "effect": {"valueType": "list", "tooltip": "Select the active radio effect."},
+        "effectValue": {
+            "valueType": "number",
+            "tooltip": "Amount for the selected effect.",
+            "range": {"min": 0, "max": 100, "step": 0.1},
+        },
+        "facing": {
+            "valueType": "number",
+            "tooltip": "Facing direction in degrees used for directional emit.",
+            "range": {"min": 0, "max": 360, "step": 0.1},
+        },
+        "emitRange": {
+            "valueType": "number",
+            "tooltip": "Maximum distance in squares for this radio's emitted audio.",
+            "range": {"min": 5, "max": 20, "step": 1},
+        },
+    },
+    "dice": {
+        "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item."},
+        "sides": {
+            "valueType": "number",
+            "tooltip": "Number of sides on each die.",
+            "range": {"min": 1, "max": 100, "step": 1},
+        },
+        "number": {
+            "valueType": "number",
+            "tooltip": "How many dice to roll per use.",
+            "range": {"min": 1, "max": 100, "step": 1},
+        },
+    },
+    "wheel": {
+        "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item."},
+        "spaces": {
+            "valueType": "text",
+            "tooltip": "Comma-delimited list of wheel spaces. Example: yes, no, maybe.",
+        },
+    },
+    "clock": {
+        "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item."},
+        "timeZone": {"valueType": "list", "tooltip": "Timezone used when the clock speaks time."},
+        "use24Hour": {"valueType": "boolean", "tooltip": "Use 24 hour format instead of AM/PM."},
+    },
+}
+
 
 def get_item_definition(item_type: ItemType) -> ItemDefinition:
     """Return catalog definition for a known item type."""
