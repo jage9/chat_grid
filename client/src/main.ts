@@ -172,6 +172,7 @@ const state = createInitialState();
 const renderer = new CanvasRenderer(dom.canvas);
 const audio = new AudioEngine();
 let worldGridSize = GRID_SIZE;
+let lastWallCollisionDirection: string | null = null;
 let localStream: MediaStream | null = null;
 let outboundStream: MediaStream | null = null;
 let statusTimeout: number | null = null;
@@ -900,18 +901,26 @@ function handleMovement(): void {
   if (state.keysPressed.ArrowLeft) dx = -1;
   if (state.keysPressed.ArrowRight) dx = 1;
 
-  if (dx === 0 && dy === 0) return;
+  if (dx === 0 && dy === 0) {
+    lastWallCollisionDirection = null;
+    return;
+  }
 
   const nextX = state.player.x + dx;
   const nextY = state.player.y + dy;
+  const attemptedDirection = `${dx},${dy}`;
   if (nextX < 0 || nextY < 0 || nextX >= worldGridSize || nextY >= worldGridSize) {
     state.player.lastMoveTime = now;
-    void audio.playSample(WALL_SOUND_URL, 1);
+    if (lastWallCollisionDirection !== attemptedDirection) {
+      void audio.playSample(WALL_SOUND_URL, 1);
+      lastWallCollisionDirection = attemptedDirection;
+    }
     return;
   }
 
   state.player.x = nextX;
   state.player.y = nextY;
+  lastWallCollisionDirection = null;
   persistPlayerPosition();
   state.player.lastMoveTime = now;
   void audio.playSample(randomFootstepUrl(), FOOTSTEP_GAIN);
