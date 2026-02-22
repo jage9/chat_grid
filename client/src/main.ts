@@ -78,7 +78,6 @@ const MIC_CALIBRATION_ACTIVE_RMS_THRESHOLD = 0.003;
 const MIC_INPUT_GAIN_SCALE_MULTIPLIER = 2;
 const MIC_INPUT_GAIN_STEP = 0.05;
 const HEARTBEAT_INTERVAL_MS = 10_000;
-const HEARTBEAT_TIMEOUT_MS = 25_000;
 
 declare global {
   interface Window {
@@ -199,6 +198,7 @@ let helpViewerIndex = 0;
 let heartbeatTimerId: number | null = null;
 let heartbeatLastPongAt = 0;
 let heartbeatNextPingId = -1;
+let heartbeatAwaitingPong = false;
 let reconnectInFlight = false;
 let activeServerInstanceId: string | null = null;
 let audioLayers: AudioLayerState = {
@@ -1050,23 +1050,25 @@ function stopHeartbeat(): void {
     heartbeatTimerId = null;
   }
   heartbeatLastPongAt = 0;
+  heartbeatAwaitingPong = false;
 }
 
 /** Sends one heartbeat ping packet using reserved negative ids. */
 function sendHeartbeatPing(): void {
   signaling.send({ type: 'ping', clientSentAt: heartbeatNextPingId });
   heartbeatNextPingId -= 1;
+  heartbeatAwaitingPong = true;
 }
 
 /** Starts heartbeat timer for stale-connection detection. */
 function startHeartbeat(): void {
   stopHeartbeat();
   heartbeatLastPongAt = Date.now();
+  heartbeatAwaitingPong = false;
   sendHeartbeatPing();
   heartbeatTimerId = window.setInterval(() => {
     if (!state.running) return;
-    const now = Date.now();
-    if (now - heartbeatLastPongAt > HEARTBEAT_TIMEOUT_MS) {
+    if (heartbeatAwaitingPong) {
       void reconnectAfterHeartbeatTimeout();
       return;
     }
@@ -1188,6 +1190,7 @@ const onAppMessage = createOnMessageHandler({
 async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   if (message.type === 'pong' && message.clientSentAt < 0) {
     heartbeatLastPongAt = Date.now();
+    heartbeatAwaitingPong = false;
     return;
   }
   let restartAnnouncement: string | null = null;

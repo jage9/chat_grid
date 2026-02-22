@@ -8,6 +8,8 @@ from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version as package_version
 import json
 import logging
+import os
+import re
 import ssl
 import uuid
 from pathlib import Path
@@ -90,10 +92,31 @@ class SignalingServer:
         self.item_last_use_ms: dict[str, int] = {}
         self.grid_size = max(1, grid_size)
         self.instance_id = str(uuid.uuid4())
+        self.server_version = self._resolve_server_version()
+
+    @staticmethod
+    def _resolve_server_version() -> str:
+        """Resolve serverInfo version, preferring synced web version when available."""
+
+        env_override = os.getenv("CHGRID_SERVER_VERSION", "").strip()
+        if env_override:
+            return env_override
+
         try:
-            self.server_version = package_version("chgrid-server")
+            version_file = Path(__file__).resolve().parents[2] / "client" / "public" / "version.js"
+            text = version_file.read_text(encoding="utf-8")
+            match = re.search(r'CHGRID_WEB_VERSION\s*=\s*"([^"]+)"', text)
+            if match:
+                token = match.group(1).strip()
+                if token:
+                    return token
+        except OSError:
+            pass
+
+        try:
+            return package_version("chgrid-server")
         except PackageNotFoundError:
-            self.server_version = "unknown"
+            return "unknown"
 
     @property
     def items(self) -> dict[str, WorldItem]:

@@ -47,7 +47,7 @@ Core incoming message effects:
 ## Stale Connection Recovery
 
 - While running, client sends heartbeat `ping` every 10 seconds.
-- If no heartbeat `pong` is observed for 25 seconds, client auto-reconnects.
+- If one heartbeat `pong` is missed (10-second interval), client auto-reconnects.
 - If reconnect lands on a different `welcome.serverInfo.instanceId`, client announces server restart/version.
 
 ## Disconnect/Cleanup

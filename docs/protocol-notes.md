@@ -61,6 +61,6 @@ This is a behavior guide for packet semantics beyond raw schemas.
 
 - Client sends automatic heartbeat `ping` packets every 10 seconds while connected.
 - Heartbeat pings use negative `clientSentAt` ids and are internal (not user-visible ping status).
-- If no heartbeat `pong` arrives within 25 seconds, client force-disconnects and reconnects.
+- If a heartbeat `pong` is missed for one interval (10 seconds), client force-disconnects and reconnects.
 - After reconnect, if `welcome.serverInfo.instanceId` changed, client announces:
   `Server restarted, version <version>.`
