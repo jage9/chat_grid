@@ -73,6 +73,7 @@ const MIC_CALIBRATION_MAX_GAIN = 4;
 const MIC_CALIBRATION_TARGET_RMS = 0.12;
 const MIC_CALIBRATION_ACTIVE_RMS_THRESHOLD = 0.003;
 const MIC_INPUT_GAIN_SCALE_MULTIPLIER = 2;
+const MIC_INPUT_GAIN_STEP = 0.05;
 
 declare global {
   interface Window {
@@ -882,11 +883,24 @@ function validateNumericItemPropertyInput(
   }
   const step = range.step;
   if (step && step > 0) {
-    const normalized = Math.round((parsed - range.min) / step) * step + range.min;
-    const decimals = step >= 1 ? 0 : Math.ceil(Math.abs(Math.log10(step)));
-    return { ok: true, value: Number(normalized.toFixed(Math.min(6, decimals + 1))) };
+    const normalized = snapNumberToStep(parsed, step, range.min);
+    return { ok: true, value: normalized };
   }
   return { ok: true, value: parsed };
+}
+
+function snapNumberToStep(value: number, step: number, anchor = 0): number {
+  if (!(step > 0) || !Number.isFinite(value) || !Number.isFinite(anchor)) {
+    return value;
+  }
+  const normalized = Math.round((value - anchor) / step) * step + anchor;
+  const decimals = step >= 1 ? 0 : Math.min(6, Math.ceil(Math.abs(Math.log10(step))) + 1);
+  return Number(normalized.toFixed(decimals));
+}
+
+function formatSteppedNumber(value: number, step: number): string {
+  const decimals = step >= 1 ? 0 : Math.min(6, Math.ceil(Math.abs(Math.log10(step))) + 1);
+  return value.toFixed(decimals);
 }
 
 function squareWord(distance: number): string {
@@ -1088,7 +1102,8 @@ async function calibrateMicInputGain(): Promise<void> {
   }
 
   const calibratedGain = clampMicInputGain((MIC_CALIBRATION_TARGET_RMS / observedRms) * MIC_INPUT_GAIN_SCALE_MULTIPLIER);
-  const appliedGain = audio.setOutboundInputGain(calibratedGain);
+  const roundedGain = clampMicInputGain(snapNumberToStep(calibratedGain, MIC_INPUT_GAIN_STEP, MIC_CALIBRATION_MIN_GAIN));
+  const appliedGain = audio.setOutboundInputGain(roundedGain);
   persistMicInputGain(appliedGain);
   updateStatus(`Mic calibration set to ${appliedGain.toFixed(2)}x.`);
   audio.sfxUiConfirm();
@@ -1848,14 +1863,35 @@ function handleChatModeInput(code: string, key: string, ctrlKey: boolean): void 
 }
 
 function handleMicGainEditModeInput(code: string, key: string, ctrlKey: boolean): void {
+  if (code === 'ArrowUp' || code === 'ArrowDown') {
+    const raw = Number(state.nicknameInput.trim());
+    const base = Number.isFinite(raw) ? raw : audio.getOutboundInputGain();
+    const delta = code === 'ArrowUp' ? MIC_INPUT_GAIN_STEP : -MIC_INPUT_GAIN_STEP;
+    const next = clampMicInputGain(
+      snapNumberToStep(base + delta, MIC_INPUT_GAIN_STEP, MIC_CALIBRATION_MIN_GAIN),
+    );
+    state.nicknameInput = formatSteppedNumber(next, MIC_INPUT_GAIN_STEP);
+    state.cursorPos = state.nicknameInput.length;
+    replaceTextOnNextType = false;
+    updateStatus(`Set volume: ${state.nicknameInput}`);
+    audio.sfxUiBlip();
+    return;
+  }
+
   if (code === 'Enter') {
     const value = Number(state.nicknameInput.trim());
-    if (!Number.isFinite(value) || value < MIC_CALIBRATION_MIN_GAIN || value > MIC_CALIBRATION_MAX_GAIN) {
+    if (!Number.isFinite(value)) {
       updateStatus(`Volume must be between ${MIC_CALIBRATION_MIN_GAIN} and ${MIC_CALIBRATION_MAX_GAIN}.`);
       audio.sfxUiCancel();
       return;
     }
-    const applied = audio.setOutboundInputGain(value);
+    const snapped = snapNumberToStep(value, MIC_INPUT_GAIN_STEP, MIC_CALIBRATION_MIN_GAIN);
+    if (snapped < MIC_CALIBRATION_MIN_GAIN || snapped > MIC_CALIBRATION_MAX_GAIN) {
+      updateStatus(`Volume must be between ${MIC_CALIBRATION_MIN_GAIN} and ${MIC_CALIBRATION_MAX_GAIN}.`);
+      audio.sfxUiCancel();
+      return;
+    }
+    const applied = audio.setOutboundInputGain(snapped);
     persistMicInputGain(applied);
     state.mode = 'normal';
     replaceTextOnNextType = false;
@@ -2282,6 +2318,35 @@ function handleItemPropertyEditModeInput(code: string, key: string, ctrlKey: boo
     updateStatus('Item no longer exists.');
     audio.sfxUiCancel();
     return;
+  }
+  if (code === 'ArrowUp' || code === 'ArrowDown') {
+    const metadata = getItemPropertyMetadata(item.type, propertyKey);
+    if (metadata?.valueType === 'number') {
+      const range = metadata.range;
+      const step = range?.step && range.step > 0 ? range.step : 1;
+      const min = range?.min;
+      const max = range?.max;
+      const rawCurrent = Number(state.nicknameInput.trim());
+      const paramCurrent = Number(item.params[propertyKey]);
+      const currentValue = Number.isFinite(rawCurrent)
+        ? rawCurrent
+        : Number.isFinite(paramCurrent)
+          ? paramCurrent
+          : Number.isFinite(min)
+            ? min
+            : 0;
+      const delta = code === 'ArrowUp' ? step : -step;
+      const anchor = Number.isFinite(min) ? min : 0;
+      let nextValue = snapNumberToStep(currentValue + delta, step, anchor);
+      if (Number.isFinite(min)) nextValue = Math.max(min, nextValue);
+      if (Number.isFinite(max)) nextValue = Math.min(max, nextValue);
+      state.nicknameInput = formatSteppedNumber(nextValue, step);
+      state.cursorPos = state.nicknameInput.length;
+      replaceTextOnNextType = false;
+      updateStatus(`Edit ${itemPropertyLabel(propertyKey)}: ${state.nicknameInput}`);
+      audio.sfxUiBlip();
+      return;
+    }
   }
   if (code === 'Enter') {
     const value = state.nicknameInput.trim();
