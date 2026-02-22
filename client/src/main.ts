@@ -80,6 +80,7 @@ const MIC_INPUT_GAIN_STEP = 0.05;
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const RECONNECT_DELAY_MS = 5_000;
 const RECONNECT_MAX_ATTEMPTS = 3;
+const AUTO_RECONNECT_AFTER_RELOAD_KEY = 'chatGridAutoReconnectAfterReload';
 
 declare global {
   interface Window {
@@ -524,6 +525,19 @@ function handleSignalingStatus(message: string): void {
     return;
   }
   pushChatMessage(message);
+}
+
+/** Performs cache-busted navigation and marks session for one-time auto-connect. */
+function reloadClientForVersion(version: string): void {
+  try {
+    sessionStorage.setItem(AUTO_RECONNECT_AFTER_RELOAD_KEY, '1');
+  } catch {
+    // Ignore sessionStorage failures.
+  }
+  const nextUrl = new URL(window.location.href);
+  nextUrl.searchParams.set('v', version || 'unknown');
+  nextUrl.searchParams.set('t', String(Date.now()));
+  window.location.replace(nextUrl.toString());
 }
 
 /** Appends a chat/system line to the bounded status history buffer. */
@@ -1140,6 +1154,10 @@ async function reconnectWithRetry(reason: 'heartbeat' | 'socketClose'): Promise<
   for (let attempt = 1; attempt <= RECONNECT_MAX_ATTEMPTS; attempt += 1) {
     await new Promise((resolve) => window.setTimeout(resolve, RECONNECT_DELAY_MS));
     await connect();
+    const waitStartedAt = Date.now();
+    while (!state.running && Date.now() - waitStartedAt < 4_000) {
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+    }
     if (state.running) {
       reconnectInFlight = false;
       return;
@@ -1159,7 +1177,12 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
     state,
     dom,
     sanitizeName,
-    updateStatus: (message) => pushChatMessage(message),
+    updateStatus: (message) => {
+      if (reconnectInFlight && message === 'Disconnected.') {
+        return;
+      }
+      pushChatMessage(message);
+    },
     updateConnectAvailability,
     settingsSaveNickname: (value) => settings.saveNickname(value),
     mediaIsConnecting: () => mediaSession.isConnecting(),
@@ -1274,7 +1297,7 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
       reloadScheduledForVersionMismatch = true;
       pushChatMessage(`Server version ${incomingVersion} detected. Reloading client...`);
       window.setTimeout(() => {
-        window.location.reload();
+        reloadClientForVersion(incomingVersion);
       }, 50);
       return;
     }
@@ -1454,8 +1477,10 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
         state.mode = 'listItems';
         const first = state.items.get(state.sortedItemIds[0]);
         if (first) {
+          const itemCount = state.sortedItemIds.length;
+          const itemLabelText = itemCount === 1 ? 'item' : 'items';
           updateStatus(
-            `List: ${itemLabel(first)}, ${distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y)}, ${first.x}, ${first.y}`,
+            `${itemCount} ${itemLabelText}. List: ${itemLabel(first)}, ${distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y)}, ${first.x}, ${first.y}`,
           );
         }
         audio.sfxUiBlip();
@@ -1566,8 +1591,10 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
         state.mode = 'listUsers';
         const first = state.peers.get(state.sortedPeerIds[0]);
         if (first) {
+          const userCount = state.sortedPeerIds.length;
+          const userLabelText = userCount === 1 ? 'user' : 'users';
           updateStatus(
-            `List: ${first.nickname}, ${distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y)}, ${first.x}, ${first.y}`,
+            `${userCount} ${userLabelText}. List: ${first.nickname}, ${distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y)}, ${first.x}, ${first.y}`,
           );
         }
         audio.sfxUiBlip();
@@ -2171,3 +2198,13 @@ if (storedNickname) {
 updateConnectAvailability();
 updateDeviceSummary();
 updateStatus('Welcome to the Chat Grid. Press the Settings button to configure your audio, then Connect to join the grid.');
+try {
+  if (sessionStorage.getItem(AUTO_RECONNECT_AFTER_RELOAD_KEY) === '1') {
+    sessionStorage.removeItem(AUTO_RECONNECT_AFTER_RELOAD_KEY);
+    if (storedNickname) {
+      void connect();
+    }
+  }
+} catch {
+  // Ignore sessionStorage failures.
+}
