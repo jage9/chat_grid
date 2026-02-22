@@ -33,6 +33,86 @@ function proxy_debug_log($message)
     @file_put_contents(proxy_log_path(), $line, FILE_APPEND);
 }
 
+$GLOBALS['CHGRID_PROXY_HEADERS_SENT'] = false;
+$GLOBALS['CHGRID_PROXY_STATUS'] = 200;
+$GLOBALS['CHGRID_PROXY_UP_HEADERS'] = array();
+
+function proxy_emit_downstream_headers()
+{
+    if (!empty($GLOBALS['CHGRID_PROXY_HEADERS_SENT'])) {
+        return;
+    }
+
+    $status = isset($GLOBALS['CHGRID_PROXY_STATUS']) ? (int) $GLOBALS['CHGRID_PROXY_STATUS'] : 200;
+    if ($status < 100 || $status > 599) {
+        $status = 200;
+    }
+    set_status($status);
+
+    $h = isset($GLOBALS['CHGRID_PROXY_UP_HEADERS']) && is_array($GLOBALS['CHGRID_PROXY_UP_HEADERS'])
+        ? $GLOBALS['CHGRID_PROXY_UP_HEADERS']
+        : array();
+
+    if (isset($h['content-type']) && $h['content-type'] !== '') {
+        header('Content-Type: ' . $h['content-type']);
+    } else {
+        header('Content-Type: application/octet-stream');
+    }
+    if (isset($h['content-length']) && $h['content-length'] !== '') {
+        header('Content-Length: ' . $h['content-length']);
+    }
+    if (isset($h['accept-ranges']) && $h['accept-ranges'] !== '') {
+        header('Accept-Ranges: ' . $h['accept-ranges']);
+    }
+    if (isset($h['content-range']) && $h['content-range'] !== '') {
+        header('Content-Range: ' . $h['content-range']);
+    }
+    if (isset($h['cache-control']) && $h['cache-control'] !== '') {
+        header('Cache-Control: ' . $h['cache-control']);
+    } else {
+        header('Cache-Control: no-store');
+    }
+
+    $GLOBALS['CHGRID_PROXY_HEADERS_SENT'] = true;
+}
+
+function proxy_header_callback($ch, $line)
+{
+    $trimmed = trim((string) $line);
+    $len = strlen($line);
+    if ($trimmed === '') {
+        return $len;
+    }
+    if (stripos($trimmed, 'HTTP/') === 0) {
+        $parts = explode(' ', $trimmed);
+        if (isset($parts[1]) && ctype_digit($parts[1])) {
+            $GLOBALS['CHGRID_PROXY_STATUS'] = (int) $parts[1];
+        }
+        // New response block (redirect hop). Keep only final hop headers.
+        $GLOBALS['CHGRID_PROXY_UP_HEADERS'] = array();
+        return $len;
+    }
+    $split = explode(':', $trimmed, 2);
+    if (count($split) !== 2) {
+        return $len;
+    }
+    $name = strtolower(trim($split[0]));
+    $value = trim($split[1]);
+    $GLOBALS['CHGRID_PROXY_UP_HEADERS'][$name] = $value;
+    return $len;
+}
+
+function proxy_write_callback($ch, $chunk)
+{
+    proxy_emit_downstream_headers();
+    $len = strlen($chunk);
+    if ($len > 0) {
+        echo $chunk;
+        flush();
+    }
+    return $len;
+}
+
 register_shutdown_function(function () {
     $e = error_get_last();
     if (!$e) {
@@ -166,81 +246,28 @@ curl_setopt($ch, CURLOPT_URL, $rawUrl);
 curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
 curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
 curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-curl_setopt($ch, CURLOPT_TIMEOUT, 45);
-curl_setopt($ch, CURLOPT_HEADER, true);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_TIMEOUT, 0);
+curl_setopt($ch, CURLOPT_HEADER, false);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
 curl_setopt($ch, CURLOPT_NOSIGNAL, true);
 curl_setopt($ch, CURLOPT_USERAGENT, 'ChatGridMediaProxy/1.0');
 curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
+curl_setopt($ch, CURLOPT_HEADERFUNCTION, 'proxy_header_callback');
+curl_setopt($ch, CURLOPT_WRITEFUNCTION, 'proxy_write_callback');
 if ($method === 'HEAD') {
     curl_setopt($ch, CURLOPT_NOBODY, true);
 }
 
-$response = curl_exec($ch);
-if ($response === false) {
+$ok = curl_exec($ch);
+if ($ok === false) {
     $err = curl_error($ch);
     curl_close($ch);
+    proxy_debug_log('ERROR curl_exec failed: ' . $err);
     send_text(502, 'upstream fetch failed: ' . $err);
 }
 
-$status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-if ($status < 100 || $status > 599) {
-    $status = 200;
+if ($method === 'HEAD') {
+    proxy_emit_downstream_headers();
 }
-$headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+
 curl_close($ch);
-
-$rawHeaders = substr($response, 0, $headerSize);
-$body = substr($response, $headerSize);
-$headerBlocks = preg_split("/\r\n\r\n|\n\n/", trim($rawHeaders));
-$lastHeaderBlock = '';
-if (is_array($headerBlocks) && count($headerBlocks) > 0) {
-    $lastHeaderBlock = $headerBlocks[count($headerBlocks) - 1];
-}
-
-set_status($status);
-
-$contentType = '';
-$contentLength = '';
-$acceptRanges = '';
-$contentRange = '';
-$cacheControl = '';
-
-$lines = preg_split("/\r\n|\n/", $lastHeaderBlock);
-if (is_array($lines)) {
-    foreach ($lines as $line) {
-        $line = trim($line);
-        if ($line === '' || stripos($line, 'HTTP/') === 0) {
-            continue;
-        }
-        $split = explode(':', $line, 2);
-        if (count($split) !== 2) {
-            continue;
-        }
-        $name = strtolower(trim($split[0]));
-        $value = trim($split[1]);
-        if ($name === 'content-type') $contentType = $value;
-        if ($name === 'content-length') $contentLength = $value;
-        if ($name === 'accept-ranges') $acceptRanges = $value;
-        if ($name === 'content-range') $contentRange = $value;
-        if ($name === 'cache-control') $cacheControl = $value;
-    }
-}
-
-if ($contentType !== '') {
-    header('Content-Type: ' . $contentType);
-} else {
-    header('Content-Type: application/octet-stream');
-}
-if ($contentLength !== '') header('Content-Length: ' . $contentLength);
-if ($acceptRanges !== '') header('Accept-Ranges: ' . $acceptRanges);
-if ($contentRange !== '') header('Content-Range: ' . $contentRange);
-if ($cacheControl !== '') {
-    header('Cache-Control: ' . $cacheControl);
-} else {
-    header('Cache-Control: no-store');
-}
-
-if ($method !== 'HEAD') {
-    echo $body;
-}
