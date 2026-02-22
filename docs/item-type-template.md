@@ -1,58 +1,70 @@
 # Item Type Template
 
-This page is a practical, copy/paste template for adding a new item type with the current registry-based system.
-
-Use this when you want a new item type without editing one huge `if/elif` chain.
+This page is a practical template for adding a new item type with the current per-item module + single registry system.
 
 ## Plain-English Flow
 
-When a new item type is added, you wire it in four places:
+When a new item type is added, wire it in these places:
 
-1. Server catalog (`item_catalog.py`)
-- Defines global defaults shared by all instances of that type:
-  - default title
-  - default params
-  - use sound / emit sound
-  - cooldown
+1. Server item module (`server/app/items/<name>.py`)
+- Define item metadata constants:
+  - label/tooltip
+  - editable properties
+  - defaults/capabilities/sounds/cooldown/range/directional
+  - property metadata
+- Implement behavior:
+  - `validate_update(item, next_params)`
+  - `use_item(item, nickname, clock_formatter)`
 
-2. Server behavior (`item_type_handlers.py`)
-- Defines what happens when users edit params (`validate_update`).
-- Defines what happens when users press `use` (`use`).
+2. Server registry (`server/app/items/registry.py`)
+- Add one module entry in `ITEM_MODULES`.
+- Update `ITEM_TYPE_ORDER` if needed.
 
-3. Shared type unions (`models.py`, protocol/state types)
-- Adds the new type name to type literals/unions so packets validate.
+3. Shared item type unions
+- Add the type in:
+  - `server/app/models.py`
+  - `client/src/network/protocol.ts`
+  - `client/src/state/gameState.ts`
 
-4. Client item registry (`itemRegistry.ts`)
-- Defines add-menu order, editable properties, and optional property dropdown choices.
+4. Client fallback metadata
+- Add defaults in `client/src/items/itemRegistry.ts`:
+  - `DEFAULT_ITEM_TYPE_SEQUENCE`
+  - `DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES`
+  - `DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES`
 
 That is enough for a first working item type.
 
-## Example: `counter`
+## Minimal Server Module Example: `counter`
 
-This sample item increments a number each time it is used.
-
-### 1. Server Catalog (`server/app/item_catalog.py`)
+`server/app/items/counter.py`:
 
 ```py
-ItemType = Literal["radio_station", "dice", "wheel", "clock", "counter"]
+from __future__ import annotations
 
-ITEM_DEFINITIONS: dict[ItemType, ItemDefinition] = {
-    # ...existing...
-    "counter": ItemDefinition(
-        default_title="counter",
-        capabilities=("editable", "carryable", "deletable", "usable"),
-        use_sound=None,
-        emit_sound=None,
-        default_params={"value": 0},
-        use_cooldown_ms=1000,
-    ),
+from typing import Callable
+
+from ..item_types import ItemUseResult
+from ..models import WorldItem
+
+LABEL = "counter"
+TOOLTIP = "Counts up each time you use it."
+EDITABLE_PROPERTIES: tuple[str, ...] = ("title", "value")
+CAPABILITIES: tuple[str, ...] = ("editable", "carryable", "deletable", "usable")
+USE_SOUND: str | None = None
+EMIT_SOUND: str | None = None
+USE_COOLDOWN_MS = 1000
+EMIT_RANGE = 15
+DIRECTIONAL = False
+DEFAULT_TITLE = "counter"
+DEFAULT_PARAMS: dict = {"value": 0}
+
+PROPERTY_METADATA: dict[str, dict[str, object]] = {
+    "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item."},
+    "value": {"valueType": "number", "tooltip": "Current counter value.", "range": {"min": 0, "max": 9999, "step": 1}},
 }
-```
 
-### 2. Server Handler (`server/app/item_type_handlers.py`)
 
-```py
-def _validate_counter_update(_item: WorldItem, next_params: dict) -> dict:
+def validate_update(_item: WorldItem, next_params: dict) -> dict:
     try:
         value = int(next_params.get("value", 0))
     except (TypeError, ValueError) as exc:
@@ -63,52 +75,30 @@ def _validate_counter_update(_item: WorldItem, next_params: dict) -> dict:
     return next_params
 
 
-def _use_counter(item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], str]) -> ItemUseResult:
-    current = int(item.params.get("value", 0))
-    next_value = current + 1
+def use_item(item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], str]) -> ItemUseResult:
+    next_value = int(item.params.get("value", 0)) + 1
     return ItemUseResult(
         self_message=f"{item.title}: {next_value}",
         others_message=f"{nickname} uses {item.title}: {next_value}",
         updated_params={**item.params, "value": next_value},
     )
+```
 
+Then register it in `server/app/items/registry.py`:
 
-ITEM_TYPE_HANDLERS: dict[ItemType, ItemTypeHandler] = {
-    # ...existing...
-    "counter": ItemTypeHandler(
-        validate_update=_validate_counter_update,
-        use=_use_counter,
-    ),
+```py
+from . import clock, counter, dice, radio, wheel
+
+ITEM_TYPE_ORDER: tuple[str, ...] = ("clock", "counter", "dice", "radio_station", "wheel")
+
+ITEM_MODULES: dict[str, ItemModule] = {
+    "clock": clock,
+    "counter": counter,
+    "dice": dice,
+    "radio_station": radio,
+    "wheel": wheel,
 }
 ```
-
-### 3. Type Unions
-
-Update item-type unions/literals in:
-
-- `server/app/models.py`
-- `client/src/network/protocol.ts`
-- `client/src/state/gameState.ts`
-
-Add `"counter"` anywhere item types are enumerated.
-
-### 4. Client Registry (`client/src/items/itemRegistry.ts`)
-
-```ts
-export const ITEM_TYPE_SEQUENCE: ItemType[] = ['clock', 'counter', 'dice', 'radio_station', 'wheel'];
-
-const ITEM_TYPE_EDITABLE_PROPERTIES: Record<ItemType, string[]> = {
-  // ...existing...
-  counter: ['title', 'value'],
-};
-
-export const ITEM_TYPE_GLOBAL_PROPERTIES: Record<ItemType, Record<string, string | number | boolean>> = {
-  // ...existing...
-  counter: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000 },
-};
-```
-
-No dropdown options are needed here because `value` is a numeric text field.
 
 ## Checklist Before Commit
 
