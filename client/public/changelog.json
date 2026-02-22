@@ -3,12 +3,7 @@
     {
       "date": "February 21, 2026",
       "items": [
-        "Added directional audio support, used now for the Radio item type."
-      ]
-    },
-    {
-      "date": "February 21, 2026",
-      "items": [
+        "Added directional audio support, used now for the Radio item type.",
         "Added audio layers to toggle voice, item sounds, media, and world (other users).",
         "Added new item type clock.",
         "Changed the E effect key to open a menu list for choosing effects.",
