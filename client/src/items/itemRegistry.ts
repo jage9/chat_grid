@@ -52,7 +52,7 @@ const DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES: Record<ItemType, string[]> = {
   dice: ['title', 'sides', 'number'],
   wheel: ['title', 'spaces'],
   clock: ['title', 'timeZone', 'use24Hour'],
-  widget: ['title', 'enabled', 'directional', 'facing', 'emitRange', 'emitVolume', 'emitSpeed', 'emitEffect', 'emitEffectValue', 'useSound', 'emitSound'],
+  widget: ['title', 'enabled', 'directional', 'facing', 'emitRange', 'emitVolume', 'emitSoundSpeed', 'emitEffect', 'emitEffectValue', 'useSound', 'emitSound'],
 };
 
 const DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES: Record<ItemType, Record<string, string | number | boolean>> = {
@@ -196,7 +196,7 @@ export function itemPropertyLabel(key: string): string {
   if (key === 'emitRange') return 'emit range';
   if (key === 'mediaVolume') return 'media volume';
   if (key === 'emitVolume') return 'emit volume';
-  if (key === 'emitSpeed') return 'emit speed';
+  if (key === 'emitSoundSpeed') return 'emit sound speed';
   if (key === 'mediaChannel') return 'media channel';
   if (key === 'mediaEffect') return 'media effect';
   if (key === 'mediaEffectValue') return 'media effect value';

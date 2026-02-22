@@ -110,7 +110,7 @@ export class ItemEmitRuntime {
       const effect = normalizeRadioEffect(item.params.emitEffect);
       const effectValue = normalizeRadioEffectValue(item.params.emitEffectValue);
       const effectRuntime = connectEffectChain(audioCtx, effectInput, gain, effect, effectValue);
-      element.playbackRate = resolveEmitPlaybackRate(item.params.emitSpeed);
+      element.playbackRate = resolveEmitPlaybackRate(item.params.emitSoundSpeed);
       if (this.audio.supportsStereoPanner()) {
         panner = audioCtx.createStereoPanner();
         gain.connect(panner).connect(audioCtx.destination);
@@ -148,7 +148,7 @@ export class ItemEmitRuntime {
         output.effect = effect;
         output.effectValue = effectValue;
       }
-      const nextPlaybackRate = resolveEmitPlaybackRate(item.params.emitSpeed);
+      const nextPlaybackRate = resolveEmitPlaybackRate(item.params.emitSoundSpeed);
       if (Math.abs(output.element.playbackRate - nextPlaybackRate) > 0.001) {
         output.element.playbackRate = nextPlaybackRate;
       }

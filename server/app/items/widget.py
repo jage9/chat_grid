@@ -17,7 +17,7 @@ EDITABLE_PROPERTIES: tuple[str, ...] = (
     "facing",
     "emitRange",
     "emitVolume",
-    "emitSpeed",
+    "emitSoundSpeed",
     "emitEffect",
     "emitEffectValue",
     "useSound",
@@ -36,7 +36,7 @@ DEFAULT_PARAMS: dict = {
     "facing": 0,
     "emitRange": 15,
     "emitVolume": 100,
-    "emitSpeed": 50,
+    "emitSoundSpeed": 50,
     "emitEffect": "off",
     "emitEffectValue": 50,
     "useSound": "",
@@ -63,7 +63,7 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "tooltip": "Emitted sound volume percent.",
         "range": {"min": 0, "max": 100, "step": 1},
     },
-    "emitSpeed": {
+    "emitSoundSpeed": {
         "valueType": "number",
         "tooltip": "Playback speed/pitch percent for emitted sound. 50 is normal, 0 is half, 100 is double.",
         "range": {"min": 0, "max": 100, "step": 1},
@@ -132,12 +132,12 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     next_params["emitVolume"] = emit_volume
 
     try:
-        emit_speed = int(next_params.get("emitSpeed", item.params.get("emitSpeed", 50)))
+        emit_speed = int(next_params.get("emitSoundSpeed", item.params.get("emitSoundSpeed", 50)))
     except (TypeError, ValueError) as exc:
-        raise ValueError("emitSpeed must be an integer between 0 and 100.") from exc
+        raise ValueError("emitSoundSpeed must be an integer between 0 and 100.") from exc
     if not (0 <= emit_speed <= 100):
-        raise ValueError("emitSpeed must be between 0 and 100.")
-    next_params["emitSpeed"] = emit_speed
+        raise ValueError("emitSoundSpeed must be between 0 and 100.")
+    next_params["emitSoundSpeed"] = emit_speed
 
     emit_effect = str(next_params.get("emitEffect", item.params.get("emitEffect", "off"))).strip().lower()
     if emit_effect not in EFFECT_OPTIONS:

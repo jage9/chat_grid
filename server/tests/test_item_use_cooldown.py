@@ -292,7 +292,7 @@ async def test_widget_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
                     "facing": 123.4,
                     "emitRange": 7,
                     "emitVolume": 42,
-                    "emitSpeed": 25,
+                    "emitSoundSpeed": 25,
                     "emitEffect": "reverb",
                     "emitEffectValue": 63.2,
                     "useSound": "ping.ogg",
@@ -306,7 +306,7 @@ async def test_widget_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
     assert item.params.get("facing") == 123.4
     assert item.params.get("emitRange") == 7
     assert item.params.get("emitVolume") == 42
-    assert item.params.get("emitSpeed") == 25
+    assert item.params.get("emitSoundSpeed") == 25
     assert item.params.get("emitEffect") == "reverb"
     assert item.params.get("emitEffectValue") == 63.2
     assert item.params.get("useSound") == "sounds/ping.ogg"
@@ -326,7 +326,7 @@ async def test_widget_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
 
     await server._handle_message(
         client,
-        json.dumps({"type": "item_update", "itemId": item.id, "params": {"emitSpeed": 101}}),
+        json.dumps({"type": "item_update", "itemId": item.id, "params": {"emitSoundSpeed": 101}}),
     )
     assert send_payloads[-1].ok is False
-    assert "emitspeed must be between 0 and 100" in send_payloads[-1].message.lower()
+    assert "emitsoundspeed must be between 0 and 100" in send_payloads[-1].message.lower()

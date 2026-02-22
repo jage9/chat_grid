@@ -120,7 +120,7 @@ This is behavior-focused documentation for item types and their defaults.
   - `facing=0`
   - `emitRange=15`
   - `emitVolume=100`
-  - `emitSpeed=50`
+  - `emitSoundSpeed=50`
   - `emitEffect="off"`
   - `emitEffectValue=50`
   - `useSound=""`
@@ -141,7 +141,7 @@ This is behavior-focused documentation for item types and their defaults.
 - `facing`: number `0..360` with `0.1` precision
 - `emitRange`: integer `1..20`
 - `emitVolume`: integer `0..100`
-- `emitSpeed`: integer `0..100` (`0=0.5x`, `50=1.0x`, `100=2.0x`)
+- `emitSoundSpeed`: integer `0..100` (`0=0.5x`, `50=1.0x`, `100=2.0x`)
 - `emitEffect`: `reverb | echo | flanger | high_pass | low_pass | off`
 - `emitEffectValue`: number `0..100` with `0.1` precision
 - `useSound`: empty, filename (assumed under `sounds/`), or full URL
