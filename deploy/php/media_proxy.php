@@ -14,13 +14,23 @@
 
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
-ini_set('error_log', '/home/bestmidi/public_html/chgrid/media_proxy_error.log');
 error_reporting(E_ALL);
+
+function proxy_log_path()
+{
+    $tmp = sys_get_temp_dir();
+    if (!is_string($tmp) || $tmp === '') {
+        $tmp = '/tmp';
+    }
+    return rtrim($tmp, '/\\') . '/chgrid_media_proxy_error.log';
+}
+
+ini_set('error_log', proxy_log_path());
 
 function proxy_debug_log($message)
 {
     $line = date('c') . ' ' . $message . PHP_EOL;
-    @file_put_contents('/home/bestmidi/public_html/chgrid/media_proxy_error.log', $line, FILE_APPEND);
+    @file_put_contents(proxy_log_path(), $line, FILE_APPEND);
 }
 
 register_shutdown_function(function () {
@@ -32,6 +42,7 @@ register_shutdown_function(function () {
 });
 
 proxy_debug_log('START method=' . (isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'unknown') . ' uri=' . (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : ''));
+header('X-ChatGrid-MediaProxy: reached');
 
 function set_status($code)
 {
