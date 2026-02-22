@@ -57,6 +57,9 @@ Notes:
 - Third arg is Vite base path for production assets.
 - For `https://bestmidi.com/chgrid/`, use `/chgrid/`.
 - For site root deploy (`https://bestmidi.com/`), use `/`.
+- Deploy script normalizes publish permissions to avoid shared-host PHP soft exceptions:
+  - directories `755`
+  - files `644`
 
 Shortcut (client deploy + service restart):
 

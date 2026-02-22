@@ -28,5 +28,11 @@ if [[ -d "$PHP_PROXY_DIR" ]]; then
   rsync -a "$PHP_PROXY_DIR/" "$PUBLISH_DIR/"
 fi
 
+# Normalize publish permissions for restrictive shared-host PHP handlers.
+# - Directories must be executable/traversable.
+# - PHP/static files must not be group-writable.
+find "$PUBLISH_DIR" -type d -exec chmod 755 {} +
+find "$PUBLISH_DIR" -type f -exec chmod 644 {} +
+
 echo "client deploy complete: $PUBLISH_DIR"
 echo "client base path: $BASE_PATH"
