@@ -44,7 +44,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - `itemTypes[].editableProperties`: editable property keys by item type
   - `itemTypes[].propertyOptions`: menu options for property keys (for example clock `timeZone`)
   - `itemTypes[].propertyMetadata`: property-level metadata (`valueType`, optional `range`, optional `tooltip`)
-  - `itemTypes[].globalProperties`: non-editable global values (`useSound`, `emitSound`, `useCooldownMs`)
+  - `itemTypes[].globalProperties`: non-editable global values (`useSound`, `emitSound`, `useCooldownMs`, `emitRange`, `directional`, `emitSoundSpeed`, `emitSoundTempo`, `emitSoundReverse`)
 
 - Clients keep local fallback defaults but should prefer server-provided metadata when present.
 

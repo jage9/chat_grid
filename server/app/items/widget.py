@@ -19,6 +19,7 @@ EDITABLE_PROPERTIES: tuple[str, ...] = (
     "emitVolume",
     "emitSoundSpeed",
     "emitSoundTempo",
+    "emitSoundReverse",
     "emitEffect",
     "emitEffectValue",
     "useSound",
@@ -39,6 +40,7 @@ DEFAULT_PARAMS: dict = {
     "emitVolume": 100,
     "emitSoundSpeed": 50,
     "emitSoundTempo": 50,
+    "emitSoundReverse": False,
     "emitEffect": "off",
     "emitEffectValue": 50,
     "useSound": "",
@@ -74,6 +76,10 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "number",
         "tooltip": "Playback tempo percent for emitted sound. 50 is normal, 0 is half, 100 is double. Using speed and tempo together may sound weird.",
         "range": {"min": 0, "max": 100, "step": 1},
+    },
+    "emitSoundReverse": {
+        "valueType": "boolean",
+        "tooltip": "Play emitted sound in reverse.",
     },
     "emitEffect": {"valueType": "list", "tooltip": "Effect applied to emitted sound."},
     "emitEffectValue": {
@@ -153,6 +159,12 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     if not (0 <= emit_tempo <= 100):
         raise ValueError("emitSoundTempo must be between 0 and 100.")
     next_params["emitSoundTempo"] = emit_tempo
+
+    emit_reverse = parse_bool_like(
+        next_params.get("emitSoundReverse", item.params.get("emitSoundReverse", False)),
+        default=False,
+    )
+    next_params["emitSoundReverse"] = emit_reverse
 
     emit_effect = str(next_params.get("emitEffect", item.params.get("emitEffect", "off"))).strip().lower()
     if emit_effect not in EFFECT_OPTIONS:

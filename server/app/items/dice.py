@@ -62,8 +62,12 @@ def use_item(item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], 
     rolls = [random.randint(1, sides) for _ in range(number)]
     total = sum(rolls)
     rolls_text = ", ".join(str(value) for value in rolls)
+    if number == 1:
+        return ItemUseResult(
+            self_message=f"You rolled {item.title}: {rolls_text}.",
+            others_message=f"{nickname} rolled {item.title}: {rolls_text}.",
+        )
     return ItemUseResult(
         self_message=f"You rolled {item.title}: {rolls_text} (total {total}).",
         others_message=f"{nickname} rolled {item.title}: {rolls_text} (total {total}).",
     )
-

@@ -139,6 +139,7 @@
   "emitVolume": 100,
   "emitSoundSpeed": 50,
   "emitSoundTempo": 50,
+  "emitSoundReverse": false,
   "emitEffect": "off",
   "emitEffectValue": 50,
   "useSound": "",
@@ -153,6 +154,7 @@
 - `emitVolume`: integer, range `0-100`, default `100`.
 - `emitSoundSpeed`: integer, range `0-100`, default `50`; controls emitted sound speed/pitch (`0=0.5x`, `50=1.0x`, `100=2.0x`).
 - `emitSoundTempo`: integer, range `0-100`, default `50`; controls emitted sound tempo (`0=0.5x`, `50=1.0x`, `100=2.0x`).
+- `emitSoundReverse`: boolean (or `on/off` in updates), default `false`.
 - `emitEffect`: one of `reverb | echo | flanger | high_pass | low_pass | off`, default `off`.
 - `emitEffectValue`: number, range `0-100`, precision `0.1`, default `50`.
 - `useSound`: empty, filename (assumed under `sounds/`), or full URL.

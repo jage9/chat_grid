@@ -101,6 +101,10 @@ GLOBAL_ITEM_PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "tooltip": "Global emitted sound tempo percent. 50 is normal.",
         "range": {"min": 0, "max": 100, "step": 1},
     },
+    "emitSoundReverse": {
+        "valueType": "boolean",
+        "tooltip": "Global emitted sound reverse flag.",
+    },
 }
 
 ITEM_TYPE_PROPERTY_METADATA: dict[ItemType, dict[str, dict[str, object]]] = {
@@ -136,4 +140,5 @@ def get_item_global_properties(item_type: ItemType) -> dict[str, str | int | boo
         "directional": bool(definition.directional),
         "emitSoundSpeed": 50,
         "emitSoundTempo": 50,
+        "emitSoundReverse": False,
     }

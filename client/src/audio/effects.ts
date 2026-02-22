@@ -71,14 +71,16 @@ export function connectEffectChain(
   }
 
   if (effect === 'echo') {
+    // Retune echo curve so 100 ~= previous 80, then increase decay (more fade) by reducing feedback.
+    const tunedMix = effectMix * 0.8;
     const delay = audioCtx.createDelay(1);
-    delay.delayTime.value = 0.04 + effectMix * 0.76;
+    delay.delayTime.value = 0.04 + tunedMix * 0.76;
     const feedback = audioCtx.createGain();
-    feedback.gain.value = 0.04 + effectMix * 0.88;
+    feedback.gain.value = 0.02 + tunedMix * 0.44;
     const wetGain = audioCtx.createGain();
-    wetGain.gain.value = 0.08 + effectMix * 0.92;
+    wetGain.gain.value = 0.08 + tunedMix * 0.92;
     const dryGain = audioCtx.createGain();
-    dryGain.gain.value = 1 - effectMix * 0.85;
+    dryGain.gain.value = 1 - tunedMix * 0.85;
 
     input.connect(dryGain);
     dryGain.connect(destination);

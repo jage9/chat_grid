@@ -52,15 +52,15 @@ const DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES: Record<ItemType, string[]> = {
   dice: ['title', 'sides', 'number'],
   wheel: ['title', 'spaces'],
   clock: ['title', 'timeZone', 'use24Hour'],
-  widget: ['title', 'enabled', 'directional', 'facing', 'emitRange', 'emitVolume', 'emitSoundSpeed', 'emitSoundTempo', 'emitEffect', 'emitEffectValue', 'useSound', 'emitSound'],
+  widget: ['title', 'enabled', 'directional', 'facing', 'emitRange', 'emitVolume', 'emitSoundSpeed', 'emitSoundTempo', 'emitSoundReverse', 'emitEffect', 'emitEffectValue', 'useSound', 'emitSound'],
 };
 
 const DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES: Record<ItemType, Record<string, string | number | boolean>> = {
-  radio_station: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000, emitRange: 20, directional: true, emitSoundSpeed: 50, emitSoundTempo: 50 },
-  dice: { useSound: 'sounds/roll.ogg', emitSound: 'none', useCooldownMs: 1000, emitRange: 15, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50 },
-  wheel: { useSound: 'sounds/spin.ogg', emitSound: 'none', useCooldownMs: 4000, emitRange: 15, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50 },
-  clock: { useSound: 'none', emitSound: 'sounds/clock.ogg', useCooldownMs: 1000, emitRange: 10, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50 },
-  widget: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000, emitRange: 15, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50 },
+  radio_station: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000, emitRange: 20, directional: true, emitSoundSpeed: 50, emitSoundTempo: 50, emitSoundReverse: false },
+  dice: { useSound: 'sounds/roll.ogg', emitSound: 'none', useCooldownMs: 1000, emitRange: 15, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50, emitSoundReverse: false },
+  wheel: { useSound: 'sounds/spin.ogg', emitSound: 'none', useCooldownMs: 4000, emitRange: 15, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50, emitSoundReverse: false },
+  clock: { useSound: 'none', emitSound: 'sounds/clock.ogg', useCooldownMs: 1000, emitRange: 10, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50, emitSoundReverse: false },
+  widget: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000, emitRange: 15, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50, emitSoundReverse: false },
 };
 
 export type ItemPropertyValueType = 'boolean' | 'text' | 'number' | 'list' | 'sound';
@@ -198,6 +198,7 @@ export function itemPropertyLabel(key: string): string {
   if (key === 'emitVolume') return 'emit volume';
   if (key === 'emitSoundSpeed') return 'emit sound speed';
   if (key === 'emitSoundTempo') return 'emit sound tempo';
+  if (key === 'emitSoundReverse') return 'emit sound reverse';
   if (key === 'mediaChannel') return 'media channel';
   if (key === 'mediaEffect') return 'media effect';
   if (key === 'mediaEffectValue') return 'media effect value';

@@ -715,6 +715,12 @@ function getItemPropertyValue(item: WorldItem, key: string): string {
   if (key === 'useSound') return toSoundDisplayName(item.params.useSound ?? item.useSound);
   if (key === 'emitSound') return toSoundDisplayName(item.params.emitSound ?? item.emitSound);
   if (key === 'enabled') return item.params.enabled === false ? 'off' : 'on';
+  if (key === 'emitSoundReverse') {
+    if (typeof item.params.emitSoundReverse === 'boolean') {
+      return item.params.emitSoundReverse ? 'on' : 'off';
+    }
+    return getItemTypeGlobalProperties(item.type).emitSoundReverse === true ? 'on' : 'off';
+  }
   if (key === 'directional') {
     if (typeof item.params.directional === 'boolean') {
       return item.params.directional ? 'on' : 'off';
@@ -747,7 +753,7 @@ function getItemPropertyValue(item: WorldItem, key: string): string {
 
 function inferItemPropertyValueType(item: WorldItem, key: string): string | undefined {
   if (key === 'useSound' || key === 'emitSound') return 'sound';
-  if (key === 'enabled' || key === 'use24Hour' || key === 'directional') return 'boolean';
+  if (key === 'enabled' || key === 'use24Hour' || key === 'directional' || key === 'emitSoundReverse') return 'boolean';
   if (key === 'mediaChannel' || key === 'mediaEffect' || key === 'emitEffect' || key === 'timeZone') return 'list';
   if (
     key === 'x' ||
@@ -2062,6 +2068,13 @@ function handleItemPropertiesModeInput(code: string, key: string): void {
       audio.sfxUiBlip();
       return;
     }
+    if (key === 'emitSoundReverse') {
+      const nextEmitSoundReverse = item.params.emitSoundReverse !== true;
+      signaling.send({ type: 'item_update', itemId, params: { emitSoundReverse: nextEmitSoundReverse } });
+      updateStatus(`emit sound reverse: ${nextEmitSoundReverse ? 'on' : 'off'}`);
+      audio.sfxUiBlip();
+      return;
+    }
     if (key === 'use24Hour') {
       const nextUse24Hour = item.params.use24Hour !== true;
       signaling.send({ type: 'item_update', itemId, params: { use24Hour: nextUse24Hour } });
@@ -2146,6 +2159,15 @@ function handleItemPropertyEditModeInput(code: string, key: string, ctrlKey: boo
       }
       const directional = ['on', 'true', '1', 'yes'].includes(normalized);
       signaling.send({ type: 'item_update', itemId, params: { directional } });
+    } else if (propertyKey === 'emitSoundReverse') {
+      const normalized = value.toLowerCase();
+      if (!['on', 'off', 'true', 'false', '1', '0', 'yes', 'no'].includes(normalized)) {
+        updateStatus('emit sound reverse must be on or off.');
+        audio.sfxUiCancel();
+        return;
+      }
+      const emitSoundReverse = ['on', 'true', '1', 'yes'].includes(normalized);
+      signaling.send({ type: 'item_update', itemId, params: { emitSoundReverse } });
     } else if (propertyKey === 'mediaVolume') {
       const parsed = validateNumericItemPropertyInput(item, propertyKey, value, true);
       if (!parsed.ok) {
