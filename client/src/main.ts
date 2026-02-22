@@ -900,7 +900,13 @@ function snapNumberToStep(value: number, step: number, anchor = 0): number {
 
 function formatSteppedNumber(value: number, step: number): string {
   const decimals = step >= 1 ? 0 : Math.min(6, Math.ceil(Math.abs(Math.log10(step))) + 1);
-  return value.toFixed(decimals);
+  if (decimals <= 0) {
+    return String(Math.round(value));
+  }
+  return value
+    .toFixed(decimals)
+    .replace(/(\.\d*?[1-9])0+$/u, '$1')
+    .replace(/\.0+$/u, '');
 }
 
 function squareWord(distance: number): string {
@@ -1105,7 +1111,7 @@ async function calibrateMicInputGain(): Promise<void> {
   const roundedGain = clampMicInputGain(snapNumberToStep(calibratedGain, MIC_INPUT_GAIN_STEP, MIC_CALIBRATION_MIN_GAIN));
   const appliedGain = audio.setOutboundInputGain(roundedGain);
   persistMicInputGain(appliedGain);
-  updateStatus(`Mic calibration set to ${appliedGain.toFixed(2)}x.`);
+  updateStatus(`Mic calibration set to ${formatSteppedNumber(appliedGain, MIC_INPUT_GAIN_STEP)}x.`);
   audio.sfxUiConfirm();
 }
 
@@ -1533,7 +1539,7 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
       return;
     }
     state.mode = 'micGainEdit';
-    state.nicknameInput = audio.getOutboundInputGain().toFixed(2);
+    state.nicknameInput = formatSteppedNumber(audio.getOutboundInputGain(), MIC_INPUT_GAIN_STEP);
     state.cursorPos = state.nicknameInput.length;
     replaceTextOnNextType = true;
     updateStatus(`Set volume: ${state.nicknameInput}`);
@@ -1867,14 +1873,17 @@ function handleMicGainEditModeInput(code: string, key: string, ctrlKey: boolean)
     const raw = Number(state.nicknameInput.trim());
     const base = Number.isFinite(raw) ? raw : audio.getOutboundInputGain();
     const delta = code === 'ArrowUp' ? MIC_INPUT_GAIN_STEP : -MIC_INPUT_GAIN_STEP;
-    const next = clampMicInputGain(
-      snapNumberToStep(base + delta, MIC_INPUT_GAIN_STEP, MIC_CALIBRATION_MIN_GAIN),
-    );
+    const attempted = snapNumberToStep(base + delta, MIC_INPUT_GAIN_STEP, MIC_CALIBRATION_MIN_GAIN);
+    const next = clampMicInputGain(attempted);
     state.nicknameInput = formatSteppedNumber(next, MIC_INPUT_GAIN_STEP);
     state.cursorPos = state.nicknameInput.length;
     replaceTextOnNextType = false;
-    updateStatus(`Set volume: ${state.nicknameInput}`);
-    audio.sfxUiBlip();
+    updateStatus(state.nicknameInput);
+    if (Math.abs(next - base) < 1e-9 || Math.abs(next - attempted) > 1e-9) {
+      audio.sfxUiCancel();
+    } else {
+      audio.sfxUiBlip();
+    }
     return;
   }
 
@@ -1895,7 +1904,7 @@ function handleMicGainEditModeInput(code: string, key: string, ctrlKey: boolean)
     persistMicInputGain(applied);
     state.mode = 'normal';
     replaceTextOnNextType = false;
-    updateStatus(`Volume set to ${applied.toFixed(2)}.`);
+    updateStatus(`Volume set to ${formatSteppedNumber(applied, MIC_INPUT_GAIN_STEP)}.`);
     audio.sfxUiConfirm();
     return;
   }
@@ -2337,14 +2346,19 @@ function handleItemPropertyEditModeInput(code: string, key: string, ctrlKey: boo
             : 0;
       const delta = code === 'ArrowUp' ? step : -step;
       const anchor = Number.isFinite(min) ? min : 0;
-      let nextValue = snapNumberToStep(currentValue + delta, step, anchor);
+      const attempted = snapNumberToStep(currentValue + delta, step, anchor);
+      let nextValue = attempted;
       if (Number.isFinite(min)) nextValue = Math.max(min, nextValue);
       if (Number.isFinite(max)) nextValue = Math.min(max, nextValue);
       state.nicknameInput = formatSteppedNumber(nextValue, step);
       state.cursorPos = state.nicknameInput.length;
       replaceTextOnNextType = false;
-      updateStatus(`Edit ${itemPropertyLabel(propertyKey)}: ${state.nicknameInput}`);
-      audio.sfxUiBlip();
+      updateStatus(state.nicknameInput);
+      if (Math.abs(nextValue - currentValue) < 1e-9 || Math.abs(nextValue - attempted) > 1e-9) {
+        audio.sfxUiCancel();
+      } else {
+        audio.sfxUiBlip();
+      }
       return;
     }
   }
