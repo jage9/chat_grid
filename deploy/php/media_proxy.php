@@ -12,6 +12,27 @@
  * - Provides same-origin endpoint for browser playback.
  */
 
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+ini_set('error_log', '/home/bestmidi/public_html/chgrid/media_proxy_error.log');
+error_reporting(E_ALL);
+
+function proxy_debug_log($message)
+{
+    $line = date('c') . ' ' . $message . PHP_EOL;
+    @file_put_contents('/home/bestmidi/public_html/chgrid/media_proxy_error.log', $line, FILE_APPEND);
+}
+
+register_shutdown_function(function () {
+    $e = error_get_last();
+    if (!$e) {
+        return;
+    }
+    proxy_debug_log('FATAL: ' . json_encode($e));
+});
+
+proxy_debug_log('START method=' . (isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'unknown') . ' uri=' . (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : ''));
+
 function set_status($code)
 {
     $map = array(
@@ -212,4 +233,3 @@ if ($cacheControl !== '') {
 if ($method !== 'HEAD') {
     echo $body;
 }
-
