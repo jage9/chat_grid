@@ -28,6 +28,8 @@ import {
   moveCursorWordRight,
   shouldReplaceCurrentText,
 } from './input/textInput';
+import { cycleIndex, findNextIndexByInitial } from './input/listNavigation';
+import { formatSteppedNumber, snapNumberToStep } from './input/numeric';
 import { type IncomingMessage, type OutgoingMessage } from './network/protocol';
 import { SignalingClient } from './network/signalingClient';
 import { CanvasRenderer } from './render/canvasRenderer';
@@ -887,26 +889,6 @@ function validateNumericItemPropertyInput(
     return { ok: true, value: normalized };
   }
   return { ok: true, value: parsed };
-}
-
-function snapNumberToStep(value: number, step: number, anchor = 0): number {
-  if (!(step > 0) || !Number.isFinite(value) || !Number.isFinite(anchor)) {
-    return value;
-  }
-  const normalized = Math.round((value - anchor) / step) * step + anchor;
-  const decimals = step >= 1 ? 0 : Math.min(6, Math.ceil(Math.abs(Math.log10(step))) + 1);
-  return Number(normalized.toFixed(decimals));
-}
-
-function formatSteppedNumber(value: number, step: number): string {
-  const decimals = step >= 1 ? 0 : Math.min(6, Math.ceil(Math.abs(Math.log10(step))) + 1);
-  if (decimals <= 0) {
-    return String(Math.round(value));
-  }
-  return value
-    .toFixed(decimals)
-    .replace(/(\.\d*?[1-9])0+$/u, '$1')
-    .replace(/\.0+$/u, '');
 }
 
 function squareWord(distance: number): string {
@@ -1922,10 +1904,7 @@ function handleMicGainEditModeInput(code: string, key: string, ctrlKey: boolean)
 
 function handleEffectSelectModeInput(code: string, key: string): void {
   if (code === 'ArrowDown' || code === 'ArrowUp') {
-    state.effectSelectIndex =
-      code === 'ArrowDown'
-        ? (state.effectSelectIndex + 1) % EFFECT_SEQUENCE.length
-        : (state.effectSelectIndex - 1 + EFFECT_SEQUENCE.length) % EFFECT_SEQUENCE.length;
+    state.effectSelectIndex = cycleIndex(state.effectSelectIndex, EFFECT_SEQUENCE.length, code === 'ArrowDown' ? 'next' : 'prev');
     updateStatus(EFFECT_SEQUENCE[state.effectSelectIndex].label);
     audio.sfxUiBlip();
     return;
@@ -1967,10 +1946,7 @@ function handleListModeInput(code: string, key: string): void {
   }
 
   if (code === 'ArrowDown' || code === 'ArrowUp') {
-    state.listIndex =
-      code === 'ArrowDown'
-        ? (state.listIndex + 1) % state.sortedPeerIds.length
-        : (state.listIndex - 1 + state.sortedPeerIds.length) % state.sortedPeerIds.length;
+    state.listIndex = cycleIndex(state.listIndex, state.sortedPeerIds.length, code === 'ArrowDown' ? 'next' : 'prev');
     const peer = state.peers.get(state.sortedPeerIds[state.listIndex]);
     if (!peer) return;
     updateStatus(
@@ -2025,10 +2001,7 @@ function handleListItemsModeInput(code: string, key: string): void {
     return;
   }
   if (code === 'ArrowDown' || code === 'ArrowUp') {
-    state.itemListIndex =
-      code === 'ArrowDown'
-        ? (state.itemListIndex + 1) % state.sortedItemIds.length
-        : (state.itemListIndex - 1 + state.sortedItemIds.length) % state.sortedItemIds.length;
+    state.itemListIndex = cycleIndex(state.itemListIndex, state.sortedItemIds.length, code === 'ArrowDown' ? 'next' : 'prev');
     const item = state.items.get(state.sortedItemIds[state.itemListIndex]);
     if (!item) return;
     updateStatus(
@@ -2087,10 +2060,7 @@ function handleAddItemModeInput(code: string, key: string): void {
     return;
   }
   if (code === 'ArrowDown' || code === 'ArrowUp') {
-    state.addItemTypeIndex =
-      code === 'ArrowDown'
-        ? (state.addItemTypeIndex + 1) % itemTypeSequence.length
-        : (state.addItemTypeIndex - 1 + itemTypeSequence.length) % itemTypeSequence.length;
+    state.addItemTypeIndex = cycleIndex(state.addItemTypeIndex, itemTypeSequence.length, code === 'ArrowDown' ? 'next' : 'prev');
     updateStatus(`${itemTypeLabel(itemTypeSequence[state.addItemTypeIndex])}.`);
     audio.sfxUiBlip();
     return;
@@ -2133,10 +2103,7 @@ function handleSelectItemModeInput(code: string, key: string): void {
     return;
   }
   if (code === 'ArrowDown' || code === 'ArrowUp') {
-    state.selectedItemIndex =
-      code === 'ArrowDown'
-        ? (state.selectedItemIndex + 1) % state.selectedItemIds.length
-        : (state.selectedItemIndex - 1 + state.selectedItemIds.length) % state.selectedItemIds.length;
+    state.selectedItemIndex = cycleIndex(state.selectedItemIndex, state.selectedItemIds.length, code === 'ArrowDown' ? 'next' : 'prev');
     const current = state.items.get(state.selectedItemIds[state.selectedItemIndex]);
     if (current) {
       updateStatus(itemLabel(current));
@@ -2222,10 +2189,7 @@ function handleItemPropertiesModeInput(code: string, key: string): void {
     return;
   }
   if (code === 'ArrowDown' || code === 'ArrowUp') {
-    state.itemPropertyIndex =
-      code === 'ArrowDown'
-        ? (state.itemPropertyIndex + 1) % state.itemPropertyKeys.length
-        : (state.itemPropertyIndex - 1 + state.itemPropertyKeys.length) % state.itemPropertyKeys.length;
+    state.itemPropertyIndex = cycleIndex(state.itemPropertyIndex, state.itemPropertyKeys.length, code === 'ArrowDown' ? 'next' : 'prev');
     const key = state.itemPropertyKeys[state.itemPropertyIndex];
     const value = getItemPropertyValue(item, key);
     updateStatus(`${itemPropertyLabel(key)}: ${value}`);
@@ -2515,10 +2479,11 @@ function handleItemPropertyOptionSelectModeInput(code: string, key: string): voi
   }
 
   if (code === 'ArrowDown' || code === 'ArrowUp') {
-    state.itemPropertyOptionIndex =
-      code === 'ArrowDown'
-        ? (state.itemPropertyOptionIndex + 1) % state.itemPropertyOptionValues.length
-        : (state.itemPropertyOptionIndex - 1 + state.itemPropertyOptionValues.length) % state.itemPropertyOptionValues.length;
+    state.itemPropertyOptionIndex = cycleIndex(
+      state.itemPropertyOptionIndex,
+      state.itemPropertyOptionValues.length,
+      code === 'ArrowDown' ? 'next' : 'prev',
+    );
     updateStatus(state.itemPropertyOptionValues[state.itemPropertyOptionIndex]);
     audio.sfxUiBlip();
     return;
@@ -2585,26 +2550,6 @@ function handleNicknameModeInput(code: string, key: string, ctrlKey: boolean): v
 
 function isTypingKey(code: string): boolean {
   return code.startsWith('Key') || code === 'Space';
-}
-
-function findNextIndexByInitial<T>(
-  entries: readonly T[],
-  currentIndex: number,
-  key: string,
-  labelFor: (entry: T) => string,
-): number {
-  if (entries.length === 0 || key.length !== 1 || !/[a-z]/i.test(key)) {
-    return -1;
-  }
-  const target = key.toLowerCase();
-  for (let step = 1; step <= entries.length; step += 1) {
-    const candidateIndex = (currentIndex + step) % entries.length;
-    const label = labelFor(entries[candidateIndex]).trim().toLowerCase();
-    if (label.startsWith(target)) {
-      return candidateIndex;
-    }
-  }
-  return -1;
 }
 
 function setupInputHandlers(): void {
