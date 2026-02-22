@@ -31,6 +31,7 @@ type OutputMode = 'stereo' | 'mono';
 
 export class AudioEngine {
   private audioCtx: AudioContext | null = null;
+  private masterGainNode: GainNode | null = null;
   private sfxGainNode: GainNode | null = null;
   private readonly sampleCache = new Map<string, AudioBuffer>();
   private readonly sampleLoaders = new Map<string, Promise<AudioBuffer>>();
@@ -43,6 +44,7 @@ export class AudioEngine {
   private loopbackEnabled = false;
   private loopbackRuntime: EffectRuntime | null = null;
   private outputMode: OutputMode = 'stereo';
+  private masterVolume = 50;
   private voiceLayerEnabled = true;
   private effectIndex = EFFECT_SEQUENCE.findIndex((effect) => effect.id === 'off');
   private readonly effectValues: Record<EffectId, number> = {
@@ -61,8 +63,11 @@ export class AudioEngine {
         (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!Ctor) return;
       this.audioCtx = new Ctor();
+      this.masterGainNode = this.audioCtx.createGain();
+      this.masterGainNode.gain.value = this.masterVolume / 100;
+      this.masterGainNode.connect(this.audioCtx.destination);
       this.sfxGainNode = this.audioCtx.createGain();
-      this.sfxGainNode.connect(this.audioCtx.destination);
+      this.sfxGainNode.connect(this.masterGainNode);
     }
     if (this.audioCtx.state === 'suspended') {
       await this.audioCtx.resume();
@@ -71,6 +76,10 @@ export class AudioEngine {
 
   get context(): AudioContext | null {
     return this.audioCtx;
+  }
+
+  getOutputDestinationNode(): AudioNode | null {
+    return this.masterGainNode ?? this.audioCtx?.destination ?? null;
   }
 
   supportsStereoPanner(): boolean {
@@ -168,6 +177,23 @@ export class AudioEngine {
     this.outputMode = mode;
   }
 
+  setMasterVolume(value: number): number {
+    const next = Math.max(0, Math.min(100, Number.isFinite(value) ? Math.round(value) : 50));
+    this.masterVolume = next;
+    if (this.masterGainNode && this.audioCtx) {
+      this.masterGainNode.gain.setValueAtTime(next / 100, this.audioCtx.currentTime);
+    }
+    return this.masterVolume;
+  }
+
+  adjustMasterVolume(step: number): number {
+    return this.setMasterVolume(this.masterVolume + step);
+  }
+
+  getMasterVolume(): number {
+    return this.masterVolume;
+  }
+
   toggleOutputMode(): OutputMode {
     this.outputMode = this.outputMode === 'stereo' ? 'mono' : 'stereo';
     return this.outputMode;
@@ -245,11 +271,11 @@ export class AudioEngine {
     if (this.supportsStereoPanner()) {
       pannerNode = this.audioCtx.createStereoPanner();
       if (this.voiceLayerEnabled) {
-        gainNode.connect(pannerNode).connect(this.audioCtx.destination);
+        gainNode.connect(pannerNode).connect(this.masterGainNode ?? this.audioCtx.destination);
       }
     } else {
       if (this.voiceLayerEnabled) {
-        gainNode.connect(this.audioCtx.destination);
+        gainNode.connect(this.masterGainNode ?? this.audioCtx.destination);
       }
     }
 
@@ -402,7 +428,13 @@ export class AudioEngine {
     if (!this.loopbackEnabled) {
       return;
     }
-    this.loopbackRuntime = connectEffectChain(this.audioCtx, this.outboundInputGain, this.audioCtx.destination, effect, effectValue);
+    this.loopbackRuntime = connectEffectChain(
+      this.audioCtx,
+      this.outboundInputGain,
+      this.masterGainNode ?? this.audioCtx.destination,
+      effect,
+      effectValue,
+    );
   }
 
   private clampLevel(value: number): number {

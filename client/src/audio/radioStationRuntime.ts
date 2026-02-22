@@ -361,12 +361,13 @@ export class RadioStationRuntime {
     const effect = normalizeRadioEffect(item.params.mediaEffect);
     const effectValue = normalizeRadioEffectValue(item.params.mediaEffectValue);
     const effectRuntime = connectEffectChain(audioCtx, effectInput, gain, effect, effectValue);
+    const destination = this.audio.getOutputDestinationNode() ?? audioCtx.destination;
     let panner: StereoPannerNode | null = null;
     if (this.audio.supportsStereoPanner()) {
       panner = audioCtx.createStereoPanner();
-      gain.connect(panner).connect(audioCtx.destination);
+      gain.connect(panner).connect(destination);
     } else {
-      gain.connect(audioCtx.destination);
+      gain.connect(destination);
     }
     this.itemRadioOutputs.set(item.id, {
       streamUrl,

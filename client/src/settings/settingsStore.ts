@@ -8,6 +8,7 @@ const AUDIO_OUTPUT_NAME_STORAGE_KEY = 'chatGridAudioOutputDeviceName';
 const AUDIO_OUTPUT_MODE_STORAGE_KEY = 'chatGridAudioOutputMode';
 const AUDIO_LAYER_STATE_STORAGE_KEY = 'chatGridAudioLayers';
 const MIC_INPUT_GAIN_STORAGE_KEY = 'chatGridMicInputGain';
+const MASTER_VOLUME_STORAGE_KEY = 'chatGridMasterVolume';
 const NICKNAME_STORAGE_KEY = 'spatialChatNickname';
 
 type DevicePreference = {
@@ -69,6 +70,17 @@ export class SettingsStore {
 
   saveMicInputGain(value: number): void {
     localStorage.setItem(MIC_INPUT_GAIN_STORAGE_KEY, String(value));
+  }
+
+  loadMasterVolume(): number | null {
+    const raw = localStorage.getItem(MASTER_VOLUME_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  saveMasterVolume(value: number): void {
+    localStorage.setItem(MASTER_VOLUME_STORAGE_KEY, String(value));
   }
 
   loadNickname(): string {

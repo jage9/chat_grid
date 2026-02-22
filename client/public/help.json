@@ -128,6 +128,10 @@
         },
         {
           "keys": "Dash or Equals",
+          "description": "Lower/raise master volume"
+        },
+        {
+          "keys": "Underscore or Plus",
           "description": "Lower/raise active effect value"
         },
         {

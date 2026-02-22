@@ -137,11 +137,12 @@ export class ItemEmitRuntime {
       const initialRates = resolveEmitRates(item);
       setElementPreservesPitch(element, initialRates.preservePitch);
       element.playbackRate = initialRates.playbackRate;
+      const destination = this.audio.getOutputDestinationNode() ?? audioCtx.destination;
       if (this.audio.supportsStereoPanner()) {
         panner = audioCtx.createStereoPanner();
-        gain.connect(panner).connect(audioCtx.destination);
+        gain.connect(panner).connect(destination);
       } else {
-        gain.connect(audioCtx.destination);
+        gain.connect(destination);
       }
       this.outputs.set(item.id, { soundUrl, element, source, effectInput, effectRuntime, effect, effectValue, gain, panner });
       void element.play().catch(() => undefined);

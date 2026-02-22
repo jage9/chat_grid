@@ -241,6 +241,7 @@ audio.setOutputMode(outputMode);
 loadEffectLevels();
 loadAudioLayerState();
 loadMicInputGain();
+loadMasterVolume();
 void loadHelp();
 void loadChangelog();
 
@@ -467,6 +468,21 @@ function loadMicInputGain(): void {
 /** Persists microphone input gain to local storage. */
 function persistMicInputGain(value: number): void {
   settings.saveMicInputGain(value);
+}
+
+/** Loads persisted master output volume and applies default when missing. */
+function loadMasterVolume(): void {
+  const parsed = settings.loadMasterVolume();
+  if (parsed === null) {
+    audio.setMasterVolume(50);
+    return;
+  }
+  audio.setMasterVolume(parsed);
+}
+
+/** Persists master output volume to local storage. */
+function persistMasterVolume(value: number): void {
+  settings.saveMasterVolume(value);
 }
 
 /** Applies current layer toggles to peer voice, media streams, and item emitters. */
@@ -1101,7 +1117,7 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
     state,
     dom,
     sanitizeName,
-    updateStatus,
+    updateStatus: (message) => pushChatMessage(message),
     updateConnectAvailability,
     settingsSaveNickname: (value) => settings.saveNickname(value),
     mediaIsConnecting: () => mediaSession.isConnecting(),
@@ -1266,6 +1282,15 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
     case 'toggleWorldLayer':
       toggleAudioLayer('world');
       return;
+    case 'masterVolumeUp':
+    case 'masterVolumeDown': {
+      const step = command === 'masterVolumeUp' ? 5 : -5;
+      const next = audio.adjustMasterVolume(step);
+      persistMasterVolume(next);
+      updateStatus(`Master volume ${next}`);
+      audio.sfxUiBlip();
+      return;
+    }
     case 'openEffectSelect': {
       const currentEffect = audio.getCurrentEffect();
       const currentIndex = EFFECT_SEQUENCE.findIndex((effect) => effect.id === currentEffect.id);

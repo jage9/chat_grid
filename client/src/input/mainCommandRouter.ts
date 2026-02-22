@@ -10,6 +10,8 @@ export type MainModeCommand =
   | 'toggleItemLayer'
   | 'toggleMediaLayer'
   | 'toggleWorldLayer'
+  | 'masterVolumeUp'
+  | 'masterVolumeDown'
   | 'openEffectSelect'
   | 'effectValueUp'
   | 'effectValueDown'
@@ -43,8 +45,10 @@ export function resolveMainModeCommand(code: string, shiftKey: boolean): MainMod
   if (code === 'Digit3') return 'toggleMediaLayer';
   if (code === 'Digit4') return 'toggleWorldLayer';
   if (code === 'KeyE') return shiftKey ? null : 'openEffectSelect';
-  if (code === 'Equal' || code === 'NumpadAdd') return 'effectValueUp';
-  if (code === 'Minus' || code === 'NumpadSubtract') return 'effectValueDown';
+  if (code === 'Equal') return shiftKey ? 'effectValueUp' : 'masterVolumeUp';
+  if (code === 'Minus') return shiftKey ? 'effectValueDown' : 'masterVolumeDown';
+  if (code === 'NumpadAdd') return 'masterVolumeUp';
+  if (code === 'NumpadSubtract') return 'masterVolumeDown';
   if (code === 'KeyC') return shiftKey ? null : 'speakCoordinates';
   if (code === 'KeyV') return shiftKey ? 'calibrateMicrophone' : 'openMicGainEdit';
   if (code === 'Enter') return 'useItem';

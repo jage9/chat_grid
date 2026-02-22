@@ -41,7 +41,8 @@ This document is the authoritative keymap for the client.
 - `3`: Toggle media layer (radio)
 - `4`: Toggle world layer (other-user world sounds)
 - `E`: Effect select menu
-- `-` / `=`: Lower/raise active effect value
+- `-` / `=`: Lower/raise master volume
+- `_` / `+` (`Shift+-` / `Shift+=`): Lower/raise active effect value
 
 ## Text Entry Modes (`nickname`, `chat`, `itemPropertyEdit`)
 
