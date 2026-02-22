@@ -131,8 +131,12 @@
           "description": "Lower/raise active effect value"
         },
         {
-          "keys": "Shift+C",
-          "description": "Calibrate mic input gain over 5 seconds"
+          "keys": "V",
+          "description": "Set volume"
+        },
+        {
+          "keys": "Shift+V",
+          "description": "Microphone calibration"
         }
       ]
     }

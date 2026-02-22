@@ -653,6 +653,7 @@ function textInputMaxLengthForMode(mode: typeof state.mode): number | null {
   if (mode === 'nickname') return NICKNAME_MAX_LENGTH;
   if (mode === 'chat') return 500;
   if (mode === 'itemPropertyEdit') return 500;
+  if (mode === 'micGainEdit') return 8;
   return null;
 }
 
@@ -670,7 +671,7 @@ function pasteIntoActiveTextInput(raw: string): boolean {
 }
 
 function isTextEditingMode(mode: typeof state.mode): boolean {
-  return mode === 'nickname' || mode === 'chat' || mode === 'itemPropertyEdit';
+  return mode === 'nickname' || mode === 'chat' || mode === 'itemPropertyEdit' || mode === 'micGainEdit';
 }
 
 function applyTextInputEdit(code: string, key: string, maxLength: number, ctrlKey = false, allowReplaceOnNextType = false): void {
@@ -1506,11 +1507,21 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
   }
 
   if (code === 'KeyC') {
+    updateStatus(`${state.player.x}, ${state.player.y}`);
+    audio.sfxUiBlip();
+    return;
+  }
+
+  if (code === 'KeyV') {
     if (shiftKey) {
       void calibrateMicInputGain();
       return;
     }
-    updateStatus(`${state.player.x}, ${state.player.y}`);
+    state.mode = 'micGainEdit';
+    state.nicknameInput = audio.getOutboundInputGain().toFixed(2);
+    state.cursorPos = state.nicknameInput.length;
+    replaceTextOnNextType = true;
+    updateStatus(`Set volume: ${state.nicknameInput}`);
     audio.sfxUiBlip();
     return;
   }
@@ -1834,6 +1845,34 @@ function handleChatModeInput(code: string, key: string, ctrlKey: boolean): void 
   }
 
   applyTextInputEdit(code, key, 500, ctrlKey);
+}
+
+function handleMicGainEditModeInput(code: string, key: string, ctrlKey: boolean): void {
+  if (code === 'Enter') {
+    const value = Number(state.nicknameInput.trim());
+    if (!Number.isFinite(value) || value < MIC_CALIBRATION_MIN_GAIN || value > MIC_CALIBRATION_MAX_GAIN) {
+      updateStatus(`Volume must be between ${MIC_CALIBRATION_MIN_GAIN} and ${MIC_CALIBRATION_MAX_GAIN}.`);
+      audio.sfxUiCancel();
+      return;
+    }
+    const applied = audio.setOutboundInputGain(value);
+    persistMicInputGain(applied);
+    state.mode = 'normal';
+    replaceTextOnNextType = false;
+    updateStatus(`Volume set to ${applied.toFixed(2)}.`);
+    audio.sfxUiConfirm();
+    return;
+  }
+
+  if (code === 'Escape') {
+    state.mode = 'normal';
+    replaceTextOnNextType = false;
+    updateStatus('Cancelled.');
+    audio.sfxUiCancel();
+    return;
+  }
+
+  applyTextInputEdit(code, key, 8, ctrlKey, true);
 }
 
 function handleEffectSelectModeInput(code: string, key: string): void {
@@ -2537,6 +2576,8 @@ function setupInputHandlers(): void {
       handleNicknameModeInput(code, event.key, event.ctrlKey);
     } else if (state.mode === 'chat') {
       handleChatModeInput(code, event.key, event.ctrlKey);
+    } else if (state.mode === 'micGainEdit') {
+      handleMicGainEditModeInput(code, event.key, event.ctrlKey);
     } else if (state.mode === 'effectSelect') {
       handleEffectSelectModeInput(code, event.key);
     } else if (state.mode === 'helpView') {
