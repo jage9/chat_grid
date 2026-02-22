@@ -1071,7 +1071,7 @@ async function calibrateMicInputGain(): Promise<void> {
 
   const activeRms = rmsValues.filter((value) => value >= MIC_CALIBRATION_ACTIVE_RMS_THRESHOLD);
   if (activeRms.length < 10) {
-    updateStatus('Calibration failed. Speak continuously and try again.');
+    updateStatus('No audio detected, please try again.');
     audio.sfxUiCancel();
     return;
   }
@@ -1080,7 +1080,7 @@ async function calibrateMicInputGain(): Promise<void> {
   const percentileIndex = Math.min(activeRms.length - 1, Math.floor(activeRms.length * 0.9));
   const observedRms = activeRms[percentileIndex];
   if (!(observedRms > 0)) {
-    updateStatus('Calibration failed. Speak continuously and try again.');
+    updateStatus('No audio detected, please try again.');
     audio.sfxUiCancel();
     return;
   }
