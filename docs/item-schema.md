@@ -62,7 +62,7 @@
   "streamUrl": "",
   "enabled": true,
   "channel": "stereo",
-  "volume": 50,
+  "mediaVolume": 50,
   "effect": "off",
   "effectValue": 50,
   "facing": 0,
@@ -73,7 +73,7 @@
 - `streamUrl`: string, empty allowed until configured.
 - `enabled`: boolean on/off flag.
   - UI behavior: in property menu, `Enter` toggles on/off directly.
-- `volume`: integer, range `0-100`, default `50`.
+- `mediaVolume`: integer, range `0-100`, default `50`.
 - `channel`: one of `stereo | mono | left | right`, default `stereo`.
 - `effect`: one of `reverb | echo | flanger | high_pass | low_pass | off`, default `off`.
 - `effectValue`: number, range `0-100`, precision `0.1`.
@@ -136,6 +136,7 @@
   "directional": false,
   "facing": 0,
   "emitRange": 15,
+  "emitVolume": 100,
   "useSound": "",
   "emitSound": ""
 }
@@ -145,6 +146,7 @@
 - `directional`: boolean (or `on/off` in updates), default `false`.
 - `facing`: number, range `0-360`, precision `0.1`.
 - `emitRange`: integer, range `1-20`, default `15`.
+- `emitVolume`: integer, range `0-100`, default `100`.
 - `useSound`: empty, filename (assumed under `sounds/`), or full URL.
 - `emitSound`: empty, filename (assumed under `sounds/`), or full URL.
 

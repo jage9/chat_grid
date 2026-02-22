@@ -10,7 +10,16 @@ from .helpers import parse_bool_like, toggle_bool_param
 
 LABEL = "widget"
 TOOLTIP = "A basic item. Make it a beacon or whatever you want."
-EDITABLE_PROPERTIES: tuple[str, ...] = ("title", "enabled", "directional", "facing", "emitRange", "useSound", "emitSound")
+EDITABLE_PROPERTIES: tuple[str, ...] = (
+    "title",
+    "enabled",
+    "directional",
+    "facing",
+    "emitRange",
+    "emitVolume",
+    "useSound",
+    "emitSound",
+)
 CAPABILITIES: tuple[str, ...] = ("editable", "carryable", "deletable", "usable")
 USE_SOUND: str | None = None
 EMIT_SOUND: str | None = None
@@ -23,6 +32,7 @@ DEFAULT_PARAMS: dict = {
     "directional": False,
     "facing": 0,
     "emitRange": 15,
+    "emitVolume": 100,
     "useSound": "",
     "emitSound": "",
 }
@@ -40,6 +50,11 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "number",
         "tooltip": "Maximum distance in squares for emitted sound.",
         "range": {"min": 1, "max": 20, "step": 1},
+    },
+    "emitVolume": {
+        "valueType": "number",
+        "tooltip": "Emitted sound volume percent.",
+        "range": {"min": 0, "max": 100, "step": 1},
     },
     "useSound": {"valueType": "sound", "tooltip": "Sound played on use. Filename assumes sounds folder, or use full URL."},
     "emitSound": {"valueType": "sound", "tooltip": "Looping emitted sound. Filename assumes sounds folder, or use full URL."},
@@ -89,6 +104,14 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     if not (1 <= emit_range <= 20):
         raise ValueError("emitRange must be between 1 and 20.")
     next_params["emitRange"] = emit_range
+
+    try:
+        emit_volume = int(next_params.get("emitVolume", item.params.get("emitVolume", 100)))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("emitVolume must be an integer between 0 and 100.") from exc
+    if not (0 <= emit_volume <= 100):
+        raise ValueError("emitVolume must be between 0 and 100.")
+    next_params["emitVolume"] = emit_volume
 
     next_params["useSound"] = _normalize_sound_value(next_params.get("useSound", item.params.get("useSound", "")))
     next_params["emitSound"] = _normalize_sound_value(next_params.get("emitSound", item.params.get("emitSound", "")))

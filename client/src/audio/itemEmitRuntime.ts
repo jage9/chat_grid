@@ -135,7 +135,9 @@ export class ItemEmitRuntime {
       });
       const gainValue = mix?.gain ?? 0;
       const panValue = mix?.pan ?? 0;
-      output.gain.gain.linearRampToValueAtTime(gainValue, audioCtx.currentTime + 0.1);
+      const emitVolumeRaw = Number(item.params.emitVolume ?? 100);
+      const emitVolume = Number.isFinite(emitVolumeRaw) ? Math.max(0, Math.min(100, emitVolumeRaw)) / 100 : 1;
+      output.gain.gain.linearRampToValueAtTime(gainValue * emitVolume, audioCtx.currentTime + 0.1);
       if (output.panner) {
         const resolvedPan = this.audio.getOutputMode() === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
         output.panner.pan.linearRampToValueAtTime(resolvedPan, audioCtx.currentTime + 0.1);

@@ -134,6 +134,13 @@ async def test_radio_channel_update_validates(monkeypatch: pytest.MonkeyPatch) -
 
     await server._handle_message(
         client,
+        json.dumps({"type": "item_update", "itemId": item.id, "params": {"mediaVolume": 12}}),
+    )
+    assert send_payloads[-1].ok is True
+    assert item.params.get("mediaVolume") == 12
+
+    await server._handle_message(
+        client,
         json.dumps({"type": "item_update", "itemId": item.id, "params": {"emitRange": 12}}),
     )
     assert send_payloads[-1].ok is True
@@ -277,6 +284,7 @@ async def test_widget_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
                     "directional": True,
                     "facing": 123.4,
                     "emitRange": 7,
+                    "emitVolume": 42,
                     "useSound": "ping.ogg",
                     "emitSound": "https://example.com/ambient.ogg",
                 },
@@ -287,6 +295,7 @@ async def test_widget_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
     assert item.params.get("directional") is True
     assert item.params.get("facing") == 123.4
     assert item.params.get("emitRange") == 7
+    assert item.params.get("emitVolume") == 42
     assert item.params.get("useSound") == "sounds/ping.ogg"
     assert item.params.get("emitSound") == "https://example.com/ambient.ogg"
 

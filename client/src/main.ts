@@ -749,7 +749,8 @@ function inferItemPropertyValueType(item: WorldItem, key: string): string | unde
     key === 'x' ||
     key === 'y' ||
     key === 'version' ||
-    key === 'volume' ||
+    key === 'mediaVolume' ||
+    key === 'emitVolume' ||
     key === 'effectValue' ||
     key === 'facing' ||
     key === 'emitRange' ||
@@ -2138,14 +2139,22 @@ function handleItemPropertyEditModeInput(code: string, key: string, ctrlKey: boo
       }
       const directional = ['on', 'true', '1', 'yes'].includes(normalized);
       signaling.send({ type: 'item_update', itemId, params: { directional } });
-    } else if (propertyKey === 'volume') {
+    } else if (propertyKey === 'mediaVolume') {
       const parsed = validateNumericItemPropertyInput(item, propertyKey, value, true);
       if (!parsed.ok) {
         updateStatus(parsed.message);
         audio.sfxUiCancel();
         return;
       }
-      signaling.send({ type: 'item_update', itemId, params: { volume: parsed.value } });
+      signaling.send({ type: 'item_update', itemId, params: { mediaVolume: parsed.value } });
+    } else if (propertyKey === 'emitVolume') {
+      const parsed = validateNumericItemPropertyInput(item, propertyKey, value, true);
+      if (!parsed.ok) {
+        updateStatus(parsed.message);
+        audio.sfxUiCancel();
+        return;
+      }
+      signaling.send({ type: 'item_update', itemId, params: { emitVolume: parsed.value } });
     } else if (propertyKey === 'effect') {
       const normalized = value.trim().toLowerCase() as EffectId;
       if (!EFFECT_IDS.has(normalized)) {

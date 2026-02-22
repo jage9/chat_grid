@@ -15,7 +15,7 @@ EDITABLE_PROPERTIES: tuple[str, ...] = (
     "streamUrl",
     "enabled",
     "channel",
-    "volume",
+    "mediaVolume",
     "effect",
     "effectValue",
     "facing",
@@ -32,7 +32,7 @@ DEFAULT_PARAMS: dict = {
     "streamUrl": "",
     "enabled": True,
     "channel": "stereo",
-    "volume": 50,
+    "mediaVolume": 50,
     "effect": "off",
     "effectValue": 50,
     "facing": 0,
@@ -47,9 +47,9 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "streamUrl": {"valueType": "text", "tooltip": "Audio stream URL used by this radio."},
     "enabled": {"valueType": "boolean", "tooltip": "Turns playback on or off for this radio."},
     "channel": {"valueType": "list", "tooltip": "Select how the station audio channels are rendered."},
-    "volume": {
+    "mediaVolume": {
         "valueType": "number",
-        "tooltip": "Playback volume percent for this radio.",
+        "tooltip": "Playback media volume percent for this radio.",
         "range": {"min": 0, "max": 100, "step": 1},
     },
     "effect": {"valueType": "list", "tooltip": "Select the active radio effect."},
@@ -100,12 +100,12 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     next_params["enabled"] = enabled
 
     try:
-        volume = int(next_params.get("volume", 50))
+        media_volume = int(next_params.get("mediaVolume", 50))
     except (TypeError, ValueError) as exc:
-        raise ValueError("volume must be a number.") from exc
-    if not (0 <= volume <= 100):
-        raise ValueError("volume must be between 0 and 100.")
-    next_params["volume"] = volume
+        raise ValueError("mediaVolume must be a number.") from exc
+    if not (0 <= media_volume <= 100):
+        raise ValueError("mediaVolume must be between 0 and 100.")
+    next_params["mediaVolume"] = media_volume
 
     effect = str(next_params.get("effect", "off")).strip().lower()
     if effect not in EFFECT_OPTIONS:
@@ -153,4 +153,3 @@ def use_item(item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], 
         others_message=f"{nickname} turns {state_text} {item.title}.",
         updated_params={**item.params, "enabled": next_enabled},
     )
-

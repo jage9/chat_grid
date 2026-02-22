@@ -22,7 +22,7 @@ This is behavior-focused documentation for item types and their defaults.
   - `streamUrl=""`
   - `enabled=true`
   - `channel="stereo"`
-  - `volume=50`
+  - `mediaVolume=50`
   - `effect="off"`
   - `effectValue=50`
   - `facing=0`
@@ -39,7 +39,7 @@ This is behavior-focused documentation for item types and their defaults.
 
 ### Validation
 - `channel`: `stereo | mono | left | right`
-- `volume`: integer `0..100`
+- `mediaVolume`: integer `0..100`
 - `effect`: `reverb | echo | flanger | high_pass | low_pass | off`
 - `effectValue`: number `0..100` with `0.1` precision
 - `facing`: number `0..360` with `0.1` precision
@@ -119,6 +119,7 @@ This is behavior-focused documentation for item types and their defaults.
   - `directional=false`
   - `facing=0`
   - `emitRange=15`
+  - `emitVolume=100`
   - `useSound=""`
   - `emitSound=""`
 - Global:
@@ -136,6 +137,7 @@ This is behavior-focused documentation for item types and their defaults.
 - `directional`: boolean or on/off style input
 - `facing`: number `0..360` with `0.1` precision
 - `emitRange`: integer `1..20`
+- `emitVolume`: integer `0..100`
 - `useSound`: empty, filename (assumed under `sounds/`), or full URL
 - `emitSound`: empty, filename (assumed under `sounds/`), or full URL
 

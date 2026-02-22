@@ -203,8 +203,8 @@ export class RadioStationRuntime {
       }
       const streamUrl = String(item.params.streamUrl ?? '').trim();
       const enabled = item.params.enabled !== false;
-      const volume = Number(item.params.volume ?? 50);
-      const normalizedVolume = Number.isFinite(volume) ? Math.max(0, Math.min(100, volume)) / 100 : 0.5;
+      const mediaVolume = Number(item.params.mediaVolume ?? 50);
+      const normalizedVolume = Number.isFinite(mediaVolume) ? Math.max(0, Math.min(100, mediaVolume)) / 100 : 0.5;
       const effect = normalizeRadioEffect(item.params.effect);
       const effectValue = normalizeRadioEffectValue(item.params.effectValue);
       this.applyEffect(output, audioCtx, effect, effectValue);

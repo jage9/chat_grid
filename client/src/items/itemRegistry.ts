@@ -48,11 +48,11 @@ const DEFAULT_CLOCK_TIME_ZONE_OPTIONS = [
 const DEFAULT_ITEM_TYPE_SEQUENCE: ItemType[] = ['clock', 'dice', 'radio_station', 'wheel', 'widget'];
 
 const DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES: Record<ItemType, string[]> = {
-  radio_station: ['title', 'streamUrl', 'enabled', 'channel', 'volume', 'effect', 'effectValue', 'facing', 'emitRange'],
+  radio_station: ['title', 'streamUrl', 'enabled', 'channel', 'mediaVolume', 'effect', 'effectValue', 'facing', 'emitRange'],
   dice: ['title', 'sides', 'number'],
   wheel: ['title', 'spaces'],
   clock: ['title', 'timeZone', 'use24Hour'],
-  widget: ['title', 'enabled', 'directional', 'facing', 'emitRange', 'useSound', 'emitSound'],
+  widget: ['title', 'enabled', 'directional', 'facing', 'emitRange', 'emitVolume', 'useSound', 'emitSound'],
 };
 
 const DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES: Record<ItemType, Record<string, string | number | boolean>> = {
@@ -193,6 +193,8 @@ export function itemTypeLabel(type: ItemType): string {
 export function itemPropertyLabel(key: string): string {
   if (key === 'use24Hour') return 'use 24 hour format';
   if (key === 'emitRange') return 'emit range';
+  if (key === 'mediaVolume') return 'media volume';
+  if (key === 'emitVolume') return 'emit volume';
   if (key === 'useSound') return 'use sound';
   if (key === 'emitSound') return 'emit sound';
   return key;
