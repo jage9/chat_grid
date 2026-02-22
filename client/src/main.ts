@@ -78,6 +78,8 @@ const MIC_CALIBRATION_ACTIVE_RMS_THRESHOLD = 0.003;
 const MIC_INPUT_GAIN_SCALE_MULTIPLIER = 2;
 const MIC_INPUT_GAIN_STEP = 0.05;
 const HEARTBEAT_INTERVAL_MS = 10_000;
+const RECONNECT_DELAY_MS = 2_000;
+const RECONNECT_MAX_ATTEMPTS = 3;
 
 declare global {
   interface Window {
@@ -510,6 +512,10 @@ function toggleAudioLayer(layer: keyof AudioLayerState): void {
 /** Routes signaling transport status messages through chat buffer + status output. */
 function handleSignalingStatus(message: string): void {
   if (message === 'Connected.') {
+    return;
+  }
+  if (message === 'Disconnected.' && state.running && !reconnectInFlight) {
+    void reconnectAfterSocketClose();
     return;
   }
   pushChatMessage(message);
@@ -1109,16 +1115,37 @@ function startHeartbeat(): void {
 
 /** Performs one reconnect attempt when heartbeat timeout indicates stale signaling. */
 async function reconnectAfterHeartbeatTimeout(): Promise<void> {
+  await reconnectWithRetry('heartbeat');
+}
+
+/** Performs immediate reconnect when websocket closes unexpectedly. */
+async function reconnectAfterSocketClose(): Promise<void> {
+  await reconnectWithRetry('socketClose');
+}
+
+/** Reconnects after disconnect with delay and bounded retry attempts. */
+async function reconnectWithRetry(reason: 'heartbeat' | 'socketClose'): Promise<void> {
   if (reconnectInFlight || !state.running) return;
   reconnectInFlight = true;
   stopHeartbeat();
-  pushChatMessage('Connection stale. Reconnecting...');
-  disconnect();
-  try {
-    await connect();
-  } finally {
-    reconnectInFlight = false;
+  if (reason === 'heartbeat') {
+    pushChatMessage('Connection stale. Reconnecting...');
   }
+  disconnect();
+  for (let attempt = 1; attempt <= RECONNECT_MAX_ATTEMPTS; attempt += 1) {
+    await new Promise((resolve) => window.setTimeout(resolve, RECONNECT_DELAY_MS));
+    await connect();
+    if (state.running) {
+      reconnectInFlight = false;
+      return;
+    }
+    if (attempt < RECONNECT_MAX_ATTEMPTS) {
+      pushChatMessage(`Reconnect attempt ${attempt} failed. Retrying...`);
+    }
+  }
+  pushChatMessage('Reconnect failed after 3 attempts. Press Connect to retry.');
+  audio.sfxUiCancel();
+  reconnectInFlight = false;
 }
 
 /** Builds dependencies shared by connect/disconnect flow helpers. */

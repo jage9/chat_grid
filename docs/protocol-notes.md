@@ -61,7 +61,9 @@ This is a behavior guide for packet semantics beyond raw schemas.
 
 - Client sends automatic heartbeat `ping` packets every 10 seconds while connected.
 - Heartbeat pings use negative `clientSentAt` ids and are internal (not user-visible ping status).
-- If a heartbeat `pong` is missed for one interval (10 seconds), client force-disconnects and reconnects.
+- If websocket close is observed unexpectedly, client starts reconnect flow.
+- If a heartbeat `pong` is missed for one interval (10 seconds), client also starts reconnect flow.
+- Reconnect flow waits 2 seconds and retries up to 3 times before stopping.
 - After reconnect, if `welcome.serverInfo.instanceId` changed, client announces `Server restarted.`
 - Client emits `Connected. Version <version>.` after each `welcome`.
 - If `welcome.serverInfo.version` differs from running client version, client auto-reloads.
