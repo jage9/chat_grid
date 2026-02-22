@@ -62,9 +62,16 @@ const AUDIO_INPUT_NAME_STORAGE_KEY = 'chatGridAudioInputDeviceName';
 const AUDIO_OUTPUT_NAME_STORAGE_KEY = 'chatGridAudioOutputDeviceName';
 const AUDIO_OUTPUT_MODE_STORAGE_KEY = 'chatGridAudioOutputMode';
 const AUDIO_LAYER_STATE_STORAGE_KEY = 'chatGridAudioLayers';
+const MIC_INPUT_GAIN_STORAGE_KEY = 'chatGridMicInputGain';
 const DEFAULT_DISPLAY_TIME_ZONE = 'America/Detroit';
 const NICKNAME_STORAGE_KEY = 'spatialChatNickname';
 const NICKNAME_MAX_LENGTH = 32;
+const MIC_CALIBRATION_DURATION_MS = 5000;
+const MIC_CALIBRATION_SAMPLE_INTERVAL_MS = 50;
+const MIC_CALIBRATION_MIN_GAIN = 0.25;
+const MIC_CALIBRATION_MAX_GAIN = 3;
+const MIC_CALIBRATION_TARGET_RMS = 0.12;
+const MIC_CALIBRATION_ACTIVE_RMS_THRESHOLD = 0.003;
 
 declare global {
   interface Window {
@@ -193,6 +200,7 @@ let replaceTextOnNextType = false;
 let pendingEscapeDisconnect = false;
 let helpViewerLines: string[] = [];
 let helpViewerIndex = 0;
+let calibratingMicInput = false;
 let audioLayers: AudioLayerState = {
   voice: true,
   item: true,
@@ -216,6 +224,7 @@ audio.setOutputMode(outputMode);
 
 loadEffectLevels();
 loadAudioLayerState();
+loadMicInputGain();
 void loadHelp();
 void loadChangelog();
 
@@ -426,6 +435,25 @@ function loadAudioLayerState(): void {
 
 function persistAudioLayerState(): void {
   localStorage.setItem(AUDIO_LAYER_STATE_STORAGE_KEY, JSON.stringify(audioLayers));
+}
+
+function clampMicInputGain(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(MIC_CALIBRATION_MIN_GAIN, Math.min(MIC_CALIBRATION_MAX_GAIN, value));
+}
+
+function loadMicInputGain(): void {
+  const raw = localStorage.getItem(MIC_INPUT_GAIN_STORAGE_KEY);
+  if (!raw) {
+    audio.setOutboundInputGain(1);
+    return;
+  }
+  const parsed = Number(raw);
+  audio.setOutboundInputGain(clampMicInputGain(parsed));
+}
+
+function persistMicInputGain(value: number): void {
+  localStorage.setItem(MIC_INPUT_GAIN_STORAGE_KEY, String(value));
 }
 
 async function applyAudioLayerState(): Promise<void> {
@@ -986,6 +1014,84 @@ async function setupLocalMedia(audioDeviceId = ''): Promise<void> {
   await peerManager.replaceOutgoingTrack(outboundStream);
 }
 
+async function calibrateMicInputGain(): Promise<void> {
+  if (calibratingMicInput) {
+    updateStatus('Mic calibration already running.');
+    return;
+  }
+  if (!state.running || !localStream) {
+    updateStatus('Connect first, then use Shift+C to calibrate.');
+    audio.sfxUiCancel();
+    return;
+  }
+  const track = localStream.getAudioTracks()[0];
+  if (!track || track.readyState !== 'live') {
+    updateStatus('No active microphone track for calibration.');
+    audio.sfxUiCancel();
+    return;
+  }
+  await audio.ensureContext();
+  const audioContext = audio.context;
+  if (!audioContext) {
+    updateStatus('Audio context unavailable.');
+    audio.sfxUiCancel();
+    return;
+  }
+
+  calibratingMicInput = true;
+  updateStatus('Speak for 5 seconds to calibrate your audio.');
+  audio.sfxUiBlip();
+
+  const source = audioContext.createMediaStreamSource(new MediaStream([track]));
+  const analyser = audioContext.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0.2;
+  source.connect(analyser);
+  const samples = new Float32Array(analyser.fftSize);
+  const rmsValues: number[] = [];
+
+  try {
+    const startedAt = performance.now();
+    while (performance.now() - startedAt < MIC_CALIBRATION_DURATION_MS) {
+      analyser.getFloatTimeDomainData(samples);
+      let sumSquares = 0;
+      for (let i = 0; i < samples.length; i += 1) {
+        const sample = samples[i];
+        sumSquares += sample * sample;
+      }
+      const rms = Math.sqrt(sumSquares / samples.length);
+      rmsValues.push(rms);
+      await new Promise((resolve) => window.setTimeout(resolve, MIC_CALIBRATION_SAMPLE_INTERVAL_MS));
+    }
+  } finally {
+    source.disconnect();
+    analyser.disconnect();
+    calibratingMicInput = false;
+  }
+
+  const activeRms = rmsValues.filter((value) => value >= MIC_CALIBRATION_ACTIVE_RMS_THRESHOLD);
+  if (activeRms.length < 10) {
+    updateStatus('Calibration failed. Speak continuously and try again.');
+    audio.sfxUiCancel();
+    return;
+  }
+
+  activeRms.sort((a, b) => a - b);
+  const percentileIndex = Math.min(activeRms.length - 1, Math.floor(activeRms.length * 0.9));
+  const observedRms = activeRms[percentileIndex];
+  if (!(observedRms > 0)) {
+    updateStatus('Calibration failed. Speak continuously and try again.');
+    audio.sfxUiCancel();
+    return;
+  }
+
+  const calibratedGain = clampMicInputGain(MIC_CALIBRATION_TARGET_RMS / observedRms);
+  const appliedGain = audio.setOutboundInputGain(calibratedGain);
+  persistMicInputGain(appliedGain);
+  updateStatus(`Mic calibration set to ${appliedGain.toFixed(2)}x.`);
+  audio.sfxUiConfirm();
+}
+
 function stopLocalMedia(): void {
   if (localStream) {
     localStream.getTracks().forEach((track) => track.stop());
@@ -1399,6 +1505,10 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
   }
 
   if (code === 'KeyC') {
+    if (shiftKey) {
+      void calibrateMicInputGain();
+      return;
+    }
     updateStatus(`${state.player.x}, ${state.player.y}`);
     audio.sfxUiBlip();
     return;

@@ -37,6 +37,7 @@ export class AudioEngine {
 
   private outboundSource: MediaStreamAudioSourceNode | null = null;
   private outboundInputGain: GainNode | null = null;
+  private outboundInputGainValue = 1;
   private outboundDestination: MediaStreamAudioDestinationNode | null = null;
   private outboundEffectRuntime: EffectRuntime | null = null;
   private loopbackEnabled = false;
@@ -97,6 +98,7 @@ export class AudioEngine {
     if (!this.outboundInputGain) {
       this.outboundInputGain = this.audioCtx.createGain();
     }
+    this.outboundInputGain.gain.value = this.outboundInputGainValue;
     if (!this.outboundDestination) {
       this.outboundDestination = this.audioCtx.createMediaStreamDestination();
     }
@@ -181,6 +183,19 @@ export class AudioEngine {
 
   isVoiceLayerEnabled(): boolean {
     return this.voiceLayerEnabled;
+  }
+
+  setOutboundInputGain(value: number): number {
+    const next = Math.max(0.01, Number.isFinite(value) ? value : 1);
+    this.outboundInputGainValue = next;
+    if (this.outboundInputGain && this.audioCtx) {
+      this.outboundInputGain.gain.setValueAtTime(next, this.audioCtx.currentTime);
+    }
+    return next;
+  }
+
+  getOutboundInputGain(): number {
+    return this.outboundInputGainValue;
   }
 
   toggleLoopback(): boolean {

@@ -129,6 +129,10 @@
         {
           "keys": "Dash or Equals",
           "description": "Lower/raise active effect value"
+        },
+        {
+          "keys": "Shift+C",
+          "description": "Calibrate mic input gain over 5 seconds"
         }
       ]
     }
