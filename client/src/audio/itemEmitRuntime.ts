@@ -133,7 +133,7 @@ export class ItemEmitRuntime {
           enabled: spatialConfig.directional,
           facingDeg: spatialConfig.facingDeg,
           coneDeg: 120,
-          rearGain: 0.35,
+          rearGain: 0.5,
         },
       });
       const gainValue = mix?.gain ?? 0;
@@ -149,8 +149,9 @@ export class ItemEmitRuntime {
         },
       );
       const clearCutoffHz = 22050;
-      const rearCutoffHz = 2500;
-      const cutoffHz = clearCutoffHz - (clearCutoffHz - rearCutoffHz) * muffleRatio;
+      const rearCutoffHz = 4500;
+      const muffleCurve = muffleRatio * muffleRatio;
+      const cutoffHz = clearCutoffHz - (clearCutoffHz - rearCutoffHz) * muffleCurve;
       output.directionalFilter.frequency.linearRampToValueAtTime(cutoffHz, audioCtx.currentTime + 0.1);
       output.gain.gain.linearRampToValueAtTime(gainValue, audioCtx.currentTime + 0.1);
       if (output.panner) {
