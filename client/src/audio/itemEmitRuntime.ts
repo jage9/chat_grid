@@ -24,6 +24,15 @@ type EmitSpatialConfig = {
 
 const ITEM_EMIT_BASE_GAIN = 0.3;
 
+function resolveEmitPlaybackRate(raw: unknown): number {
+  const speed = Number(raw);
+  const clamped = Number.isFinite(speed) ? Math.max(0, Math.min(100, speed)) : 50;
+  if (clamped <= 50) {
+    return 0.5 + (clamped / 50) * 0.5;
+  }
+  return 1 + ((clamped - 50) / 50) * 1;
+}
+
 export class ItemEmitRuntime {
   private readonly outputs = new Map<string, EmitOutput>();
   private layerEnabled = true;
@@ -101,6 +110,7 @@ export class ItemEmitRuntime {
       const effect = normalizeRadioEffect(item.params.emitEffect);
       const effectValue = normalizeRadioEffectValue(item.params.emitEffectValue);
       const effectRuntime = connectEffectChain(audioCtx, effectInput, gain, effect, effectValue);
+      element.playbackRate = resolveEmitPlaybackRate(item.params.emitSpeed);
       if (this.audio.supportsStereoPanner()) {
         panner = audioCtx.createStereoPanner();
         gain.connect(panner).connect(audioCtx.destination);
@@ -137,6 +147,10 @@ export class ItemEmitRuntime {
         output.effectRuntime = connectEffectChain(audioCtx, output.effectInput, output.gain, effect, effectValue);
         output.effect = effect;
         output.effectValue = effectValue;
+      }
+      const nextPlaybackRate = resolveEmitPlaybackRate(item.params.emitSpeed);
+      if (Math.abs(output.element.playbackRate - nextPlaybackRate) > 0.001) {
+        output.element.playbackRate = nextPlaybackRate;
       }
       const spatialConfig = this.getSpatialConfig(item);
       const mix = resolveSpatialMix({

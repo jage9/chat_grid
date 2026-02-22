@@ -753,6 +753,7 @@ function inferItemPropertyValueType(item: WorldItem, key: string): string | unde
     key === 'version' ||
     key === 'mediaVolume' ||
     key === 'emitVolume' ||
+    key === 'emitSpeed' ||
     key === 'mediaEffectValue' ||
     key === 'emitEffectValue' ||
     key === 'facing' ||
@@ -2158,6 +2159,14 @@ function handleItemPropertyEditModeInput(code: string, key: string, ctrlKey: boo
         return;
       }
       signaling.send({ type: 'item_update', itemId, params: { emitVolume: parsed.value } });
+    } else if (propertyKey === 'emitSpeed') {
+      const parsed = validateNumericItemPropertyInput(item, propertyKey, value, true);
+      if (!parsed.ok) {
+        updateStatus(parsed.message);
+        audio.sfxUiCancel();
+        return;
+      }
+      signaling.send({ type: 'item_update', itemId, params: { emitSpeed: parsed.value } });
     } else if (propertyKey === 'mediaEffect' || propertyKey === 'emitEffect') {
       const normalized = value.trim().toLowerCase() as EffectId;
       if (!EFFECT_IDS.has(normalized)) {
