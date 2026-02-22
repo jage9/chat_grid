@@ -49,17 +49,9 @@ function resolveEmitRates(item: WorldItem): { playbackRate: number; preservePitc
   const globals = getItemTypeGlobalProperties(item.type);
   const speed = resolveEmitPlaybackRate(item.params.emitSoundSpeed ?? globals.emitSoundSpeed ?? 50);
   const tempo = resolveEmitPlaybackRate(item.params.emitSoundTempo ?? globals.emitSoundTempo ?? 50);
-  const speedOffset = Math.abs(speed - 1);
-  if (speedOffset > 0.001) {
-    return {
-      playbackRate: Math.max(0.25, Math.min(4, speed)),
-      preservePitch: false,
-    };
-  }
-  return {
-    playbackRate: Math.max(0.25, Math.min(4, tempo)),
-    preservePitch: true,
-  };
+  const playbackRate = Math.max(0.25, Math.min(4, speed * tempo));
+  const preservePitch = Math.abs(speed - 1) < 0.001;
+  return { playbackRate, preservePitch };
 }
 
 export class ItemEmitRuntime {
