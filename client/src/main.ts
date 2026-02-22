@@ -1480,7 +1480,7 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
           const itemCount = state.sortedItemIds.length;
           const itemLabelText = itemCount === 1 ? 'item' : 'items';
           updateStatus(
-            `${itemCount} ${itemLabelText}. List: ${itemLabel(first)}, ${distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y)}, ${first.x}, ${first.y}`,
+            `${itemCount} ${itemLabelText}. ${itemLabel(first)}, ${distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y)}, ${first.x}, ${first.y}`,
           );
         }
         audio.sfxUiBlip();
@@ -1594,7 +1594,7 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
           const userCount = state.sortedPeerIds.length;
           const userLabelText = userCount === 1 ? 'user' : 'users';
           updateStatus(
-            `${userCount} ${userLabelText}. List: ${first.nickname}, ${distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y)}, ${first.x}, ${first.y}`,
+            `${userCount} ${userLabelText}. ${first.nickname}, ${distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y)}, ${first.x}, ${first.y}`,
           );
         }
         audio.sfxUiBlip();
