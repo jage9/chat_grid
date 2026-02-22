@@ -738,9 +738,11 @@ function getItemPropertyValue(item: WorldItem, key: string): string {
     if (!Number.isFinite(parsed)) return '15';
     return String(Math.round(parsed));
   }
+  const paramValue = item.params[key];
+  if (paramValue !== undefined) return String(paramValue);
   const globalValue = getItemTypeGlobalProperties(item.type)?.[key];
   if (globalValue !== undefined) return String(globalValue);
-  return String(item.params[key] ?? '');
+  return '';
 }
 
 function inferItemPropertyValueType(item: WorldItem, key: string): string | undefined {
