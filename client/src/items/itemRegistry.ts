@@ -73,53 +73,6 @@ export type ItemPropertyMetadata = {
   };
 };
 
-const DEFAULT_ITEM_TYPE_TOOLTIPS: Record<ItemType, string> = {
-  radio_station: 'Can play stations from the Internet. Tune multiple to the same station and they will sync up.',
-  dice: 'Great for drinking games or boredom.',
-  wheel: 'Spin to win fabulous prizes.',
-  clock: 'It tells the time. What did you think it did?',
-};
-
-const DEFAULT_GLOBAL_ITEM_PROPERTY_METADATA: Record<string, ItemPropertyMetadata> = {
-  useSound: { valueType: 'sound', tooltip: 'One-shot sound played when this item is used successfully.' },
-  emitSound: { valueType: 'sound', tooltip: 'Looping sound emitted from this item on the grid.' },
-  useCooldownMs: { valueType: 'number', tooltip: 'Global cooldown in milliseconds between uses for this item type.' },
-  emitRange: { valueType: 'number', tooltip: 'Maximum distance in squares where emitted audio can be heard.' },
-  directional: { valueType: 'boolean', tooltip: "Whether emitted audio favors the item's facing direction." },
-};
-
-const DEFAULT_ITEM_PROPERTY_METADATA: Record<ItemType, Record<string, ItemPropertyMetadata>> = {
-  radio_station: {
-    ...DEFAULT_GLOBAL_ITEM_PROPERTY_METADATA,
-    title: { valueType: 'text', tooltip: 'Display name spoken and shown for this item.' },
-    streamUrl: { valueType: 'text', tooltip: 'Audio stream URL used by this radio.' },
-    enabled: { valueType: 'boolean', tooltip: 'Turns playback on or off for this radio.' },
-    channel: { valueType: 'list', tooltip: 'Select stereo, mono, left-only, or right-only channel mix.' },
-    volume: { valueType: 'number', tooltip: 'Playback volume percent for this radio.', range: { min: 0, max: 100, step: 1 } },
-    effect: { valueType: 'list', tooltip: 'Select the active radio effect.' },
-    effectValue: { valueType: 'number', tooltip: 'Amount for the selected effect.', range: { min: 0, max: 100, step: 0.1 } },
-    facing: { valueType: 'number', tooltip: 'Facing direction in degrees used for directional emit.', range: { min: 0, max: 360, step: 0.1 } },
-    emitRange: { valueType: 'number', tooltip: "Maximum distance in squares for this radio's emitted audio.", range: { min: 5, max: 20, step: 1 } },
-  },
-  dice: {
-    ...DEFAULT_GLOBAL_ITEM_PROPERTY_METADATA,
-    title: { valueType: 'text', tooltip: 'Display name spoken and shown for this item.' },
-    sides: { valueType: 'number', tooltip: 'Number of sides on each die.', range: { min: 1, max: 100, step: 1 } },
-    number: { valueType: 'number', tooltip: 'How many dice to roll per use.', range: { min: 1, max: 100, step: 1 } },
-  },
-  wheel: {
-    ...DEFAULT_GLOBAL_ITEM_PROPERTY_METADATA,
-    title: { valueType: 'text', tooltip: 'Display name spoken and shown for this item.' },
-    spaces: { valueType: 'text', tooltip: 'Comma-delimited list of wheel spaces. Example: yes, no, maybe.' },
-  },
-  clock: {
-    ...DEFAULT_GLOBAL_ITEM_PROPERTY_METADATA,
-    title: { valueType: 'text', tooltip: 'Display name spoken and shown for this item.' },
-    timeZone: { valueType: 'list', tooltip: 'Timezone used when the clock speaks time.' },
-    use24Hour: { valueType: 'boolean', tooltip: 'Use 24 hour format instead of AM/PM.' },
-  },
-};
-
 type UiDefinitionsPayload = {
   itemTypeOrder?: ItemType[];
   itemTypes?: Array<{
@@ -140,12 +93,7 @@ let itemTypeLabels: Record<ItemType, string> = {
   wheel: 'wheel',
   clock: 'clock',
 };
-let itemTypeTooltips: Record<ItemType, string> = {
-  radio_station: DEFAULT_ITEM_TYPE_TOOLTIPS.radio_station,
-  dice: DEFAULT_ITEM_TYPE_TOOLTIPS.dice,
-  wheel: DEFAULT_ITEM_TYPE_TOOLTIPS.wheel,
-  clock: DEFAULT_ITEM_TYPE_TOOLTIPS.clock,
-};
+let itemTypeTooltips: Partial<Record<ItemType, string>> = {};
 let itemTypeEditableProperties: Record<ItemType, string[]> = {
   radio_station: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.radio_station],
   dice: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.dice],
@@ -163,12 +111,7 @@ let optionItemPropertyValues: Partial<Record<string, string[]>> = {
   channel: [...RADIO_CHANNEL_OPTIONS],
   timeZone: [...DEFAULT_CLOCK_TIME_ZONE_OPTIONS],
 };
-let itemTypePropertyMetadata: Record<ItemType, Record<string, ItemPropertyMetadata>> = {
-  radio_station: { ...DEFAULT_ITEM_PROPERTY_METADATA.radio_station },
-  dice: { ...DEFAULT_ITEM_PROPERTY_METADATA.dice },
-  wheel: { ...DEFAULT_ITEM_PROPERTY_METADATA.wheel },
-  clock: { ...DEFAULT_ITEM_PROPERTY_METADATA.clock },
-};
+let itemTypePropertyMetadata: Partial<Record<ItemType, Record<string, ItemPropertyMetadata>>> = {};
 
 export let EDITABLE_ITEM_PROPERTY_KEYS = new Set<string>(
   Object.values(itemTypeEditableProperties).flatMap((keys) => keys),
