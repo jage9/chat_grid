@@ -20,6 +20,7 @@ import {
   applyPastedText,
   applyTextInput,
   describeBackspaceDeletedCharacter,
+  describeDeleteDeletedCharacter,
   describeCursorCharacter,
   describeCursorWordOrCharacter,
   mapTextInputKey,
@@ -680,6 +681,10 @@ function applyTextInputEdit(code: string, key: string, maxLength: number, ctrlKe
   state.cursorPos = result.newCursorPos;
   if (code === 'Backspace') {
     const spoken = describeBackspaceDeletedCharacter(beforeText, beforeCursor);
+    if (spoken) updateStatus(spoken);
+  }
+  if (code === 'Delete') {
+    const spoken = describeDeleteDeletedCharacter(beforeText, beforeCursor);
     if (spoken) updateStatus(spoken);
   }
   if (code === 'ArrowLeft' || code === 'ArrowRight' || code === 'Home' || code === 'End') {
@@ -2377,6 +2382,9 @@ function setupInputHandlers(): void {
     }
 
     if (event.ctrlKey && isTextEditingMode(state.mode)) {
+      if (code === 'KeyV') {
+        return;
+      }
       if (code === 'KeyC') {
         const text = state.nicknameInput;
         internalClipboardText = text;

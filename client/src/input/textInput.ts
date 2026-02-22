@@ -17,6 +17,10 @@ export function applyTextInput(
       newString = newString.slice(0, cursorPos - 1) + newString.slice(cursorPos);
       newCursorPos = cursorPos - 1;
     }
+  } else if (lowerKey === 'delete') {
+    if (cursorPos < newString.length) {
+      newString = newString.slice(0, cursorPos) + newString.slice(cursorPos + 1);
+    }
   } else if (lowerKey === 'home') {
     newCursorPos = 0;
   } else if (lowerKey === 'end') {
@@ -92,6 +96,7 @@ export function mapTextInputKey(code: string, key: string): string {
   if (code === 'ArrowLeft') return 'arrowleft';
   if (code === 'ArrowRight') return 'arrowright';
   if (code === 'Backspace') return 'backspace';
+  if (code === 'Delete') return 'delete';
   if (code === 'Home') return 'home';
   if (code === 'End') return 'end';
   return key;
@@ -181,4 +186,9 @@ export function describeCursorWordOrCharacter(text: string, cursorPos: number): 
 export function describeBackspaceDeletedCharacter(text: string, cursorPos: number): string | null {
   if (cursorPos <= 0 || cursorPos > text.length) return null;
   return describeCharacter(text[cursorPos - 1]);
+}
+
+export function describeDeleteDeletedCharacter(text: string, cursorPos: number): string | null {
+  if (cursorPos < 0 || cursorPos >= text.length) return null;
+  return describeCharacter(text[cursorPos]);
 }
