@@ -81,8 +81,16 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "tooltip": "Amount for emit effect.",
         "range": {"min": 0, "max": 100, "step": 0.1},
     },
-    "useSound": {"valueType": "sound", "tooltip": "Sound played on use. Filename assumes sounds folder, or use full URL."},
-    "emitSound": {"valueType": "sound", "tooltip": "Looping emitted sound. Filename assumes sounds folder, or use full URL."},
+    "useSound": {
+        "valueType": "sound",
+        "tooltip": "Sound played on use. Filename assumes sounds folder, or use full URL.",
+        "maxLength": 2048,
+    },
+    "emitSound": {
+        "valueType": "sound",
+        "tooltip": "Looping emitted sound. Filename assumes sounds folder, or use full URL.",
+        "maxLength": 2048,
+    },
 }
 
 
@@ -169,6 +177,10 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
 
     next_params["useSound"] = _normalize_sound_value(next_params.get("useSound", item.params.get("useSound", "")))
     next_params["emitSound"] = _normalize_sound_value(next_params.get("emitSound", item.params.get("emitSound", "")))
+    if len(next_params["useSound"]) > 2048:
+        raise ValueError("useSound must be 2048 characters or less.")
+    if len(next_params["emitSound"]) > 2048:
+        raise ValueError("emitSound must be 2048 characters or less.")
     return next_params
 
 

@@ -86,8 +86,16 @@ ITEM_TYPE_TOOLTIPS: dict[ItemType, str] = {
 }
 
 GLOBAL_ITEM_PROPERTY_METADATA: dict[str, dict[str, object]] = {
-    "useSound": {"valueType": "sound", "tooltip": "One-shot sound played when this item is used successfully."},
-    "emitSound": {"valueType": "sound", "tooltip": "Looping sound emitted from this item on the grid."},
+    "useSound": {
+        "valueType": "sound",
+        "tooltip": "One-shot sound played when this item is used successfully.",
+        "maxLength": 2048,
+    },
+    "emitSound": {
+        "valueType": "sound",
+        "tooltip": "Looping sound emitted from this item on the grid.",
+        "maxLength": 2048,
+    },
     "useCooldownMs": {"valueType": "number", "tooltip": "Global cooldown in milliseconds between uses for this item type."},
     "emitRange": {"valueType": "number", "tooltip": "Maximum distance in squares where emitted audio can be heard."},
     "directional": {"valueType": "boolean", "tooltip": "Whether emitted audio favors the item's facing direction."},

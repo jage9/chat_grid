@@ -44,7 +44,7 @@ EFFECT_OPTIONS: tuple[str, ...] = ("reverb", "echo", "flanger", "high_pass", "lo
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item.", "maxLength": 80},
-    "streamUrl": {"valueType": "text", "tooltip": "Audio stream URL used by this radio."},
+    "streamUrl": {"valueType": "text", "tooltip": "Audio stream URL used by this radio.", "maxLength": 2048},
     "enabled": {"valueType": "boolean", "tooltip": "Turns playback on or off for this radio."},
     "mediaVolume": {
         "valueType": "number",
@@ -75,6 +75,8 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     """Validate and normalize radio params."""
 
     stream_url = str(next_params.get("streamUrl", "")).strip()
+    if len(stream_url) > 2048:
+        raise ValueError("streamUrl must be 2048 characters or less.")
     previous_stream_url = str(item.params.get("streamUrl", "")).strip()
     next_params["streamUrl"] = stream_url
 
