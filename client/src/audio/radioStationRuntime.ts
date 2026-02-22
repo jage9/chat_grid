@@ -225,7 +225,7 @@ export class RadioStationRuntime {
           enabled: spatialConfig.directional,
           facingDeg: spatialConfig.facingDeg,
           coneDeg: 120,
-          rearGain: 0.3,
+          rearGain: 0.4,
         },
       });
       const gainValue = mix?.gain ?? 0;
