@@ -12,27 +12,6 @@
  * - Provides same-origin endpoint for browser playback.
  */
 
-ini_set('display_errors', '0');
-ini_set('log_errors', '1');
-error_reporting(E_ALL);
-
-function proxy_log_path()
-{
-    $tmp = sys_get_temp_dir();
-    if (!is_string($tmp) || $tmp === '') {
-        $tmp = '/tmp';
-    }
-    return rtrim($tmp, '/\\') . '/chgrid_media_proxy_error.log';
-}
-
-ini_set('error_log', proxy_log_path());
-
-function proxy_debug_log($message)
-{
-    $line = date('c') . ' ' . $message . PHP_EOL;
-    @file_put_contents(proxy_log_path(), $line, FILE_APPEND);
-}
-
 $GLOBALS['CHGRID_PROXY_HEADERS_SENT'] = false;
 $GLOBALS['CHGRID_PROXY_STATUS'] = 200;
 $GLOBALS['CHGRID_PROXY_UP_HEADERS'] = array();
@@ -112,17 +91,6 @@ function proxy_write_callback($ch, $chunk)
     }
     return $len;
 }
-
-register_shutdown_function(function () {
-    $e = error_get_last();
-    if (!$e) {
-        return;
-    }
-    proxy_debug_log('FATAL: ' . json_encode($e));
-});
-
-proxy_debug_log('START method=' . (isset($_SERVER['REQUEST_METHOD']) ? $_SERVER['REQUEST_METHOD'] : 'unknown') . ' uri=' . (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : ''));
-header('X-ChatGrid-MediaProxy: reached');
 
 function set_status($code)
 {
@@ -262,7 +230,6 @@ $ok = curl_exec($ch);
 if ($ok === false) {
     $err = curl_error($ch);
     curl_close($ch);
-    proxy_debug_log('ERROR curl_exec failed: ' . $err);
     send_text(502, 'upstream fetch failed: ' . $err);
 }
 

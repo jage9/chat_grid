@@ -162,22 +162,12 @@ type RadioSpatialConfig = {
 export class RadioStationRuntime {
   private readonly sharedRadioSources = new Map<string, SharedRadioSource>();
   private readonly itemRadioOutputs = new Map<string, ItemRadioOutput>();
-  private readonly lastStreamStatusAt = new Map<string, number>();
   private layerEnabled = true;
 
   constructor(
     private readonly audio: AudioEngine,
     private readonly getSpatialConfig: (item: WorldItem) => RadioSpatialConfig,
-    private readonly onStreamStatus?: (message: string) => void,
   ) {}
-
-  private reportStreamStatus(message: string, dedupeKey: string): void {
-    const now = Date.now();
-    const lastAt = this.lastStreamStatusAt.get(dedupeKey) ?? 0;
-    if (now - lastAt < 3000) return;
-    this.lastStreamStatusAt.set(dedupeKey, now);
-    this.onStreamStatus?.(message);
-  }
 
   cleanup(itemId: string): void {
     const output = this.itemRadioOutputs.get(itemId);
@@ -327,18 +317,6 @@ export class RadioStationRuntime {
     element.crossOrigin = 'anonymous';
     element.loop = true;
     element.preload = 'none';
-    element.addEventListener('error', () => {
-      this.reportStreamStatus(
-        `Media stream failed: ${streamUrl}`,
-        `error:${streamUrl}`,
-      );
-    });
-    element.addEventListener('canplay', () => {
-      this.reportStreamStatus(
-        `Media stream ready: ${streamUrl}`,
-        `ready:${streamUrl}`,
-      );
-    });
     const source = audioCtx.createMediaElementSource(element);
     void element.play().catch(() => undefined);
     const shared: SharedRadioSource = {

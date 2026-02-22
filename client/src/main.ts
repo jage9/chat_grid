@@ -185,7 +185,7 @@ let outputMode = localStorage.getItem(AUDIO_OUTPUT_MODE_STORAGE_KEY) === 'mono' 
 let connecting = false;
 const messageBuffer: string[] = [];
 let messageCursor = -1;
-const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig, (message) => updateStatus(message));
+const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig);
 const itemEmitRuntime = new ItemEmitRuntime(audio, resolveIncomingSoundUrl, getItemSpatialConfig);
 let internalClipboardText = '';
 let replaceTextOnNextType = false;
