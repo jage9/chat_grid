@@ -201,6 +201,7 @@ let heartbeatNextPingId = -1;
 let heartbeatAwaitingPong = false;
 let reconnectInFlight = false;
 let activeServerInstanceId: string | null = null;
+let reloadScheduledForVersionMismatch = false;
 let audioLayers: AudioLayerState = {
   voice: true,
   item: true,
@@ -508,6 +509,9 @@ function toggleAudioLayer(layer: keyof AudioLayerState): void {
 
 /** Routes signaling transport status messages through chat buffer + status output. */
 function handleSignalingStatus(message: string): void {
+  if (message === 'Connected.') {
+    return;
+  }
   pushChatMessage(message);
 }
 
@@ -1221,16 +1225,35 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
     return;
   }
   let restartAnnouncement: string | null = null;
+  let connectedAnnouncement: string | null = null;
   if (message.type === 'welcome') {
     const incomingInstanceId = String(message.serverInfo?.instanceId ?? '').trim() || null;
     const incomingVersion = String(message.serverInfo?.version ?? '').trim() || 'unknown';
+    connectedAnnouncement = `Connected. Version ${incomingVersion}.`;
+    if (
+      !reloadScheduledForVersionMismatch &&
+      APP_VERSION &&
+      incomingVersion &&
+      incomingVersion !== 'unknown' &&
+      incomingVersion !== APP_VERSION
+    ) {
+      reloadScheduledForVersionMismatch = true;
+      pushChatMessage(`Server version ${incomingVersion} detected. Reloading client...`);
+      window.setTimeout(() => {
+        window.location.reload();
+      }, 50);
+      return;
+    }
     if (activeServerInstanceId && incomingInstanceId && activeServerInstanceId !== incomingInstanceId) {
-      restartAnnouncement = `Server restarted, version ${incomingVersion}.`;
+      restartAnnouncement = 'Server restarted.';
     }
     activeServerInstanceId = incomingInstanceId;
     startHeartbeat();
   }
   await onAppMessage(message);
+  if (connectedAnnouncement) {
+    pushChatMessage(connectedAnnouncement);
+  }
   if (restartAnnouncement) {
     pushChatMessage(restartAnnouncement);
     audio.sfxUiConfirm();

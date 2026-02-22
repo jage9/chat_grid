@@ -9,6 +9,7 @@
 5. Client:
    - applies `welcome.worldConfig.gridSize` for authoritative grid bounds/rendering
    - records `welcome.serverInfo` (`instanceId`, `version`) for restart detection
+   - if `welcome.serverInfo.version` differs from running client version, auto-reloads the page
    - applies `welcome.uiDefinitions` for item menus/properties/options
    - sends initial `update_position`
    - sends initial `update_nickname`
@@ -48,7 +49,8 @@ Core incoming message effects:
 
 - While running, client sends heartbeat `ping` every 10 seconds.
 - If one heartbeat `pong` is missed (10-second interval), client auto-reconnects.
-- If reconnect lands on a different `welcome.serverInfo.instanceId`, client announces server restart/version.
+- If reconnect lands on a different `welcome.serverInfo.instanceId`, client announces server restart.
+- Connect/reconnect status message is emitted from `welcome` and includes server version.
 
 ## Disconnect/Cleanup
 
