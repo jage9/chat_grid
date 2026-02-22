@@ -35,11 +35,28 @@ export function resolveSpatialMix(options: SpatialMixOptions): SpatialMixResult 
   }
 
   const distance = Math.hypot(dx, dy);
-  if (distance > range) {
+  let effectiveRange = range;
+  if (options.directional?.enabled) {
+    const coneDeg = Math.max(1, Math.min(359, options.directional.coneDeg ?? 120));
+    const rearGain = Math.max(0, Math.min(1, options.directional.rearGain ?? 0.5));
+    const facingDeg = normalizeDegrees(options.directional.facingDeg);
+    // `dx/dy` are listener-relative source coords in current callers, so invert to get source->listener bearing.
+    const bearingDeg = bearingFromSourceToListener(-dx, -dy);
+    const diff = angularDifferenceDeg(facingDeg, bearingDeg);
+    const halfCone = coneDeg / 2;
+    if (diff > halfCone) {
+      const span = Math.max(1, 180 - halfCone);
+      const t = Math.max(0, Math.min(1, (diff - halfCone) / span));
+      const directionalFactor = 1 - t * (1 - rearGain);
+      effectiveRange = Math.max(0.01, range * directionalFactor);
+    }
+  }
+
+  if (distance > effectiveRange) {
     return null;
   }
 
-  const volumeRatio = Math.max(0, 1 - distance / range);
+  const volumeRatio = Math.max(0, 1 - distance / effectiveRange);
   let gain = baseGain * Math.pow(volumeRatio, 2);
   const clampedX = Math.max(-range, Math.min(range, dx));
   let pan = Math.sin((clampedX / range) * (Math.PI / 2));
@@ -48,21 +65,6 @@ export function resolveSpatialMix(options: SpatialMixOptions): SpatialMixResult 
     gain = baseGain * nearFieldGain;
     if (nearFieldCenterPan) {
       pan = 0;
-    }
-  }
-
-  if (options.directional?.enabled) {
-    const coneDeg = Math.max(1, Math.min(359, options.directional.coneDeg ?? 120));
-    const rearGain = Math.max(0, Math.min(1, options.directional.rearGain ?? 0.5));
-    const facingDeg = normalizeDegrees(options.directional.facingDeg);
-    const bearingDeg = bearingFromSourceToListener(dx, dy);
-    const diff = angularDifferenceDeg(facingDeg, bearingDeg);
-    const halfCone = coneDeg / 2;
-    if (diff > halfCone) {
-      const span = Math.max(1, 180 - halfCone);
-      const t = Math.max(0, Math.min(1, (diff - halfCone) / span));
-      const directionalGain = 1 - t * (1 - rearGain);
-      gain *= directionalGain;
     }
   }
 
