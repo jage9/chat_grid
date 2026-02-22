@@ -5,65 +5,27 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from .items import clock, dice, radio, wheel
+
 ItemType = Literal["radio_station", "dice", "wheel", "clock"]
 ITEM_TYPE_SEQUENCE: tuple[ItemType, ...] = ("clock", "dice", "radio_station", "wheel")
 ITEM_TYPE_LABELS: dict[ItemType, str] = {
-    "radio_station": "radio",
-    "dice": "dice",
-    "wheel": "wheel",
-    "clock": "clock",
+    "radio_station": radio.LABEL,
+    "dice": dice.LABEL,
+    "wheel": wheel.LABEL,
+    "clock": clock.LABEL,
 }
-RADIO_EFFECT_OPTIONS: tuple[str, ...] = ("reverb", "echo", "flanger", "high_pass", "low_pass", "off")
-RADIO_CHANNEL_OPTIONS: tuple[str, ...] = ("stereo", "mono", "left", "right")
 ITEM_TYPE_EDITABLE_PROPERTIES: dict[ItemType, tuple[str, ...]] = {
-    "radio_station": ("title", "streamUrl", "enabled", "channel", "volume", "effect", "effectValue", "facing", "emitRange"),
-    "dice": ("title", "sides", "number"),
-    "wheel": ("title", "spaces"),
-    "clock": ("title", "timeZone", "use24Hour"),
+    "radio_station": radio.EDITABLE_PROPERTIES,
+    "dice": dice.EDITABLE_PROPERTIES,
+    "wheel": wheel.EDITABLE_PROPERTIES,
+    "clock": clock.EDITABLE_PROPERTIES,
 }
-CLOCK_DEFAULT_TIME_ZONE = "America/Detroit"
-CLOCK_TIME_ZONE_OPTIONS: tuple[str, ...] = (
-    "America/Anchorage",
-    "America/Argentina/Buenos_Aires",
-    "America/Chicago",
-    "America/Detroit",
-    "America/Halifax",
-    "America/Indiana/Indianapolis",
-    "America/Kentucky/Louisville",
-    "America/Los_Angeles",
-    "America/St_Johns",
-    "Asia/Bangkok",
-    "Asia/Dhaka",
-    "Asia/Dubai",
-    "Asia/Hong_Kong",
-    "Asia/Kabul",
-    "Asia/Karachi",
-    "Asia/Kathmandu",
-    "Asia/Kolkata",
-    "Asia/Seoul",
-    "Asia/Singapore",
-    "Asia/Tehran",
-    "Asia/Tokyo",
-    "Asia/Yangon",
-    "Atlantic/Azores",
-    "Atlantic/South_Georgia",
-    "Australia/Brisbane",
-    "Australia/Darwin",
-    "Australia/Eucla",
-    "Australia/Lord_Howe",
-    "Europe/Berlin",
-    "Europe/Helsinki",
-    "Europe/London",
-    "Europe/Moscow",
-    "Pacific/Apia",
-    "Pacific/Auckland",
-    "Pacific/Chatham",
-    "Pacific/Honolulu",
-    "Pacific/Kiritimati",
-    "Pacific/Noumea",
-    "Pacific/Pago_Pago",
-    "UTC",
-)
+
+CLOCK_DEFAULT_TIME_ZONE = clock.DEFAULT_TIME_ZONE
+CLOCK_TIME_ZONE_OPTIONS = clock.TIME_ZONE_OPTIONS
+RADIO_EFFECT_OPTIONS = radio.EFFECT_OPTIONS
+RADIO_CHANNEL_OPTIONS = radio.CHANNEL_OPTIONS
 
 
 @dataclass(frozen=True)
@@ -80,47 +42,71 @@ class ItemDefinition:
     directional: bool = False
 
 
+def _build_definition(
+    *,
+    default_title: str,
+    capabilities: tuple[str, ...],
+    use_sound: str | None,
+    emit_sound: str | None,
+    default_params: dict,
+    use_cooldown_ms: int,
+    emit_range: int,
+    directional: bool,
+) -> ItemDefinition:
+    """Build one immutable catalog definition from an item module."""
+
+    return ItemDefinition(
+        default_title=default_title,
+        capabilities=capabilities,
+        use_sound=use_sound,
+        emit_sound=emit_sound,
+        default_params=default_params,
+        use_cooldown_ms=use_cooldown_ms,
+        emit_range=emit_range,
+        directional=directional,
+    )
+
+
 ITEM_DEFINITIONS: dict[ItemType, ItemDefinition] = {
-    "radio_station": ItemDefinition(
-        default_title="radio",
-        capabilities=("editable", "carryable", "deletable", "usable"),
-        use_sound=None,
-        emit_sound=None,
-        default_params={
-            "streamUrl": "",
-            "enabled": True,
-            "channel": "stereo",
-            "volume": 50,
-            "effect": "off",
-            "effectValue": 50,
-            "facing": 0,
-            "emitRange": 20,
-        },
-        emit_range=20,
-        directional=True,
+    "radio_station": _build_definition(
+        default_title=radio.DEFAULT_TITLE,
+        capabilities=radio.CAPABILITIES,
+        use_sound=radio.USE_SOUND,
+        emit_sound=radio.EMIT_SOUND,
+        default_params=radio.DEFAULT_PARAMS,
+        use_cooldown_ms=radio.USE_COOLDOWN_MS,
+        emit_range=radio.EMIT_RANGE,
+        directional=radio.DIRECTIONAL,
     ),
-    "dice": ItemDefinition(
-        default_title="Dice",
-        capabilities=("editable", "carryable", "deletable", "usable"),
-        use_sound="sounds/roll.ogg",
-        emit_sound=None,
-        default_params={"sides": 6, "number": 2},
+    "dice": _build_definition(
+        default_title=dice.DEFAULT_TITLE,
+        capabilities=dice.CAPABILITIES,
+        use_sound=dice.USE_SOUND,
+        emit_sound=dice.EMIT_SOUND,
+        default_params=dice.DEFAULT_PARAMS,
+        use_cooldown_ms=dice.USE_COOLDOWN_MS,
+        emit_range=dice.EMIT_RANGE,
+        directional=dice.DIRECTIONAL,
     ),
-    "wheel": ItemDefinition(
-        default_title="wheel",
-        capabilities=("editable", "carryable", "deletable", "usable"),
-        use_sound="sounds/spin.ogg",
-        emit_sound=None,
-        default_params={"spaces": "yes, no"},
-        use_cooldown_ms=4000,
+    "wheel": _build_definition(
+        default_title=wheel.DEFAULT_TITLE,
+        capabilities=wheel.CAPABILITIES,
+        use_sound=wheel.USE_SOUND,
+        emit_sound=wheel.EMIT_SOUND,
+        default_params=wheel.DEFAULT_PARAMS,
+        use_cooldown_ms=wheel.USE_COOLDOWN_MS,
+        emit_range=wheel.EMIT_RANGE,
+        directional=wheel.DIRECTIONAL,
     ),
-    "clock": ItemDefinition(
-        default_title="clock",
-        capabilities=("editable", "carryable", "deletable", "usable"),
-        use_sound=None,
-        emit_sound="sounds/clock.ogg",
-        default_params={"timeZone": CLOCK_DEFAULT_TIME_ZONE, "use24Hour": False},
-        emit_range=10,
+    "clock": _build_definition(
+        default_title=clock.DEFAULT_TITLE,
+        capabilities=clock.CAPABILITIES,
+        use_sound=clock.USE_SOUND,
+        emit_sound=clock.EMIT_SOUND,
+        default_params=clock.DEFAULT_PARAMS,
+        use_cooldown_ms=clock.USE_COOLDOWN_MS,
+        emit_range=clock.EMIT_RANGE,
+        directional=clock.DIRECTIONAL,
     ),
 }
 
@@ -131,10 +117,10 @@ ITEM_PROPERTY_OPTIONS: dict[str, tuple[str, ...]] = {
 }
 
 ITEM_TYPE_TOOLTIPS: dict[ItemType, str] = {
-    "radio_station": "Can play stations from the Internet. Tune multiple to the same station and they will sync up.",
-    "dice": "Great for drinking games or boredom.",
-    "wheel": "Spin to win fabulous prizes.",
-    "clock": "It tells the time. What did you think it did?",
+    "radio_station": radio.TOOLTIP,
+    "dice": dice.TOOLTIP,
+    "wheel": wheel.TOOLTIP,
+    "clock": clock.TOOLTIP,
 }
 
 GLOBAL_ITEM_PROPERTY_METADATA: dict[str, dict[str, object]] = {
@@ -146,62 +132,10 @@ GLOBAL_ITEM_PROPERTY_METADATA: dict[str, dict[str, object]] = {
 }
 
 ITEM_TYPE_PROPERTY_METADATA: dict[ItemType, dict[str, dict[str, object]]] = {
-    "radio_station": {
-        **GLOBAL_ITEM_PROPERTY_METADATA,
-        "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item."},
-        "streamUrl": {"valueType": "text", "tooltip": "Audio stream URL used by this radio."},
-        "enabled": {"valueType": "boolean", "tooltip": "Turns playback on or off for this radio."},
-        "channel": {"valueType": "list", "tooltip": "Select how the station audio channels are rendered."},
-        "volume": {
-            "valueType": "number",
-            "tooltip": "Playback volume percent for this radio.",
-            "range": {"min": 0, "max": 100, "step": 1},
-        },
-        "effect": {"valueType": "list", "tooltip": "Select the active radio effect."},
-        "effectValue": {
-            "valueType": "number",
-            "tooltip": "Amount for the selected effect.",
-            "range": {"min": 0, "max": 100, "step": 0.1},
-        },
-        "facing": {
-            "valueType": "number",
-            "tooltip": "Facing direction in degrees used for directional emit.",
-            "range": {"min": 0, "max": 360, "step": 0.1},
-        },
-        "emitRange": {
-            "valueType": "number",
-            "tooltip": "Maximum distance in squares for this radio's emitted audio.",
-            "range": {"min": 5, "max": 20, "step": 1},
-        },
-    },
-    "dice": {
-        **GLOBAL_ITEM_PROPERTY_METADATA,
-        "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item."},
-        "sides": {
-            "valueType": "number",
-            "tooltip": "Number of sides on each die.",
-            "range": {"min": 1, "max": 100, "step": 1},
-        },
-        "number": {
-            "valueType": "number",
-            "tooltip": "How many dice to roll per use.",
-            "range": {"min": 1, "max": 100, "step": 1},
-        },
-    },
-    "wheel": {
-        **GLOBAL_ITEM_PROPERTY_METADATA,
-        "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item."},
-        "spaces": {
-            "valueType": "text",
-            "tooltip": "Comma-delimited list of wheel spaces. Example: yes, no, maybe.",
-        },
-    },
-    "clock": {
-        **GLOBAL_ITEM_PROPERTY_METADATA,
-        "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item."},
-        "timeZone": {"valueType": "list", "tooltip": "Timezone used when the clock speaks time."},
-        "use24Hour": {"valueType": "boolean", "tooltip": "Use 24 hour format instead of AM/PM."},
-    },
+    "radio_station": {**GLOBAL_ITEM_PROPERTY_METADATA, **radio.PROPERTY_METADATA},
+    "dice": {**GLOBAL_ITEM_PROPERTY_METADATA, **dice.PROPERTY_METADATA},
+    "wheel": {**GLOBAL_ITEM_PROPERTY_METADATA, **wheel.PROPERTY_METADATA},
+    "clock": {**GLOBAL_ITEM_PROPERTY_METADATA, **clock.PROPERTY_METADATA},
 }
 
 
@@ -232,3 +166,4 @@ def get_item_global_properties(item_type: ItemType) -> dict[str, str | int | boo
         "emitRange": definition.emit_range if isinstance(definition.emit_range, int) and definition.emit_range > 0 else 15,
         "directional": bool(definition.directional),
     }
+
