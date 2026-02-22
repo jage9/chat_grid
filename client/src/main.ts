@@ -819,6 +819,10 @@ function describeItemPropertyHelp(item: WorldItem, key: string): string {
     }
   }
 
+  if (metadata?.maxLength !== undefined) {
+    parts.push(`Max length: ${metadata.maxLength} characters.`);
+  }
+
   parts.push(EDITABLE_ITEM_PROPERTY_KEYS.has(key) ? 'Editable.' : 'Read only.');
   return parts.join(' ');
 }

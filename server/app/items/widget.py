@@ -47,7 +47,7 @@ DEFAULT_PARAMS: dict = {
 EFFECT_OPTIONS: tuple[str, ...] = ("reverb", "echo", "flanger", "high_pass", "low_pass", "off")
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
-    "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item."},
+    "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item.", "maxLength": 80},
     "enabled": {"valueType": "boolean", "tooltip": "Turns this widget on or off."},
     "directional": {"valueType": "boolean", "tooltip": "If on, emitted sound favors the facing direction."},
     "facing": {

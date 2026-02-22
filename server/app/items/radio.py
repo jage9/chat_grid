@@ -43,7 +43,7 @@ CHANNEL_OPTIONS: tuple[str, ...] = ("stereo", "mono", "left", "right")
 EFFECT_OPTIONS: tuple[str, ...] = ("reverb", "echo", "flanger", "high_pass", "low_pass", "off")
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
-    "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item."},
+    "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item.", "maxLength": 80},
     "streamUrl": {"valueType": "text", "tooltip": "Audio stream URL used by this radio."},
     "enabled": {"valueType": "boolean", "tooltip": "Turns playback on or off for this radio."},
     "mediaVolume": {

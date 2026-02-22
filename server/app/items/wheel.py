@@ -21,10 +21,11 @@ DEFAULT_TITLE = "wheel"
 DEFAULT_PARAMS: dict = {"spaces": "yes, no"}
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
-    "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item."},
+    "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item.", "maxLength": 80},
     "spaces": {
         "valueType": "text",
         "tooltip": "Comma-delimited list of wheel spaces. Example: yes, no, maybe.",
+        "maxLength": 4000,
     },
 }
 
@@ -35,6 +36,8 @@ def validate_update(_item: WorldItem, next_params: dict) -> dict:
     spaces_raw = next_params.get("spaces", "")
     if not isinstance(spaces_raw, str):
         raise ValueError("spaces must be a comma-delimited string.")
+    if len(spaces_raw) > 4000:
+        raise ValueError("spaces must be 4000 characters or less.")
     spaces = [token.strip() for token in spaces_raw.split(",") if token.strip()]
     if not spaces:
         raise ValueError("spaces must include at least one value, separated by commas.")
@@ -65,4 +68,3 @@ def use_item(item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], 
         delayed_self_message=landed,
         delayed_others_message=landed,
     )
-

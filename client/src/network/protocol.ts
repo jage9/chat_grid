@@ -50,6 +50,7 @@ export const welcomeMessageSchema = z.object({
               z.object({
                 valueType: z.enum(['boolean', 'text', 'number', 'list', 'sound']).optional(),
                 tooltip: z.string().optional(),
+                maxLength: z.number().int().positive().optional(),
                 range: z
                   .object({
                     min: z.number(),

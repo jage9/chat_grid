@@ -64,7 +64,7 @@ TIME_ZONE_OPTIONS: tuple[str, ...] = (
 DEFAULT_PARAMS: dict = {"timeZone": DEFAULT_TIME_ZONE, "use24Hour": False}
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
-    "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item."},
+    "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item.", "maxLength": 80},
     "timeZone": {"valueType": "list", "tooltip": "Timezone used when the clock speaks time."},
     "use24Hour": {"valueType": "boolean", "tooltip": "Use 24 hour format instead of AM/PM."},
 }
@@ -92,4 +92,3 @@ def use_item(item: WorldItem, nickname: str, clock_formatter: Callable[[dict], s
         self_message=f"{item.title} says {display_time}.",
         others_message=f"{nickname} checks {item.title}. {item.title} says {display_time}.",
     )
-

@@ -68,6 +68,7 @@ export type ItemPropertyValueType = 'boolean' | 'text' | 'number' | 'list' | 'so
 export type ItemPropertyMetadata = {
   valueType?: ItemPropertyValueType;
   tooltip?: string;
+  maxLength?: number;
   range?: {
     min: number;
     max: number;
@@ -139,6 +140,12 @@ function normalizePropertyMetadataRecord(raw: Record<string, unknown> | undefine
     }
     if (typeof valueObj.tooltip === 'string' && valueObj.tooltip.trim().length > 0) {
       metadata.tooltip = valueObj.tooltip.trim();
+    }
+    if (valueObj.maxLength !== undefined) {
+      const maxLength = Number(valueObj.maxLength);
+      if (Number.isFinite(maxLength) && maxLength > 0) {
+        metadata.maxLength = Math.floor(maxLength);
+      }
     }
     const range = valueObj.range;
     if (range && typeof range === 'object') {
