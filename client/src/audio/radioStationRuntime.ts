@@ -109,6 +109,15 @@ function connectRadioChannelSource(
 }
 
 function freshStreamUrl(streamUrl: string): string {
+  try {
+    const parsed = new URL(streamUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname.endsWith('dropbox.com') || hostname.endsWith('dropboxusercontent.com')) {
+      return streamUrl;
+    }
+  } catch {
+    // Leave non-URL strings to the generic cache-buster behavior below.
+  }
   const separator = streamUrl.includes('?') ? '&' : '?';
   return `${streamUrl}${separator}chgrid_start=${Date.now()}`;
 }
