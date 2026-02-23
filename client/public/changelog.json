@@ -3,6 +3,8 @@
     {
       "date": "February 22, 2026",
       "items": [
+        "Teleporting now takes a bit of time.",
+        "You can now use left and right arrows on item properties to quickly adjust them.",
         "Added volume adjustment for other users. Press left or right arrow from the user list.",
         "Improved handling of audio streams so only nearby ones will be loaded, saves a ton of bandwidth.",
         "Moved Use item to Enter Key instead of u, moved speak users to U from Shift U.",
