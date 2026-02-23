@@ -369,7 +369,7 @@ export class AudioEngine {
     }
   }
 
-  async playSample(url: string, gain = 1): Promise<void> {
+  async playSample(url: string, gain = 1, fadeInMs = 0): Promise<void> {
     await this.ensureContext();
     const { audioCtx, sfxGainNode } = this;
     if (!audioCtx || !sfxGainNode) return;
@@ -380,7 +380,13 @@ export class AudioEngine {
       const source = audioCtx.createBufferSource();
       source.buffer = buffer;
       const gainNode = audioCtx.createGain();
-      gainNode.gain.value = gain;
+      const safeFadeMs = Number.isFinite(fadeInMs) ? Math.max(0, fadeInMs) : 0;
+      if (safeFadeMs > 0) {
+        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(gain, audioCtx.currentTime + safeFadeMs / 1000);
+      } else {
+        gainNode.gain.value = gain;
+      }
       source.connect(gainNode).connect(sfxGainNode);
       source.start();
     } catch {
