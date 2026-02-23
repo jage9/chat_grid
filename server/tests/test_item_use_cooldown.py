@@ -555,8 +555,10 @@ async def test_piano_recording_toggle_and_save(monkeypatch: pytest.MonkeyPatch) 
     payload = server.item_service.piano_songs.get(song_id)
     assert isinstance(payload, dict)
     keys = payload.get("keys")
+    states = payload.get("states")
     events = payload.get("events")
     assert isinstance(keys, list) and "KeyA" in keys
+    assert isinstance(states, list) and len(states) >= 1
     assert isinstance(events, list) and len(events) >= 2
 
 
@@ -567,7 +569,13 @@ async def test_piano_playback_starts_task(monkeypatch: pytest.MonkeyPatch) -> No
     client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
     server.clients[ws] = client
     item = server.item_service.default_item(client, "piano")
-    item.params["recording"] = [{"t": 0, "keyId": "KeyA", "midi": 60, "on": True}]
+    item.params["songId"] = "item:test-song"
+    server.item_service.piano_songs["item:test-song"] = {
+        "meta": {"instrument": "piano", "voiceMode": "poly", "attack": 15, "decay": 45, "release": 35, "brightness": 55, "emitRange": 15},
+        "keys": ["KeyA"],
+        "states": [["piano", "poly", 15, 45, 35, 55, 15]],
+        "events": [[0, 0, 60, 1, 0]],
+    }
     server.item_service.add_item(item)
 
     send_payloads: list[object] = []

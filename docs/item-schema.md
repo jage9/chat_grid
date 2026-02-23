@@ -184,9 +184,11 @@
 - `brightness`: integer, range `0-100`, default `55`.
 - `emitRange`: integer, range `5-20`, default `15`.
 - `songId`: server-managed song reference used for piano demo/playback content.
-- `recording`: server-managed array of note events (`t`, `keyId`, `midi`, `on`) captured from piano mode recording.
-- `recordingLengthMs`: server-managed recording duration in milliseconds (`0..30000`).
-  - Legacy fallback only during migration; new recordings are stored in server song registry by `songId`.
+- Recorded/demo song payload is stored in server song registry (`runtime/piano_songs.json`) using compact format:
+  - `meta`: shared synth parameters
+  - `keys`: keyId dictionary
+  - `states`: parameter-state dictionary (for mid-song instrument/param changes)
+  - `events`: `[t, keyIndex, midi, on, stateIndex]`
 
 ## Packet Shapes
 

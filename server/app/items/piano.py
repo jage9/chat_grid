@@ -106,12 +106,8 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
 def validate_update(_item: WorldItem, next_params: dict) -> dict:
     """Validate and normalize piano params."""
 
-    # Recording data is server-managed and not directly editable from client updates.
-    preserved_recording = _item.params.get("recording")
-    preserved_recording_length = _item.params.get("recordingLengthMs")
+    # Song references are server-managed and not directly editable from client updates.
     preserved_song_id = _item.params.get("songId")
-    next_params.pop("recording", None)
-    next_params.pop("recordingLengthMs", None)
     next_params.pop("songId", None)
 
     instrument = str(next_params.get("instrument", "piano")).strip().lower()
@@ -180,10 +176,6 @@ def validate_update(_item: WorldItem, next_params: dict) -> dict:
         raise ValueError("emitRange must be between 5 and 20.")
     next_params["emitRange"] = emit_range
 
-    if isinstance(preserved_recording, list):
-        next_params["recording"] = preserved_recording
-    if isinstance(preserved_recording_length, (int, float)):
-        next_params["recordingLengthMs"] = max(0, min(30_000, int(preserved_recording_length)))
     if isinstance(preserved_song_id, str) and preserved_song_id.strip():
         next_params["songId"] = preserved_song_id.strip()
 

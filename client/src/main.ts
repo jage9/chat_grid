@@ -478,39 +478,9 @@ async function loadPianoDemo(): Promise<void> {
     const data = (await response.json()) as {
       defaultSongId?: unknown;
       songs?: unknown;
-      recording?: unknown;
     };
     pianoDemoSongs.clear();
     pianoDemoDefaultSongId = '';
-
-    const parseLegacyEvents = (rawEvents: unknown): PianoDemoEvent[] => {
-      const parsed: PianoDemoEvent[] = [];
-      if (!Array.isArray(rawEvents)) return parsed;
-      for (const entry of rawEvents) {
-        if (!entry || typeof entry !== 'object') continue;
-        const record = entry as Record<string, unknown>;
-        const t = Number(record.t);
-        const midi = Number(record.midi);
-        const keyId = String(record.keyId ?? '').trim();
-        const on = record.on === true;
-        if (!Number.isFinite(t) || !Number.isFinite(midi) || !keyId) continue;
-        parsed.push({
-          t: Math.max(0, Math.round(t)),
-          keyId: keyId.slice(0, 32),
-          midi: Math.max(0, Math.min(127, Math.round(midi))),
-          on,
-          instrument: typeof record.instrument === 'string' ? record.instrument : undefined,
-          voiceMode: record.voiceMode === 'mono' ? 'mono' : record.voiceMode === 'poly' ? 'poly' : undefined,
-          attack: Number.isFinite(Number(record.attack)) ? Math.max(0, Math.min(100, Math.round(Number(record.attack)))) : undefined,
-          decay: Number.isFinite(Number(record.decay)) ? Math.max(0, Math.min(100, Math.round(Number(record.decay)))) : undefined,
-          release: Number.isFinite(Number(record.release)) ? Math.max(0, Math.min(100, Math.round(Number(record.release)))) : undefined,
-          brightness: Number.isFinite(Number(record.brightness)) ? Math.max(0, Math.min(100, Math.round(Number(record.brightness)))) : undefined,
-          emitRange: Number.isFinite(Number(record.emitRange)) ? Math.max(5, Math.min(20, Math.round(Number(record.emitRange)))) : undefined,
-        });
-      }
-      parsed.sort((a, b) => a.t - b.t);
-      return parsed;
-    };
 
     if (data.songs && typeof data.songs === 'object') {
       const songs = data.songs as Record<string, unknown>;
@@ -518,27 +488,57 @@ async function loadPianoDemo(): Promise<void> {
         if (!rawSong || typeof rawSong !== 'object') continue;
         const song = rawSong as Record<string, unknown>;
         const meta = song.meta as Record<string, unknown> | undefined;
+        const states = Array.isArray(song.states) ? song.states : [];
         const keys = Array.isArray(song.keys) ? song.keys.filter((value): value is string => typeof value === 'string') : [];
         const compactEvents = Array.isArray(song.events) ? song.events : [];
         const events: PianoDemoEvent[] = [];
+        const resolveState = (stateIndex: number): Partial<PianoDemoEvent> => {
+          if (stateIndex < 0 || stateIndex >= states.length) {
+            return {};
+          }
+          const row = states[stateIndex];
+          if (!Array.isArray(row) || row.length < 7) {
+            return {};
+          }
+          return {
+            instrument: typeof row[0] === 'string' ? row[0] : undefined,
+            voiceMode: row[1] === 'mono' ? 'mono' : row[1] === 'poly' ? 'poly' : undefined,
+            attack: typeof row[2] === 'number' ? Math.max(0, Math.min(100, Math.round(row[2]))) : undefined,
+            decay: typeof row[3] === 'number' ? Math.max(0, Math.min(100, Math.round(row[3]))) : undefined,
+            release: typeof row[4] === 'number' ? Math.max(0, Math.min(100, Math.round(row[4]))) : undefined,
+            brightness: typeof row[5] === 'number' ? Math.max(0, Math.min(100, Math.round(row[5]))) : undefined,
+            emitRange: typeof row[6] === 'number' ? Math.max(5, Math.min(20, Math.round(row[6]))) : undefined,
+          };
+        };
         for (const compact of compactEvents) {
           if (!Array.isArray(compact) || compact.length < 4) continue;
-          const [rawT, rawKeyIdx, rawMidi, rawOn] = compact;
+          const [rawT, rawKeyIdx, rawMidi, rawOn, rawStateIdx] = compact;
           if (typeof rawT !== 'number' || typeof rawKeyIdx !== 'number' || typeof rawMidi !== 'number') continue;
           const keyId = keys[Math.max(0, Math.round(rawKeyIdx))];
           if (!keyId) continue;
+          const eventState = typeof rawStateIdx === 'number' ? resolveState(Math.round(rawStateIdx)) : {};
           events.push({
             t: Math.max(0, Math.round(rawT)),
             keyId: keyId.slice(0, 32),
             midi: Math.max(0, Math.min(127, Math.round(rawMidi))),
             on: Boolean(rawOn),
-            instrument: typeof meta?.instrument === 'string' ? meta.instrument : undefined,
-            voiceMode: meta?.voiceMode === 'mono' ? 'mono' : meta?.voiceMode === 'poly' ? 'poly' : undefined,
-            attack: Number.isFinite(Number(meta?.attack)) ? Math.max(0, Math.min(100, Math.round(Number(meta?.attack)))) : undefined,
-            decay: Number.isFinite(Number(meta?.decay)) ? Math.max(0, Math.min(100, Math.round(Number(meta?.decay)))) : undefined,
-            release: Number.isFinite(Number(meta?.release)) ? Math.max(0, Math.min(100, Math.round(Number(meta?.release)))) : undefined,
-            brightness: Number.isFinite(Number(meta?.brightness)) ? Math.max(0, Math.min(100, Math.round(Number(meta?.brightness)))) : undefined,
-            emitRange: Number.isFinite(Number(meta?.emitRange)) ? Math.max(5, Math.min(20, Math.round(Number(meta?.emitRange)))) : undefined,
+            instrument: eventState.instrument ?? (typeof meta?.instrument === 'string' ? meta.instrument : undefined),
+            voiceMode: eventState.voiceMode ?? (meta?.voiceMode === 'mono' ? 'mono' : meta?.voiceMode === 'poly' ? 'poly' : undefined),
+            attack:
+              eventState.attack ??
+              (Number.isFinite(Number(meta?.attack)) ? Math.max(0, Math.min(100, Math.round(Number(meta?.attack)))) : undefined),
+            decay:
+              eventState.decay ??
+              (Number.isFinite(Number(meta?.decay)) ? Math.max(0, Math.min(100, Math.round(Number(meta?.decay)))) : undefined),
+            release:
+              eventState.release ??
+              (Number.isFinite(Number(meta?.release)) ? Math.max(0, Math.min(100, Math.round(Number(meta?.release)))) : undefined),
+            brightness:
+              eventState.brightness ??
+              (Number.isFinite(Number(meta?.brightness)) ? Math.max(0, Math.min(100, Math.round(Number(meta?.brightness)))) : undefined),
+            emitRange:
+              eventState.emitRange ??
+              (Number.isFinite(Number(meta?.emitRange)) ? Math.max(5, Math.min(20, Math.round(Number(meta?.emitRange)))) : undefined),
           });
         }
         events.sort((a, b) => a.t - b.t);
@@ -553,14 +553,6 @@ async function loadPianoDemo(): Promise<void> {
         pianoDemoDefaultSongId = pianoDemoSongs.keys().next().value ?? '';
       }
       return;
-    }
-
-    // Backward fallback for legacy flat recording JSON format.
-    const legacyEvents = parseLegacyEvents(data.recording);
-    if (legacyEvents.length > 0) {
-      const legacyId = 'unterlandersheimweh';
-      pianoDemoSongs.set(legacyId, { id: legacyId, events: legacyEvents });
-      pianoDemoDefaultSongId = legacyId;
     }
   } catch {
     // Demo remains unavailable if loading/parsing fails.
