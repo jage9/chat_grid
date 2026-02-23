@@ -170,7 +170,8 @@
 ```
 
 - `instrument`: one of
-  `piano | electric_piano | guitar | organ | bass | violin | synth_lead | drum_kit`.
+  `piano | electric_piano | guitar | organ | bass | violin | synth_lead | nintendo | drum_kit`.
+- Selecting a new instrument resets `attack`/`decay` to that instrument's defaults.
 - `attack`: integer, range `0-100`, default `15`.
 - `decay`: integer, range `0-100`, default `45`.
 - `emitRange`: integer, range `5-20`, default `15`.

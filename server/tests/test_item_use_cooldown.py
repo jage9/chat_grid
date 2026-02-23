@@ -370,8 +370,6 @@ async def test_piano_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
                 "itemId": item.id,
                 "params": {
                     "instrument": "drum_kit",
-                    "attack": 22,
-                    "decay": 67,
                     "emitRange": 12,
                 },
             }
@@ -379,9 +377,18 @@ async def test_piano_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert send_payloads[-1].ok is True
     assert item.params.get("instrument") == "drum_kit"
-    assert item.params.get("attack") == 22
-    assert item.params.get("decay") == 67
+    assert item.params.get("attack") == 1
+    assert item.params.get("decay") == 22
     assert item.params.get("emitRange") == 12
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "item_update", "itemId": item.id, "params": {"instrument": "nintendo"}}),
+    )
+    assert send_payloads[-1].ok is True
+    assert item.params.get("instrument") == "nintendo"
+    assert item.params.get("attack") == 2
+    assert item.params.get("decay") == 28
 
     await server._handle_message(client, json.dumps({"type": "item_use", "itemId": item.id}))
     assert send_payloads[-1].ok is True
@@ -438,3 +445,38 @@ async def test_piano_note_packet_broadcasts(monkeypatch: pytest.MonkeyPatch) -> 
     assert getattr(packet, "attack", -1) == 20
     assert getattr(packet, "decay", -1) == 60
     assert getattr(packet, "emitRange", -1) == 12
+
+
+@pytest.mark.asyncio
+async def test_piano_note_key_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws_sender = _fake_ws()
+    sender = ClientConnection(websocket=ws_sender, id="u1", nickname="tester", x=5, y=6)
+    server.clients[ws_sender] = sender
+    item = server.item_service.default_item(sender, "piano")
+    server.item_service.add_item(item)
+
+    broadcast_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        return
+
+    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+        broadcast_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+
+    for index in range(32):
+        await server._handle_message(
+            sender,
+            json.dumps({"type": "item_piano_note", "itemId": item.id, "keyId": f"Key{index}", "midi": 60, "on": True}),
+        )
+    assert len(broadcast_payloads) == 32
+
+    # 33rd distinct held key is dropped by cap.
+    await server._handle_message(
+        sender,
+        json.dumps({"type": "item_piano_note", "itemId": item.id, "keyId": "KeyOverflow", "midi": 60, "on": True}),
+    )
+    assert len(broadcast_payloads) == 32

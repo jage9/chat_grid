@@ -14,7 +14,7 @@ import {
   shouldProxyStreamUrl,
 } from './audio/radioStationRuntime';
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
-import { PianoSynth, type PianoInstrumentId } from './audio/pianoSynth';
+import { DEFAULT_ENVELOPE_BY_INSTRUMENT, PianoSynth, type PianoInstrumentId } from './audio/pianoSynth';
 import { normalizeDegrees } from './audio/spatial';
 import {
   applyPastedText,
@@ -251,6 +251,7 @@ let activeTeleportLoopToken = 0;
 let activePianoItemId: string | null = null;
 const activePianoKeys = new Set<string>();
 const activeRemotePianoKeys = new Set<string>();
+let pianoPreviewTimeoutId: number | null = null;
 let activeTeleport:
   | {
       startX: number;
@@ -797,6 +798,7 @@ function getPianoParams(item: WorldItem): { instrument: PianoInstrumentId; attac
     rawInstrument === 'bass' ||
     rawInstrument === 'violin' ||
     rawInstrument === 'synth_lead' ||
+    rawInstrument === 'nintendo' ||
     rawInstrument === 'drum_kit'
       ? rawInstrument
       : 'piano';
@@ -820,6 +822,7 @@ function normalizePianoInstrument(value: unknown): PianoInstrumentId {
   if (raw === 'bass') return 'bass';
   if (raw === 'violin') return 'violin';
   if (raw === 'synth_lead') return 'synth_lead';
+  if (raw === 'nintendo') return 'nintendo';
   if (raw === 'drum_kit') return 'drum_kit';
   return 'piano';
 }
@@ -864,6 +867,39 @@ function stopPianoUseMode(announce = true): void {
     updateStatus('Stopped piano.');
     audio.sfxUiCancel();
   }
+}
+
+/** Plays one short C4 preview using the piano item's current/overridden envelope+instrument. */
+async function previewPianoSettingChange(item: WorldItem, overrides: Partial<{ instrument: PianoInstrumentId; attack: number; decay: number }>): Promise<void> {
+  if (item.type !== 'piano') return;
+  await audio.ensureContext();
+  const ctx = audio.context;
+  const destination = audio.getOutputDestinationNode();
+  if (!ctx || !destination) return;
+  const current = getPianoParams(item);
+  const instrument = overrides.instrument ?? current.instrument;
+  const attack = Math.max(0, Math.min(100, Math.round(overrides.attack ?? current.attack)));
+  const decay = Math.max(0, Math.min(100, Math.round(overrides.decay ?? current.decay)));
+  const sourceX = item.carrierId === state.player.id ? state.player.x : item.x;
+  const sourceY = item.carrierId === state.player.id ? state.player.y : item.y;
+  const previewKeyId = '__piano_preview_c4__';
+  pianoSynth.noteOff(previewKeyId);
+  pianoSynth.noteOn(
+    previewKeyId,
+    60,
+    instrument,
+    attack,
+    decay,
+    { audioCtx: ctx, destination },
+    { x: sourceX - state.player.x, y: sourceY - state.player.y, range: current.emitRange },
+  );
+  if (pianoPreviewTimeoutId !== null) {
+    window.clearTimeout(pianoPreviewTimeoutId);
+  }
+  pianoPreviewTimeoutId = window.setTimeout(() => {
+    pianoSynth.noteOff(previewKeyId);
+    pianoPreviewTimeoutId = null;
+  }, 320);
 }
 
 /** Plays one inbound piano note from another user using item spatial position. */
@@ -1611,6 +1647,10 @@ function disconnect(): void {
   for (const key of Array.from(activeRemotePianoKeys)) {
     activeRemotePianoKeys.delete(key);
     pianoSynth.noteOff(key);
+  }
+  if (pianoPreviewTimeoutId !== null) {
+    window.clearTimeout(pianoPreviewTimeoutId);
+    pianoPreviewTimeoutId = null;
   }
 }
 
@@ -2483,6 +2523,26 @@ const itemPropertyEditor = createItemPropertyEditor({
   },
   suppressItemPropertyEchoMs: (ms) => {
     suppressItemPropertyEchoUntilMs = Math.max(suppressItemPropertyEchoUntilMs, Date.now() + Math.max(0, ms));
+  },
+  onPreviewPropertyChange: (item, key, value) => {
+    if (item.type !== 'piano') return;
+    if (key === 'instrument') {
+      const instrument = normalizePianoInstrument(value);
+      const defaults = DEFAULT_ENVELOPE_BY_INSTRUMENT[instrument];
+      void previewPianoSettingChange(item, { instrument, attack: defaults.attack, decay: defaults.decay });
+      return;
+    }
+    if (key === 'attack') {
+      const attack = Number(value);
+      if (!Number.isFinite(attack)) return;
+      void previewPianoSettingChange(item, { attack });
+      return;
+    }
+    if (key === 'decay') {
+      const decay = Number(value);
+      if (!Number.isFinite(decay)) return;
+      void previewPianoSettingChange(item, { decay });
+    }
   },
   updateStatus,
   sfxUiBlip: () => audio.sfxUiBlip(),

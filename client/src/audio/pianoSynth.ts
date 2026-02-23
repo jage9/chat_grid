@@ -8,6 +8,7 @@ export const PIANO_INSTRUMENT_OPTIONS = [
   'bass',
   'violin',
   'synth_lead',
+  'nintendo',
   'drum_kit',
 ] as const;
 
@@ -103,6 +104,27 @@ const PRESETS: Record<Exclude<PianoInstrumentId, 'drum_kit'>, InstrumentPreset> 
     gain: 0.2,
     releaseScale: 1,
   },
+  nintendo: {
+    oscillators: [
+      { type: 'square', gain: 1 },
+      { type: 'square', detune: 8, gain: 0.16 },
+    ],
+    filter: { type: 'lowpass', frequency: 5200, q: 1.2 },
+    gain: 0.22,
+    releaseScale: 0.65,
+  },
+};
+
+export const DEFAULT_ENVELOPE_BY_INSTRUMENT: Record<PianoInstrumentId, { attack: number; decay: number }> = {
+  piano: { attack: 15, decay: 45 },
+  electric_piano: { attack: 12, decay: 40 },
+  guitar: { attack: 8, decay: 35 },
+  organ: { attack: 25, decay: 70 },
+  bass: { attack: 10, decay: 35 },
+  violin: { attack: 22, decay: 75 },
+  synth_lead: { attack: 6, decay: 30 },
+  nintendo: { attack: 2, decay: 28 },
+  drum_kit: { attack: 1, decay: 22 },
 };
 
 /** Maps 0..100 control values to note attack seconds. */

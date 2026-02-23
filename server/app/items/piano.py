@@ -32,8 +32,21 @@ INSTRUMENT_OPTIONS: tuple[str, ...] = (
     "bass",
     "violin",
     "synth_lead",
+    "nintendo",
     "drum_kit",
 )
+
+DEFAULT_ENVELOPE_BY_INSTRUMENT: dict[str, tuple[int, int]] = {
+    "piano": (15, 45),
+    "electric_piano": (12, 40),
+    "guitar": (8, 35),
+    "organ": (25, 70),
+    "bass": (10, 35),
+    "violin": (22, 75),
+    "synth_lead": (6, 30),
+    "nintendo": (2, 28),
+    "drum_kit": (1, 22),
+}
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item.", "maxLength": 80},
@@ -62,6 +75,7 @@ def validate_update(_item: WorldItem, next_params: dict) -> dict:
     instrument = str(next_params.get("instrument", "piano")).strip().lower()
     if instrument not in INSTRUMENT_OPTIONS:
         raise ValueError(f"instrument must be one of: {', '.join(INSTRUMENT_OPTIONS)}.")
+    previous_instrument = str(_item.params.get("instrument", "piano")).strip().lower()
     next_params["instrument"] = instrument
 
     try:
@@ -70,14 +84,17 @@ def validate_update(_item: WorldItem, next_params: dict) -> dict:
         raise ValueError("attack must be an integer between 0 and 100.") from exc
     if not (0 <= attack <= 100):
         raise ValueError("attack must be between 0 and 100.")
-    next_params["attack"] = attack
-
     try:
         decay = int(next_params.get("decay", 45))
     except (TypeError, ValueError) as exc:
         raise ValueError("decay must be an integer between 0 and 100.") from exc
     if not (0 <= decay <= 100):
         raise ValueError("decay must be between 0 and 100.")
+
+    # When instrument changes, reset envelope to instrument-appropriate defaults.
+    if instrument != previous_instrument:
+        attack, decay = DEFAULT_ENVELOPE_BY_INSTRUMENT.get(instrument, (15, 45))
+    next_params["attack"] = attack
     next_params["decay"] = decay
 
     try:

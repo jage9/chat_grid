@@ -39,6 +39,7 @@ type EditorDeps = {
   applyTextInputEdit: (code: string, key: string, maxLength: number, ctrlKey?: boolean, allowReplaceOnNextType?: boolean) => void;
   setReplaceTextOnNextType: (value: boolean) => void;
   suppressItemPropertyEchoMs: (ms: number) => void;
+  onPreviewPropertyChange?: (item: WorldItem, key: string, value: unknown) => void;
   updateStatus: (message: string) => void;
   sfxUiBlip: () => void;
   sfxUiCancel: () => void;
@@ -105,6 +106,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         const nextValue = options[nextIndex];
         deps.suppressItemPropertyEchoMs(600);
         deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: nextValue } });
+        deps.onPreviewPropertyChange?.(item, selectedKey, nextValue);
         deps.updateStatus(nextValue);
         deps.sfxUiBlip();
         return;
@@ -118,6 +120,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         const nextValue = !current;
         deps.suppressItemPropertyEchoMs(600);
         deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: nextValue } });
+        deps.onPreviewPropertyChange?.(item, selectedKey, nextValue);
         deps.updateStatus(nextValue ? 'on' : 'off');
         deps.sfxUiBlip();
         return;
@@ -141,6 +144,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         if (Number.isFinite(max)) nextValue = Math.min(max, nextValue);
         deps.suppressItemPropertyEchoMs(600);
         deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: nextValue } });
+        deps.onPreviewPropertyChange?.(item, selectedKey, nextValue);
         deps.updateStatus(formatSteppedNumber(nextValue, step));
         if (Math.abs(nextValue - currentValue) < 1e-9 || Math.abs(nextValue - attempted) > 1e-9) {
           deps.sfxUiCancel();
@@ -254,6 +258,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         deps.state.nicknameInput = formatSteppedNumber(nextValue, step);
         deps.state.cursorPos = deps.state.nicknameInput.length;
         deps.setReplaceTextOnNextType(false);
+        deps.onPreviewPropertyChange?.(item, propertyKey, nextValue);
         deps.updateStatus(deps.state.nicknameInput);
         if (Math.abs(nextValue - currentValue) < 1e-9 || Math.abs(nextValue - attempted) > 1e-9) {
           deps.sfxUiCancel();
@@ -268,6 +273,9 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       const value = deps.state.nicknameInput.trim();
       const sendItemParams = (params: Record<string, unknown>): void => {
         deps.signalingSend({ type: 'item_update', itemId, params });
+        for (const [key, nextValue] of Object.entries(params)) {
+          deps.onPreviewPropertyChange?.(item, key, nextValue);
+        }
       };
       const parseToggleValue = (raw: string, field: string): { ok: true; value: boolean } | { ok: false } => {
         const normalized = raw.toLowerCase();
@@ -397,6 +405,10 @@ export function createItemPropertyEditor(deps: EditorDeps): {
     if (control.type === 'select') {
       const selectedValue = deps.state.itemPropertyOptionValues[deps.state.itemPropertyOptionIndex];
       deps.signalingSend({ type: 'item_update', itemId, params: { [propertyKey]: selectedValue } });
+      const item = deps.state.items.get(itemId);
+      if (item) {
+        deps.onPreviewPropertyChange?.(item, propertyKey, selectedValue);
+      }
       deps.state.mode = 'itemProperties';
       deps.state.editingPropertyKey = null;
       deps.state.itemPropertyOptionValues = [];

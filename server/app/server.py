@@ -68,6 +68,7 @@ from .models import (
 LOGGER = logging.getLogger("chgrid.server")
 PACKET_LOGGER = logging.getLogger("chgrid.server.packet")
 CLIENT_PACKET_ADAPTER = TypeAdapter(ClientPacket)
+MAX_ACTIVE_PIANO_KEYS_PER_CLIENT = 32
 
 
 class SignalingServer:
@@ -92,6 +93,7 @@ class SignalingServer:
         self.clients: dict[ServerConnection, ClientConnection] = {}
         self.item_service = ItemService(state_file=state_file)
         self.item_last_use_ms: dict[str, int] = {}
+        self.active_piano_keys_by_client: dict[str, set[str]] = {}
         self.grid_size = max(1, grid_size)
         self.instance_id = str(uuid.uuid4())
         self.server_version = self._resolve_server_version()
@@ -260,6 +262,7 @@ class SignalingServer:
         finally:
             if websocket in self.clients:
                 disconnected = self.clients.pop(websocket)
+                self.active_piano_keys_by_client.pop(disconnected.id, None)
                 for item in self.item_service.drop_carried_items_for_disconnect(disconnected):
                     await self._broadcast_item(item)
                 self.item_service.save_state()
@@ -666,6 +669,13 @@ class SignalingServer:
                 return
             if item.carrierId is None and (item.x != client.x or item.y != client.y):
                 return
+            active_keys = self.active_piano_keys_by_client.setdefault(client.id, set())
+            if packet.on:
+                if packet.keyId not in active_keys and len(active_keys) >= MAX_ACTIVE_PIANO_KEYS_PER_CLIENT:
+                    return
+                active_keys.add(packet.keyId)
+            else:
+                active_keys.discard(packet.keyId)
             instrument = str(item.params.get("instrument", "piano")).strip().lower()
             attack = int(item.params.get("attack", 15)) if isinstance(item.params.get("attack", 15), (int, float)) else 15
             decay = int(item.params.get("decay", 45)) if isinstance(item.params.get("decay", 45), (int, float)) else 45

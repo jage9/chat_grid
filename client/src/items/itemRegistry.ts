@@ -54,6 +54,7 @@ const DEFAULT_PIANO_INSTRUMENT_OPTIONS = [
   'bass',
   'violin',
   'synth_lead',
+  'nintendo',
   'drum_kit',
 ] as const;
 

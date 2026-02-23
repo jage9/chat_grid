@@ -171,10 +171,11 @@ This is behavior-focused documentation for item types and their defaults.
 - Announces that the user begins playing the piano (client enters piano key mode).
 
 ### Validation
-- `instrument`: `piano | electric_piano | guitar | organ | bass | violin | synth_lead | drum_kit`
+- `instrument`: `piano | electric_piano | guitar | organ | bass | violin | synth_lead | nintendo | drum_kit`
 - `attack`: integer `0..100`
 - `decay`: integer `0..100`
 - `emitRange`: integer `5..20`
+- Instrument changes reset `attack`/`decay` to instrument defaults.
 
 ## Adding A New Item Type (Registry V1)
 
