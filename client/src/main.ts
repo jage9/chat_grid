@@ -4,7 +4,6 @@ import {
   EFFECT_IDS,
   EFFECT_SEQUENCE,
   clampEffectLevel,
-  type EffectId,
 } from './audio/effects';
 import {
   RadioStationRuntime,
@@ -80,6 +79,7 @@ const MIC_INPUT_GAIN_STEP = 0.05;
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const RECONNECT_DELAY_MS = 5_000;
 const RECONNECT_MAX_ATTEMPTS = 3;
+const AUDIO_SUBSCRIPTION_REFRESH_MS = 500;
 const AUTO_RECONNECT_AFTER_RELOAD_KEY = 'chatGridAutoReconnectAfterReload';
 const SELF_LIST_ENTRY_ID = '__self__';
 
@@ -200,7 +200,6 @@ let micGainLoopbackRestoreState: boolean | null = null;
 let helpViewerLines: string[] = [];
 let helpViewerIndex = 0;
 let heartbeatTimerId: number | null = null;
-let heartbeatLastPongAt = 0;
 let heartbeatNextPingId = -1;
 let heartbeatAwaitingPong = false;
 let reconnectInFlight = false;
@@ -213,6 +212,11 @@ let audioLayers: AudioLayerState = {
   media: true,
   world: true,
 };
+let lastSubscriptionRefreshAt = 0;
+let lastSubscriptionRefreshX = state.player.x;
+let lastSubscriptionRefreshY = state.player.y;
+let subscriptionRefreshInFlight = false;
+let subscriptionRefreshPending = false;
 
 const signalingProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const signalingUrl = `${signalingProtocol}://${window.location.host}/ws`;
@@ -551,8 +555,38 @@ async function applyAudioLayerState(): Promise<void> {
   } else {
     peerManager.suspendRemoteAudio();
   }
-  await radioRuntime.setLayerEnabled(audioLayers.media, state.items.values());
-  await itemEmitRuntime.setLayerEnabled(audioLayers.item, state.items.values());
+  const listenerPosition = { x: state.player.x, y: state.player.y };
+  await radioRuntime.setLayerEnabled(audioLayers.media, state.items.values(), listenerPosition);
+  await itemEmitRuntime.setLayerEnabled(audioLayers.item, state.items.values(), listenerPosition);
+}
+
+/** Refreshes distance-gated radio/item stream subscriptions on movement or timer cadence. */
+async function refreshAudioSubscriptions(force = false): Promise<void> {
+  if (!state.running) return;
+  const now = Date.now();
+  const moved = state.player.x !== lastSubscriptionRefreshX || state.player.y !== lastSubscriptionRefreshY;
+  if (!force && !moved && now - lastSubscriptionRefreshAt < AUDIO_SUBSCRIPTION_REFRESH_MS) {
+    return;
+  }
+  if (subscriptionRefreshInFlight) {
+    subscriptionRefreshPending = true;
+    return;
+  }
+  subscriptionRefreshInFlight = true;
+  lastSubscriptionRefreshAt = now;
+  lastSubscriptionRefreshX = state.player.x;
+  lastSubscriptionRefreshY = state.player.y;
+  const listenerPosition = { x: state.player.x, y: state.player.y };
+  try {
+    await radioRuntime.sync(state.items.values(), listenerPosition);
+    await itemEmitRuntime.sync(state.items.values(), listenerPosition);
+  } finally {
+    subscriptionRefreshInFlight = false;
+    if (subscriptionRefreshPending) {
+      subscriptionRefreshPending = false;
+      void refreshAudioSubscriptions(true);
+    }
+  }
 }
 
 /** Toggles a single audio layer and applies the change immediately. */
@@ -1057,6 +1091,7 @@ function randomFootstepUrl(): string {
 function gameLoop(): void {
   if (!state.running) return;
   handleMovement();
+  void refreshAudioSubscriptions();
   audio.updateSpatialAudio(peerManager.getPeers(), { x: state.player.x, y: state.player.y });
   radioRuntime.updateSpatialAudio(state.items, { x: state.player.x, y: state.player.y });
   itemEmitRuntime.updateSpatialAudio(state.items, { x: state.player.x, y: state.player.y });
@@ -1100,6 +1135,7 @@ function handleMovement(): void {
   lastWallCollisionDirection = null;
   persistPlayerPosition();
   state.player.lastMoveTime = now;
+  void refreshAudioSubscriptions(true);
   void audio.playSample(randomFootstepUrl(), FOOTSTEP_GAIN);
   signaling.send({ type: 'update_position', x: nextX, y: nextY });
 
@@ -1159,7 +1195,6 @@ function stopHeartbeat(): void {
     window.clearInterval(heartbeatTimerId);
     heartbeatTimerId = null;
   }
-  heartbeatLastPongAt = 0;
   heartbeatAwaitingPong = false;
 }
 
@@ -1173,7 +1208,6 @@ function sendHeartbeatPing(): void {
 /** Starts heartbeat timer for stale-connection detection. */
 function startHeartbeat(): void {
   stopHeartbeat();
-  heartbeatLastPongAt = Date.now();
   heartbeatAwaitingPong = false;
   sendHeartbeatPing();
   heartbeatTimerId = window.setInterval(() => {
@@ -1272,6 +1306,9 @@ function disconnect(): void {
   runDisconnectFlow(getConnectionFlowDeps());
   pendingEscapeDisconnect = false;
   restoreLoopbackAfterMicGainEdit();
+  subscriptionRefreshPending = false;
+  subscriptionRefreshInFlight = false;
+  lastSubscriptionRefreshAt = 0;
 }
 
 const onAppMessage = createOnMessageHandler({
@@ -1289,8 +1326,11 @@ const onAppMessage = createOnMessageHandler({
   dom,
   signalingSend: (message) => signaling.send(message as OutgoingMessage),
   peerManager,
-  radioRuntime,
-  itemEmitRuntime,
+  refreshAudioSubscriptions,
+  cleanupItemAudio: (itemId) => {
+    radioRuntime.cleanup(itemId);
+    itemEmitRuntime.cleanup(itemId);
+  },
   applyAudioLayerState,
   gameLoop,
   sanitizeName,
@@ -1329,7 +1369,6 @@ const onAppMessage = createOnMessageHandler({
 /** Handles signaling packets with heartbeat/restart metadata before app-level dispatch. */
 async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   if (message.type === 'pong' && message.clientSentAt < 0) {
-    heartbeatLastPongAt = Date.now();
     heartbeatAwaitingPong = false;
     return;
   }
@@ -1946,6 +1985,7 @@ function handleListModeInput(code: string, key: string): void {
     state.player.x = entry.x;
     state.player.y = entry.y;
     persistPlayerPosition();
+    void refreshAudioSubscriptions(true);
     void audio.playSample(TELEPORT_SOUND_URL, FOOTSTEP_GAIN);
     signaling.send({ type: 'update_position', x: entry.x, y: entry.y });
     state.mode = 'normal';
@@ -1993,6 +2033,7 @@ function handleListItemsModeInput(code: string, key: string): void {
     state.player.x = item.x;
     state.player.y = item.y;
     persistPlayerPosition();
+    void refreshAudioSubscriptions(true);
     void audio.playSample(TELEPORT_SOUND_URL, FOOTSTEP_GAIN);
     signaling.send({ type: 'update_position', x: item.x, y: item.y });
     state.mode = 'normal';

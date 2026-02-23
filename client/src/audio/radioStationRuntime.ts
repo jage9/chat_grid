@@ -162,10 +162,14 @@ type RadioSpatialConfig = {
   facingDeg: number;
 };
 
+const SUBSCRIBE_PRELOAD_SQUARES = 5;
+const UNSUBSCRIBE_HYSTERESIS_SQUARES = 8;
+
 export class RadioStationRuntime {
   private readonly sharedRadioSources = new Map<string, SharedRadioSource>();
   private readonly itemRadioOutputs = new Map<string, ItemRadioOutput>();
   private layerEnabled = true;
+  private listenerPosition: { x: number; y: number } | null = null;
 
   constructor(
     private readonly audio: AudioEngine,
@@ -207,24 +211,39 @@ export class RadioStationRuntime {
     }
   }
 
-  async setLayerEnabled(enabled: boolean, items: Iterable<WorldItem>): Promise<void> {
+  async setLayerEnabled(
+    enabled: boolean,
+    items: Iterable<WorldItem>,
+    listenerPosition: { x: number; y: number } | null = null,
+  ): Promise<void> {
     this.layerEnabled = enabled;
+    if (listenerPosition) {
+      this.listenerPosition = { ...listenerPosition };
+    }
     if (!enabled) {
       this.cleanupAll();
       return;
     }
-    await this.sync(items);
+    await this.sync(items, this.listenerPosition);
   }
 
-  async sync(items: Iterable<WorldItem>): Promise<void> {
+  async sync(items: Iterable<WorldItem>, listenerPosition: { x: number; y: number } | null = null): Promise<void> {
     if (!this.layerEnabled) {
       this.cleanupAll();
       return;
     }
+    if (listenerPosition) {
+      this.listenerPosition = { ...listenerPosition };
+    }
+    const listener = this.listenerPosition;
     const validIds = new Set<string>();
     for (const item of items) {
       if (item.type !== 'radio_station') continue;
       validIds.add(item.id);
+      if (!this.shouldKeepRuntime(item, listener, this.itemRadioOutputs.has(item.id))) {
+        this.cleanup(item.id);
+        continue;
+      }
       await this.ensureRuntime(item);
     }
     for (const id of Array.from(this.itemRadioOutputs.keys())) {
@@ -385,5 +404,20 @@ export class RadioStationRuntime {
       gain,
       panner,
     });
+  }
+
+  private shouldKeepRuntime(
+    item: WorldItem,
+    listenerPosition: { x: number; y: number } | null,
+    currentlyActive: boolean,
+  ): boolean {
+    const streamUrl = String(item.params.streamUrl ?? '').trim();
+    if (!streamUrl || item.params.enabled === false || !listenerPosition) {
+      return false;
+    }
+    const spatialConfig = this.getSpatialConfig(item);
+    const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
+    const threshold = baseRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);
+    return Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold;
   }
 }

@@ -24,6 +24,8 @@ type EmitSpatialConfig = {
 };
 
 const ITEM_EMIT_BASE_GAIN = 0.3;
+const SUBSCRIBE_PRELOAD_SQUARES = 5;
+const UNSUBSCRIBE_HYSTERESIS_SQUARES = 8;
 
 /** Maps a 0-100 speed control to playback-rate range used by emitted audio. */
 function resolveEmitPlaybackRate(raw: unknown): number {
@@ -60,6 +62,7 @@ function resolveEmitRates(item: WorldItem): { playbackRate: number; preservePitc
 export class ItemEmitRuntime {
   private readonly outputs = new Map<string, EmitOutput>();
   private layerEnabled = true;
+  private listenerPosition: { x: number; y: number } | null = null;
 
   constructor(
     private readonly audio: AudioEngine,
@@ -86,30 +89,39 @@ export class ItemEmitRuntime {
     }
   }
 
-  async setLayerEnabled(enabled: boolean, items: Iterable<WorldItem>): Promise<void> {
+  async setLayerEnabled(
+    enabled: boolean,
+    items: Iterable<WorldItem>,
+    listenerPosition: { x: number; y: number } | null = null,
+  ): Promise<void> {
     this.layerEnabled = enabled;
+    if (listenerPosition) {
+      this.listenerPosition = { ...listenerPosition };
+    }
     if (!enabled) {
       this.cleanupAll();
       return;
     }
-    await this.sync(items);
+    await this.sync(items, this.listenerPosition);
   }
 
-  async sync(items: Iterable<WorldItem>): Promise<void> {
+  async sync(items: Iterable<WorldItem>, listenerPosition: { x: number; y: number } | null = null): Promise<void> {
     if (!this.layerEnabled) {
       this.cleanupAll();
       return;
     }
+    if (listenerPosition) {
+      this.listenerPosition = { ...listenerPosition };
+    }
+    const listener = this.listenerPosition;
     const validIds = new Set<string>();
-    await this.audio.ensureContext();
-    const audioCtx = this.audio.context;
-    if (!audioCtx) return;
+    let audioCtx = this.audio.context;
 
     for (const item of items) {
       const emitSound = String(item.params.emitSound ?? item.emitSound ?? '').trim();
       const enabled = item.params.enabled !== false;
       const soundUrl = enabled ? this.resolveSoundUrl(emitSound) : '';
-      if (!soundUrl || item.carrierId) {
+      if (!soundUrl || item.carrierId || !this.shouldKeepRuntime(item, listener, this.outputs.has(item.id))) {
         this.cleanup(item.id);
         continue;
       }
@@ -120,6 +132,13 @@ export class ItemEmitRuntime {
       }
       if (existing) {
         this.cleanup(item.id);
+      }
+      if (!audioCtx) {
+        await this.audio.ensureContext();
+        audioCtx = this.audio.context;
+      }
+      if (!audioCtx) {
+        continue;
       }
       const element = new Audio(soundUrl);
       element.loop = true;
@@ -207,5 +226,17 @@ export class ItemEmitRuntime {
         output.panner.pan.linearRampToValueAtTime(resolvedPan, audioCtx.currentTime + 0.1);
       }
     }
+  }
+
+  private shouldKeepRuntime(
+    item: WorldItem,
+    listenerPosition: { x: number; y: number } | null,
+    currentlyActive: boolean,
+  ): boolean {
+    if (!listenerPosition) return false;
+    const spatialConfig = this.getSpatialConfig(item);
+    const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
+    const threshold = baseRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);
+    return Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold;
   }
 }

@@ -39,8 +39,8 @@ type MessageHandlerDeps = {
     setPeerNickname: (id: string, nickname: string) => void;
     removePeer: (id: string) => void;
   };
-  radioRuntime: { sync: (items: Iterable<WorldItem>) => Promise<void>; cleanup: (itemId: string) => void };
-  itemEmitRuntime: { sync: (items: Iterable<WorldItem>) => Promise<void>; cleanup: (itemId: string) => void };
+  refreshAudioSubscriptions: (force?: boolean) => Promise<void>;
+  cleanupItemAudio: (itemId: string) => void;
   applyAudioLayerState: () => Promise<void>;
   gameLoop: () => void;
   sanitizeName: (value: string) => string;
@@ -106,8 +106,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
             carrierId: item.carrierId ?? null,
           });
         }
-        await deps.radioRuntime.sync(deps.state.items.values());
-        await deps.itemEmitRuntime.sync(deps.state.items.values());
+        await deps.refreshAudioSubscriptions(true);
         await deps.applyAudioLayerState();
         deps.gameLoop();
         break;
@@ -208,16 +207,15 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
             deps.updateStatus(`${deps.itemPropertyLabel(key)}: ${deps.getItemPropertyValue(message.item, key)}`);
           }
         }
-        await deps.radioRuntime.sync(deps.state.items.values());
-        await deps.itemEmitRuntime.sync(deps.state.items.values());
+        await deps.refreshAudioSubscriptions(true);
         break;
       }
 
       case 'item_remove': {
         deps.state.items.delete(message.itemId);
         deps.state.carriedItemId = deps.getCarriedItemId();
-        deps.radioRuntime.cleanup(message.itemId);
-        deps.itemEmitRuntime.cleanup(message.itemId);
+        deps.cleanupItemAudio(message.itemId);
+        await deps.refreshAudioSubscriptions(true);
         break;
       }
 
