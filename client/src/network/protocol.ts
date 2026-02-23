@@ -199,7 +199,7 @@ export type OutgoingMessage =
   | { type: 'item_delete'; itemId: string }
   | { type: 'item_use'; itemId: string }
   | { type: 'item_piano_note'; itemId: string; keyId: string; midi: number; on: boolean }
-  | { type: 'item_piano_recording'; itemId: string; action: 'toggle_record' | 'playback' | 'stop_playback' }
+  | { type: 'item_piano_recording'; itemId: string; action: 'toggle_record' | 'playback' | 'stop_playback' | 'stop_record' }
   | {
       type: 'item_update';
       itemId: string;

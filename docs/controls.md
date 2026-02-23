@@ -82,10 +82,10 @@ Applies to effect select, user/item list modes, item selection, item property li
 - Multiple keys can be held/played at once
 - `?`: Open piano-mode help viewer
 - `-` / `=`: Shift octave down/up
-- `Z`: Start/stop recording on this piano (max 30s)
-- `X`: Play back saved recording on this piano
-- `Enter`: Play demo melody (press again to restart)
-- `C`: Stop demo/playback on this piano
+- `Z`: Start, pause, or resume recording on this piano (max 30s recorded time)
+- `X`: Play back saved recording on this piano (stops demo first)
+- `Enter`: Play demo melody (press again to restart; stops recording playback first)
+- `C`: Stop demo, recording playback, and active recording
 - `Escape`: Exit piano mode
 
 ## Help Viewer Mode

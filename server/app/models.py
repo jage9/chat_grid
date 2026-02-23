@@ -78,7 +78,7 @@ class ItemPianoNotePacket(BasePacket):
 class ItemPianoRecordingPacket(BasePacket):
     type: Literal["item_piano_recording"]
     itemId: str
-    action: Literal["toggle_record", "playback", "stop_playback"]
+    action: Literal["toggle_record", "playback", "stop_playback", "stop_record"]
 
 
 class ItemUpdatePacket(BasePacket):

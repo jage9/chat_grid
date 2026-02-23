@@ -549,6 +549,15 @@ async def test_piano_recording_toggle_and_save(monkeypatch: pytest.MonkeyPatch) 
         json.dumps({"type": "item_piano_recording", "itemId": item.id, "action": "toggle_record"}),
     )
     assert send_payloads[-1].ok is True
+    assert send_payloads[-1].message == "pause"
+    assert item.id in server.piano_recording_state_by_item
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "item_piano_recording", "itemId": item.id, "action": "stop_record"}),
+    )
+    assert send_payloads[-1].ok is True
+    assert send_payloads[-1].message == "stop"
     assert item.id not in server.piano_recording_state_by_item
     song_id = item.params.get("songId")
     assert isinstance(song_id, str)

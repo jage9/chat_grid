@@ -243,6 +243,8 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
       case 'item_action_result': {
         const pianoStatusMessages = new Set([
           'record',
+          'pause',
+          'resume',
           'play',
           'stop',
           'No recording saved on this piano.',

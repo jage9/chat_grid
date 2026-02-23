@@ -276,6 +276,20 @@ class SignalingServer:
         if task is not None and not task.done():
             task.cancel()
 
+    @staticmethod
+    def _recording_elapsed_ms(session: dict, now_monotonic: float | None = None) -> int:
+        """Compute effective recorded duration, including currently active segment."""
+
+        elapsed_ms = int(session.get("elapsedMs", 0)) if isinstance(session.get("elapsedMs"), (int, float)) else 0
+        paused = session.get("paused") is True
+        if paused:
+            return max(0, elapsed_ms)
+        last_resume = session.get("lastResumeMonotonic")
+        if isinstance(last_resume, (int, float)):
+            now_value = now_monotonic if isinstance(now_monotonic, (int, float)) else time.monotonic()
+            elapsed_ms += max(0, int((now_value - float(last_resume)) * 1000))
+        return max(0, elapsed_ms)
+
     async def _finalize_piano_recording(self, item_id: str, *, status_message: str | None = None) -> None:
         """Persist and broadcast one active recording session, then clear runtime state."""
 
@@ -288,10 +302,7 @@ class SignalingServer:
         item = self.items.get(item_id)
         if not item or item.type != "piano":
             return
-        now_monotonic = time.monotonic()
-        started = float(session.get("startedMonotonic", now_monotonic))
-        elapsed_ms = int((now_monotonic - started) * 1000)
-        elapsed_ms = max(0, min(PIANO_RECORDING_MAX_MS, elapsed_ms))
+        elapsed_ms = max(0, min(PIANO_RECORDING_MAX_MS, self._recording_elapsed_ms(session)))
         recorded_events = session.get("events")
         events = list(recorded_events) if isinstance(recorded_events, list) else []
         song_id = f"item:{item.id}:recording"
@@ -372,8 +383,14 @@ class SignalingServer:
         """Stop a recording automatically at the max recording duration."""
 
         try:
-            await asyncio.sleep(PIANO_RECORDING_MAX_MS / 1000)
-            await self._finalize_piano_recording(item_id, status_message="stop")
+            while True:
+                session = self.piano_recording_state_by_item.get(item_id)
+                if not isinstance(session, dict):
+                    return
+                if self._recording_elapsed_ms(session) >= PIANO_RECORDING_MAX_MS:
+                    await self._finalize_piano_recording(item_id, status_message="stop")
+                    return
+                await asyncio.sleep(0.25)
         except asyncio.CancelledError:
             return
 
@@ -1036,9 +1053,8 @@ class SignalingServer:
             else:
                 active_keys.discard(packet.keyId)
             recording_state = self.piano_recording_state_by_item.get(item.id)
-            if recording_state and recording_state.get("ownerClientId") == client.id:
-                started = float(recording_state.get("startedMonotonic", time.monotonic()))
-                elapsed_ms = max(0, min(PIANO_RECORDING_MAX_MS, int((time.monotonic() - started) * 1000)))
+            if recording_state and recording_state.get("ownerClientId") == client.id and recording_state.get("paused") is not True:
+                elapsed_ms = max(0, min(PIANO_RECORDING_MAX_MS, self._recording_elapsed_ms(recording_state)))
                 events = recording_state.get("events")
                 if isinstance(events, list) and len(events) < PIANO_RECORDING_MAX_EVENTS:
                     instrument = str(item.params.get("instrument", "piano")).strip().lower()
@@ -1095,18 +1111,39 @@ class SignalingServer:
                     await self._send_item_result(client, False, "use", "This piano is already recording.", item.id)
                     return
                 if existing and existing.get("ownerClientId") == client.id:
-                    await self._finalize_piano_recording(item.id, status_message="stop")
+                    if existing.get("paused") is True:
+                        existing["paused"] = False
+                        existing["lastResumeMonotonic"] = time.monotonic()
+                        await self._send_item_result(client, True, "use", "resume", item.id)
+                    else:
+                        existing["elapsedMs"] = self._recording_elapsed_ms(existing)
+                        existing["paused"] = True
+                        existing.pop("lastResumeMonotonic", None)
+                        await self._send_item_result(client, True, "use", "pause", item.id)
                     return
                 self._cancel_piano_playback(item.id)
                 recording_state = {
                     "ownerClientId": client.id,
-                    "startedMonotonic": time.monotonic(),
+                    "elapsedMs": 0,
+                    "paused": False,
+                    "lastResumeMonotonic": time.monotonic(),
                     "events": [],
                 }
                 self.piano_recording_state_by_item[item.id] = recording_state
                 auto_stop_task = asyncio.create_task(self._auto_stop_piano_recording(item.id))
                 recording_state["autoStopTask"] = auto_stop_task
                 await self._send_item_result(client, True, "use", "record", item.id)
+                return
+
+            if packet.action == "stop_record":
+                existing = self.piano_recording_state_by_item.get(item.id)
+                if existing and existing.get("ownerClientId") != client.id:
+                    await self._send_item_result(client, False, "use", "This piano is already recording.", item.id)
+                    return
+                if existing and existing.get("ownerClientId") == client.id:
+                    await self._finalize_piano_recording(item.id, status_message="stop")
+                    return
+                await self._send_item_result(client, True, "use", "stop", item.id)
                 return
 
             if packet.action == "playback":

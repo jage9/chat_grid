@@ -21,19 +21,19 @@
         },
         {
           "keys": "Z",
-          "description": "Start or stop recording (up to 30 seconds)."
+          "description": "Start, pause, or resume recording (up to 30 seconds of recorded time)."
         },
         {
           "keys": "X",
-          "description": "Play the saved recording."
+          "description": "Play the saved recording. Stops demo if demo is active."
         },
         {
           "keys": "Enter",
-          "description": "Play demo melody. Press Enter again to restart it."
+          "description": "Play demo melody. Press Enter again to restart it. Stops recording playback first."
         },
         {
           "keys": "C",
-          "description": "Stop demo and recording playback."
+          "description": "Stop demo, recording playback, and active recording."
         },
         {
           "keys": "Escape",

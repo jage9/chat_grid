@@ -297,6 +297,7 @@ const activePianoDemoTimeoutIds: number[] = [];
 const activePianoDemoNotes = new Map<string, { runtimeKey: string; midi: number }>();
 const pianoDemoSongs = new Map<string, PianoDemoSong>();
 let pianoDemoDefaultSongId = '';
+let activePianoRecordingState: 'idle' | 'recording' | 'paused' = 'idle';
 const activeRemotePianoKeys = new Set<string>();
 let pianoPreviewTimeoutId: number | null = null;
 let activeTeleport:
@@ -1034,6 +1035,7 @@ async function startPianoUseMode(itemId: string): Promise<void> {
   activePianoKeyMidi.clear();
   activePianoHeldOrder.length = 0;
   activePianoMonophonicKey = null;
+  activePianoRecordingState = 'idle';
   state.mode = 'pianoUse';
   await audio.ensureContext();
   updateStatus(`using ${item.title}, press question mark for help.`);
@@ -1056,6 +1058,7 @@ function stopPianoUseMode(announce = true): void {
   activePianoKeyMidi.clear();
   activePianoHeldOrder.length = 0;
   activePianoMonophonicKey = null;
+  activePianoRecordingState = 'idle';
   state.mode = 'normal';
   if (announce) {
     updateStatus('Stopped piano.');
@@ -2141,6 +2144,22 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
     message.ok &&
     message.action === 'use' &&
     typeof message.itemId === 'string' &&
+    activePianoItemId &&
+    message.itemId === activePianoItemId
+  ) {
+    if (message.message === 'record' || message.message === 'resume') {
+      activePianoRecordingState = 'recording';
+    } else if (message.message === 'pause') {
+      activePianoRecordingState = 'paused';
+    } else if (message.message === 'stop') {
+      activePianoRecordingState = 'idle';
+    }
+  }
+  if (
+    message.type === 'item_action_result' &&
+    message.ok &&
+    message.action === 'use' &&
+    typeof message.itemId === 'string' &&
     typeof message.message === 'string' &&
     message.message.toLowerCase().includes('begin playing')
   ) {
@@ -2645,6 +2664,12 @@ function handlePianoUseModeInput(code: string): void {
     return;
   }
   if (code === 'Enter') {
+    if (activePianoRecordingState !== 'idle') {
+      updateStatus('Stop or pause recording first.');
+      audio.sfxUiCancel();
+      return;
+    }
+    signaling.send({ type: 'item_piano_recording', itemId, action: 'stop_playback' });
     startPianoDemo(item, itemId);
     updateStatus('demo play');
     audio.sfxUiBlip();
@@ -2655,12 +2680,20 @@ function handlePianoUseModeInput(code: string): void {
     return;
   }
   if (code === 'KeyX') {
+    if (activePianoRecordingState !== 'idle') {
+      updateStatus('Stop or pause recording first.');
+      audio.sfxUiCancel();
+      return;
+    }
+    stopPianoDemo(true);
     signaling.send({ type: 'item_piano_recording', itemId, action: 'playback' });
     return;
   }
   if (code === 'KeyC') {
     stopPianoDemo(true);
     signaling.send({ type: 'item_piano_recording', itemId, action: 'stop_playback' });
+    signaling.send({ type: 'item_piano_recording', itemId, action: 'stop_record' });
+    activePianoRecordingState = 'idle';
     return;
   }
   if (code === 'Equal' || code === 'Minus') {
