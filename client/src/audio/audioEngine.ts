@@ -31,6 +31,7 @@ type SoundSpec = {
 type OutputMode = 'stereo' | 'mono';
 const SPATIAL_RAMP_SECONDS = 0.2;
 const SPATIAL_TIME_CONSTANT_SECONDS = SPATIAL_RAMP_SECONDS / 3;
+const ONE_SHOT_ATTACK_SECONDS = 0.02;
 
 export class AudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -356,7 +357,8 @@ export class AudioEngine {
       const source = audioCtx.createBufferSource();
       source.buffer = buffer;
       const gainNode = audioCtx.createGain();
-      gainNode.gain.value = resolved.gain;
+      gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+      gainNode.gain.setTargetAtTime(resolved.gain, audioCtx.currentTime, ONE_SHOT_ATTACK_SECONDS);
       source.connect(gainNode);
       if (resolved.pan !== undefined && this.supportsStereoPanner() && this.outputMode === 'stereo') {
         const panner = audioCtx.createStereoPanner();
@@ -387,7 +389,8 @@ export class AudioEngine {
         gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
         gainNode.gain.linearRampToValueAtTime(gain, audioCtx.currentTime + safeFadeMs / 1000);
       } else {
-        gainNode.gain.value = gain;
+        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+        gainNode.gain.setTargetAtTime(gain, audioCtx.currentTime, ONE_SHOT_ATTACK_SECONDS);
       }
       source.connect(gainNode).connect(sfxGainNode);
       source.start();
