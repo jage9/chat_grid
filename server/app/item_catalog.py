@@ -102,12 +102,12 @@ GLOBAL_ITEM_PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "emitSoundSpeed": {
         "valueType": "number",
         "tooltip": "Global emitted sound speed/pitch percent. 50 is normal.",
-        "range": {"min": 0, "max": 100, "step": 1},
+        "range": {"min": 0, "max": 100, "step": 0.1},
     },
     "emitSoundTempo": {
         "valueType": "number",
         "tooltip": "Global emitted sound tempo percent. 50 is normal.",
-        "range": {"min": 0, "max": 100, "step": 1},
+        "range": {"min": 0, "max": 100, "step": 0.1},
     },
 }
 

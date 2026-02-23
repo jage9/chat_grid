@@ -308,13 +308,13 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       } else if (
         propertyKey === 'mediaVolume' ||
         propertyKey === 'emitVolume' ||
-        propertyKey === 'emitSoundSpeed' ||
-        propertyKey === 'emitSoundTempo' ||
         propertyKey === 'emitRange' ||
         propertyKey === 'sides' ||
         propertyKey === 'number'
       ) {
         if (!submitNumericParam(propertyKey, true)) return;
+      } else if (propertyKey === 'emitSoundSpeed' || propertyKey === 'emitSoundTempo') {
+        if (!submitNumericParam(propertyKey, false)) return;
       } else if (propertyKey === 'mediaEffect' || propertyKey === 'emitEffect') {
         const normalized = value.trim().toLowerCase();
         if (!deps.effectIds.has(normalized)) {

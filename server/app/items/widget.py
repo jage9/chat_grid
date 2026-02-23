@@ -68,12 +68,12 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "emitSoundSpeed": {
         "valueType": "number",
         "tooltip": "Playback speed/pitch percent for emitted sound. 50 is normal, 0 is half, 100 is double. Using speed and tempo together may sound weird.",
-        "range": {"min": 0, "max": 100, "step": 1},
+        "range": {"min": 0, "max": 100, "step": 0.1},
     },
     "emitSoundTempo": {
         "valueType": "number",
         "tooltip": "Playback tempo percent for emitted sound. 50 is normal, 0 is half, 100 is double. Using speed and tempo together may sound weird.",
-        "range": {"min": 0, "max": 100, "step": 1},
+        "range": {"min": 0, "max": 100, "step": 0.1},
     },
     "emitEffect": {"valueType": "list", "tooltip": "Effect applied to emitted sound."},
     "emitEffectValue": {
@@ -147,20 +147,20 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     next_params["emitVolume"] = emit_volume
 
     try:
-        emit_speed = int(next_params.get("emitSoundSpeed", item.params.get("emitSoundSpeed", 50)))
+        emit_speed = float(next_params.get("emitSoundSpeed", item.params.get("emitSoundSpeed", 50)))
     except (TypeError, ValueError) as exc:
-        raise ValueError("emitSoundSpeed must be an integer between 0 and 100.") from exc
+        raise ValueError("emitSoundSpeed must be a number between 0 and 100.") from exc
     if not (0 <= emit_speed <= 100):
         raise ValueError("emitSoundSpeed must be between 0 and 100.")
-    next_params["emitSoundSpeed"] = emit_speed
+    next_params["emitSoundSpeed"] = round(emit_speed, 1)
 
     try:
-        emit_tempo = int(next_params.get("emitSoundTempo", item.params.get("emitSoundTempo", 50)))
+        emit_tempo = float(next_params.get("emitSoundTempo", item.params.get("emitSoundTempo", 50)))
     except (TypeError, ValueError) as exc:
-        raise ValueError("emitSoundTempo must be an integer between 0 and 100.") from exc
+        raise ValueError("emitSoundTempo must be a number between 0 and 100.") from exc
     if not (0 <= emit_tempo <= 100):
         raise ValueError("emitSoundTempo must be between 0 and 100.")
-    next_params["emitSoundTempo"] = emit_tempo
+    next_params["emitSoundTempo"] = round(emit_tempo, 1)
 
     emit_effect = str(next_params.get("emitEffect", item.params.get("emitEffect", "off"))).strip().lower()
     if emit_effect not in EFFECT_OPTIONS:
