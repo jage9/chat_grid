@@ -880,9 +880,10 @@ async function startPianoUseMode(itemId: string): Promise<void> {
   if (!item || item.type !== 'piano') return;
   activePianoItemId = itemId;
   activePianoKeys.clear();
+  activePianoKeyMidi.clear();
   state.mode = 'pianoUse';
   await audio.ensureContext();
-  updateStatus(`Piano mode: ${item.title}. Press Enter or Escape to stop.`);
+  updateStatus(`using ${item.title}, press escape to stop.`);
   audio.sfxUiBlip();
 }
 
@@ -2313,7 +2314,7 @@ function handleMicGainEditModeInput(code: string, key: string, ctrlKey: boolean)
 
 /** Handles realtime keyboard performance while piano item mode is active. */
 function handlePianoUseModeInput(code: string): void {
-  if (code === 'Escape' || code === 'Enter') {
+  if (code === 'Escape') {
     stopPianoUseMode(true);
     return;
   }
@@ -2325,6 +2326,20 @@ function handlePianoUseModeInput(code: string): void {
   const item = state.items.get(itemId);
   if (!item || item.type !== 'piano') {
     stopPianoUseMode(false);
+    return;
+  }
+  if (code === 'Equal' || code === 'Minus') {
+    const current = getPianoParams(item).octave;
+    const next = Math.max(-2, Math.min(2, current + (code === 'Equal' ? 1 : -1)));
+    item.params.octave = next;
+    signaling.send({ type: 'item_update', itemId, params: { octave: next } });
+    void previewPianoSettingChange(item, {});
+    updateStatus(`octave ${next}.`);
+    if (next === current) {
+      audio.sfxUiCancel();
+    } else {
+      audio.sfxUiBlip();
+    }
     return;
   }
   if (code.startsWith('Digit')) {

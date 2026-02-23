@@ -80,7 +80,8 @@ Applies to effect select, user/item list modes, item selection, item property li
 - `A S D F G H J K L ; '`: Play white keys (C major from C4 upward)
 - `W E T Y U O P ]`: Play sharps
 - Multiple keys can be held/played at once
-- `Enter` / `Escape`: Exit piano mode
+- `-` / `=`: Shift octave down/up
+- `Escape`: Exit piano mode
 
 ## Help Viewer Mode
 
