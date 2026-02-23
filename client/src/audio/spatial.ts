@@ -111,7 +111,8 @@ function resolveDirectionalProfile(
     return { attenuationFactor: 1, offAxisRatio: 0 };
   }
   const span = Math.max(1, 180 - halfCone);
-  const offAxisRatio = Math.max(0, Math.min(1, (diff - halfCone) / span));
+  const linearRatio = Math.max(0, Math.min(1, (diff - halfCone) / span));
+  const offAxisRatio = linearRatio * linearRatio * (3 - 2 * linearRatio);
   return {
     attenuationFactor: 1 - offAxisRatio * (1 - rearGain),
     offAxisRatio,
