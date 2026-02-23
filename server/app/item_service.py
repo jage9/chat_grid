@@ -33,7 +33,7 @@ class ItemService:
 
         return int(time.time() * 1000)
 
-    def default_item(self, client: ClientConnection, item_type: Literal["radio_station", "dice", "wheel", "clock", "widget"]) -> WorldItem:
+    def default_item(self, client: ClientConnection, item_type: Literal["radio_station", "dice", "wheel", "clock", "widget", "piano"]) -> WorldItem:
         """Create a new server-authoritative item at the caller's position."""
 
         item_def = get_item_definition(item_type)

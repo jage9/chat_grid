@@ -309,6 +309,8 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         propertyKey === 'mediaVolume' ||
         propertyKey === 'emitVolume' ||
         propertyKey === 'emitRange' ||
+        propertyKey === 'attack' ||
+        propertyKey === 'decay' ||
         propertyKey === 'sides' ||
         propertyKey === 'number'
       ) {

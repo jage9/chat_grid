@@ -5,7 +5,7 @@
 ```json
 {
   "id": "string",
-  "type": "radio_station | dice | wheel | clock | widget",
+  "type": "radio_station | dice | wheel | clock | widget | piano",
   "title": "string",
   "x": 0,
   "y": 0,
@@ -24,8 +24,8 @@
 - `useSound`: optional client-played one-shot sound when item `use` succeeds; global item field and not user-editable in V1.
 - `emitSound`: optional continuously-looping spatial sound emitted from the item on the grid; global item field and not user-editable in V1.
 - `capabilities`, `useSound`, and `emitSound` are derived from global item-type definitions at runtime (not stored per-instance in persisted state).
-- `useCooldownMs`: global per item type (`radio_station=1000`, `dice=1000`, `wheel=4000`, `clock=1000`, `widget=1000`), not per-instance editable.
-- `emitRange`: global spatial range default per item type (`radio_station=20`, `dice=15`, `wheel=15`, `clock=10`, `widget=15`).
+- `useCooldownMs`: global per item type (`radio_station=1000`, `dice=1000`, `wheel=4000`, `clock=1000`, `widget=1000`, `piano=1000`), not per-instance editable.
+- `emitRange`: global spatial range default per item type (`radio_station=20`, `dice=15`, `wheel=15`, `clock=10`, `widget=15`, `piano=15`).
   - `radio_station` can override this per instance via `params.emitRange` (`5..20`).
 - `directional`: global directional attenuation flag per item type (`radio_station=true`, others `false`); `widget` can override per instance via `params.directional`.
 
@@ -34,7 +34,7 @@
 ```json
 {
   "id": "string",
-  "type": "radio_station | dice | wheel | clock | widget",
+  "type": "radio_station | dice | wheel | clock | widget | piano",
   "title": "string",
   "x": 0,
   "y": 0,
@@ -158,6 +158,23 @@
 - `useSound`: empty, filename (assumed under `sounds/`), or full URL.
 - `emitSound`: empty, filename (assumed under `sounds/`), or full URL.
 
+### `piano`
+
+```json
+{
+  "instrument": "piano",
+  "attack": 15,
+  "decay": 45,
+  "emitRange": 15
+}
+```
+
+- `instrument`: one of
+  `piano | electric_piano | guitar | organ | bass | violin | synth_lead | drum_kit`.
+- `attack`: integer, range `0-100`, default `15`.
+- `decay`: integer, range `0-100`, default `45`.
+- `emitRange`: integer, range `5-20`, default `15`.
+
 ## Packet Shapes
 
 - `item_upsert`:
@@ -199,5 +216,24 @@
   "sound": "sounds/roll.ogg",
   "x": 12,
   "y": 8
+}
+```
+
+- `item_piano_note`:
+
+```json
+{
+  "type": "item_piano_note",
+  "itemId": "item-id",
+  "senderId": "user-id",
+  "keyId": "KeyA",
+  "midi": 60,
+  "on": true,
+  "instrument": "piano",
+  "attack": 15,
+  "decay": 45,
+  "x": 12,
+  "y": 8,
+  "emitRange": 15
 }
 ```

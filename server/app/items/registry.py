@@ -7,7 +7,7 @@ from typing import Callable, Protocol
 from ..item_types import ItemUseResult
 from ..models import WorldItem
 
-from . import clock, dice, radio, wheel, widget
+from . import clock, dice, piano, radio, wheel, widget
 
 
 class ItemModule(Protocol):
@@ -29,11 +29,12 @@ class ItemModule(Protocol):
     use_item: Callable[[WorldItem, str, Callable[[dict], str]], ItemUseResult]
 
 
-ITEM_TYPE_ORDER: tuple[str, ...] = ("clock", "dice", "radio_station", "wheel", "widget")
+ITEM_TYPE_ORDER: tuple[str, ...] = ("clock", "dice", "piano", "radio_station", "wheel", "widget")
 
 ITEM_MODULES: dict[str, ItemModule] = {
     "clock": clock,
     "dice": dice,
+    "piano": piano,
     "radio_station": radio,
     "wheel": wheel,
     "widget": widget,

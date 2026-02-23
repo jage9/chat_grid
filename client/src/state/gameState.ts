@@ -2,7 +2,7 @@ export const GRID_SIZE = 41;
 export const HEARING_RADIUS = 20;
 export const MOVE_COOLDOWN_MS = 200;
 
-export type ItemType = 'radio_station' | 'dice' | 'wheel' | 'clock' | 'widget';
+export type ItemType = 'radio_station' | 'dice' | 'wheel' | 'clock' | 'widget' | 'piano';
 
 export type WorldItem = {
   id: string;
@@ -36,7 +36,8 @@ export type GameMode =
   | 'selectItem'
   | 'itemProperties'
   | 'itemPropertyEdit'
-  | 'itemPropertyOptionSelect';
+  | 'itemPropertyOptionSelect'
+  | 'pianoUse';
 
 export type Player = {
   id: string | null;

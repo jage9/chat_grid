@@ -339,3 +339,102 @@ async def test_widget_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert send_payloads[-1].ok is False
     assert "emitsoundtempo must be between 0 and 100" in send_payloads[-1].message.lower()
+
+
+@pytest.mark.asyncio
+async def test_piano_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    server.clients[ws] = client
+    item = server.item_service.default_item(client, "piano")
+    server.item_service.add_item(item)
+
+    send_payloads: list[object] = []
+    broadcast_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+        broadcast_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+
+    await server._handle_message(
+        client,
+        json.dumps(
+            {
+                "type": "item_update",
+                "itemId": item.id,
+                "params": {
+                    "instrument": "drum_kit",
+                    "attack": 22,
+                    "decay": 67,
+                    "emitRange": 12,
+                },
+            }
+        ),
+    )
+    assert send_payloads[-1].ok is True
+    assert item.params.get("instrument") == "drum_kit"
+    assert item.params.get("attack") == 22
+    assert item.params.get("decay") == 67
+    assert item.params.get("emitRange") == 12
+
+    await server._handle_message(client, json.dumps({"type": "item_use", "itemId": item.id}))
+    assert send_payloads[-1].ok is True
+    assert "begin playing" in send_payloads[-1].message.lower()
+    assert not any(getattr(packet, "type", "") == "item_use_sound" for packet in broadcast_payloads)
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "item_update", "itemId": item.id, "params": {"instrument": "banjo"}}),
+    )
+    assert send_payloads[-1].ok is False
+    assert "instrument must be one of" in send_payloads[-1].message.lower()
+
+
+@pytest.mark.asyncio
+async def test_piano_note_packet_broadcasts(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws_sender = _fake_ws()
+    sender = ClientConnection(websocket=ws_sender, id="u1", nickname="tester", x=5, y=6)
+    ws_other = _fake_ws()
+    other = ClientConnection(websocket=ws_other, id="u2", nickname="listener", x=7, y=6)
+    server.clients[ws_sender] = sender
+    server.clients[ws_other] = other
+    item = server.item_service.default_item(sender, "piano")
+    item.params["instrument"] = "organ"
+    item.params["attack"] = 20
+    item.params["decay"] = 60
+    item.params["emitRange"] = 12
+    server.item_service.add_item(item)
+
+    send_payloads: list[object] = []
+    broadcast_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+        broadcast_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+
+    await server._handle_message(
+        sender,
+        json.dumps({"type": "item_piano_note", "itemId": item.id, "keyId": "KeyA", "midi": 60, "on": True}),
+    )
+
+    assert not send_payloads
+    assert broadcast_payloads
+    packet = broadcast_payloads[-1]
+    assert getattr(packet, "type", "") == "item_piano_note"
+    assert getattr(packet, "itemId", "") == item.id
+    assert getattr(packet, "instrument", "") == "organ"
+    assert getattr(packet, "attack", -1) == 20
+    assert getattr(packet, "decay", -1) == 60
+    assert getattr(packet, "emitRange", -1) == 12

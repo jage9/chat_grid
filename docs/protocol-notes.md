@@ -15,6 +15,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `chat_message`: player chat.
 - `ping`: latency measurement.
 - `item_add`, `item_pickup`, `item_drop`, `item_delete`, `item_use`, `item_update`: item actions.
+- `item_piano_note`: realtime piano note on/off for active piano use mode.
 
 ## Server -> Client
 
@@ -28,12 +29,17 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_remove`: item deletion.
 - `item_action_result`: action success/failure and user-facing message.
 - `item_use_sound`: spatial one-shot sound on successful item use (if `useSound` configured).
+- `item_piano_note`: broadcast piano note on/off with resolved instrument/envelope/spatial params.
 
 ## Item Packet Behavior
 
 - `item_upsert` is full-state replacement for one item, not partial patch.
 - `item_action_result` messages are intended for direct screen-reader/user status feedback.
 - `item_use_sound` contains absolute item world coordinates (`x`, `y`) and sound path.
+- `item_piano_note` contains:
+  - `itemId`, `senderId`, `keyId`, `midi`, `on`
+  - resolved `instrument`, `attack`, `decay`, `emitRange`
+  - absolute source coordinates `x`, `y`
 
 ## Welcome Metadata
 

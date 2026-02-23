@@ -14,6 +14,7 @@ import {
   shouldProxyStreamUrl,
 } from './audio/radioStationRuntime';
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
+import { PianoSynth, type PianoInstrumentId } from './audio/pianoSynth';
 import { normalizeDegrees } from './audio/spatial';
 import {
   applyPastedText,
@@ -82,6 +83,29 @@ const RECONNECT_MAX_ATTEMPTS = 3;
 const AUDIO_SUBSCRIPTION_REFRESH_MS = 500;
 const TELEPORT_SQUARES_PER_SECOND = 20;
 const TELEPORT_SYNC_INTERVAL_MS = 100;
+const PIANO_WHITE_KEY_MIDI_BY_CODE: Record<string, number> = {
+  KeyA: 60,
+  KeyS: 62,
+  KeyD: 64,
+  KeyF: 65,
+  KeyG: 67,
+  KeyH: 69,
+  KeyJ: 71,
+  KeyK: 72,
+  KeyL: 74,
+  Semicolon: 76,
+  Quote: 77,
+};
+const PIANO_SHARP_KEY_MIDI_BY_CODE: Record<string, number> = {
+  KeyW: 61,
+  KeyE: 63,
+  KeyT: 66,
+  KeyY: 68,
+  KeyU: 70,
+  KeyO: 73,
+  KeyP: 75,
+  BracketRight: 78,
+};
 
 declare global {
   interface Window {
@@ -224,6 +248,9 @@ let subscriptionRefreshPending = false;
 let suppressItemPropertyEchoUntilMs = 0;
 let activeTeleportLoopStop: (() => void) | null = null;
 let activeTeleportLoopToken = 0;
+let activePianoItemId: string | null = null;
+const activePianoKeys = new Set<string>();
+const activeRemotePianoKeys = new Set<string>();
 let activeTeleport:
   | {
       startX: number;
@@ -238,6 +265,7 @@ let activeTeleport:
       completionStatus: string;
     }
   | null = null;
+const pianoSynth = new PianoSynth();
 
 const signalingProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const signalingUrl = `${signalingProtocol}://${window.location.host}/ws`;
@@ -759,6 +787,136 @@ function getItemSpatialConfig(item: WorldItem): { range: number; directional: bo
   return { range, directional, facingDeg };
 }
 
+/** Resolves piano params with safe defaults for local play mode. */
+function getPianoParams(item: WorldItem): { instrument: PianoInstrumentId; attack: number; decay: number; emitRange: number } {
+  const rawInstrument = String(item.params.instrument ?? 'piano').trim().toLowerCase();
+  const instrument: PianoInstrumentId =
+    rawInstrument === 'electric_piano' ||
+    rawInstrument === 'guitar' ||
+    rawInstrument === 'organ' ||
+    rawInstrument === 'bass' ||
+    rawInstrument === 'violin' ||
+    rawInstrument === 'synth_lead' ||
+    rawInstrument === 'drum_kit'
+      ? rawInstrument
+      : 'piano';
+  const rawAttack = Number(item.params.attack);
+  const rawDecay = Number(item.params.decay);
+  const rawEmitRange = Number(item.params.emitRange ?? getItemTypeGlobalProperties(item.type).emitRange ?? 15);
+  return {
+    instrument,
+    attack: Math.max(0, Math.min(100, Number.isFinite(rawAttack) ? Math.round(rawAttack) : 15)),
+    decay: Math.max(0, Math.min(100, Number.isFinite(rawDecay) ? Math.round(rawDecay) : 45)),
+    emitRange: Math.max(5, Math.min(20, Number.isFinite(rawEmitRange) ? Math.round(rawEmitRange) : 15)),
+  };
+}
+
+/** Normalizes arbitrary instrument strings into supported piano synth ids. */
+function normalizePianoInstrument(value: unknown): PianoInstrumentId {
+  const raw = String(value ?? 'piano').trim().toLowerCase();
+  if (raw === 'electric_piano') return 'electric_piano';
+  if (raw === 'guitar') return 'guitar';
+  if (raw === 'organ') return 'organ';
+  if (raw === 'bass') return 'bass';
+  if (raw === 'violin') return 'violin';
+  if (raw === 'synth_lead') return 'synth_lead';
+  if (raw === 'drum_kit') return 'drum_kit';
+  return 'piano';
+}
+
+/** Returns playable MIDI note for a piano-mode key code, or null when unmapped. */
+function getPianoMidiForCode(code: string): number | null {
+  if (code in PIANO_WHITE_KEY_MIDI_BY_CODE) {
+    return PIANO_WHITE_KEY_MIDI_BY_CODE[code]!;
+  }
+  if (code in PIANO_SHARP_KEY_MIDI_BY_CODE) {
+    return PIANO_SHARP_KEY_MIDI_BY_CODE[code]!;
+  }
+  return null;
+}
+
+/** Starts local piano key mode for one used piano item. */
+async function startPianoUseMode(itemId: string): Promise<void> {
+  const item = state.items.get(itemId);
+  if (!item || item.type !== 'piano') return;
+  activePianoItemId = itemId;
+  activePianoKeys.clear();
+  state.mode = 'pianoUse';
+  await audio.ensureContext();
+  updateStatus(`Piano mode: ${item.title}. Press Enter or Escape to stop.`);
+  audio.sfxUiBlip();
+}
+
+/** Exits local piano key mode and releases any held notes. */
+function stopPianoUseMode(announce = true): void {
+  if (!activePianoItemId) return;
+  const itemId = activePianoItemId;
+  for (const code of Array.from(activePianoKeys)) {
+    const midi = getPianoMidiForCode(code);
+    if (midi === null) continue;
+    signaling.send({ type: 'item_piano_note', itemId, keyId: code, midi, on: false });
+    pianoSynth.noteOff(code);
+  }
+  activePianoItemId = null;
+  activePianoKeys.clear();
+  state.mode = 'normal';
+  if (announce) {
+    updateStatus('Stopped piano.');
+    audio.sfxUiCancel();
+  }
+}
+
+/** Plays one inbound piano note from another user using item spatial position. */
+function playRemotePianoNote(note: {
+  itemId: string;
+  senderId: string;
+  keyId: string;
+  midi: number;
+  instrument: string;
+  attack: number;
+  decay: number;
+  x: number;
+  y: number;
+  emitRange: number;
+}): void {
+  const ctx = audio.context;
+  const destination = audio.getOutputDestinationNode();
+  if (!ctx || !destination) return;
+  const runtimeKey = `${note.senderId}:${note.keyId}`;
+  if (activeRemotePianoKeys.has(runtimeKey)) return;
+  activeRemotePianoKeys.add(runtimeKey);
+  pianoSynth.noteOn(
+    runtimeKey,
+    Math.max(0, Math.min(127, Math.round(note.midi))),
+    normalizePianoInstrument(note.instrument),
+    Math.max(0, Math.min(100, Math.round(note.attack))),
+    Math.max(0, Math.min(100, Math.round(note.decay))),
+    { audioCtx: ctx, destination },
+    {
+      x: note.x - state.player.x,
+      y: note.y - state.player.y,
+      range: Math.max(1, Math.round(note.emitRange)),
+    },
+  );
+}
+
+/** Stops one inbound piano note previously started for another user. */
+function stopRemotePianoNote(senderId: string, keyId: string): void {
+  const runtimeKey = `${senderId}:${keyId}`;
+  if (!activeRemotePianoKeys.delete(runtimeKey)) return;
+  pianoSynth.noteOff(runtimeKey);
+}
+
+/** Stops all currently active remote piano notes for a sender id. */
+function stopAllRemotePianoNotesForSender(senderId: string): void {
+  const prefix = `${senderId}:`;
+  for (const runtimeKey of Array.from(activeRemotePianoKeys)) {
+    if (!runtimeKey.startsWith(prefix)) continue;
+    activeRemotePianoKeys.delete(runtimeKey);
+    pianoSynth.noteOff(runtimeKey);
+  }
+}
+
 /** Enters help-view mode and announces the first help line. */
 function openHelpViewer(): void {
   if (helpViewerLines.length === 0) {
@@ -973,7 +1131,7 @@ function getItemPropertyValue(item: WorldItem, key: string): string {
 function inferItemPropertyValueType(item: WorldItem, key: string): string | undefined {
   if (key === 'useSound' || key === 'emitSound') return 'sound';
   if (key === 'enabled' || key === 'use24Hour' || key === 'directional') return 'boolean';
-  if (key === 'mediaChannel' || key === 'mediaEffect' || key === 'emitEffect' || key === 'timeZone') return 'list';
+  if (key === 'mediaChannel' || key === 'mediaEffect' || key === 'emitEffect' || key === 'timeZone' || key === 'instrument') return 'list';
   if (
     key === 'x' ||
     key === 'y' ||
@@ -986,6 +1144,8 @@ function inferItemPropertyValueType(item: WorldItem, key: string): string | unde
     key === 'emitEffectValue' ||
     key === 'facing' ||
     key === 'emitRange' ||
+    key === 'attack' ||
+    key === 'decay' ||
     key === 'sides' ||
     key === 'number' ||
     key === 'useCooldownMs'
@@ -1447,6 +1607,11 @@ function disconnect(): void {
   lastSubscriptionRefreshTileY = Math.round(state.player.y);
   stopTeleportLoopAudio();
   activeTeleport = null;
+  stopPianoUseMode(false);
+  for (const key of Array.from(activeRemotePianoKeys)) {
+    activeRemotePianoKeys.delete(key);
+    pianoSynth.noteOff(key);
+  }
 }
 
 const onAppMessage = createOnMessageHandler({
@@ -1482,6 +1647,9 @@ const onAppMessage = createOnMessageHandler({
       gain,
     );
   },
+  playRemotePianoNote,
+  stopRemotePianoNote,
+  stopAllRemotePianoNotesForSender,
   TELEPORT_SOUND_URL,
   TELEPORT_START_SOUND_URL,
   getAudioLayers: () => audioLayers,
@@ -1543,6 +1711,20 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
     startHeartbeat();
   }
   await onAppMessage(message);
+  if (
+    message.type === 'item_action_result' &&
+    message.ok &&
+    message.action === 'use' &&
+    typeof message.itemId === 'string'
+  ) {
+    const item = state.items.get(message.itemId);
+    if (item?.type === 'piano') {
+      await startPianoUseMode(item.id);
+    }
+  }
+  if (activePianoItemId && !state.items.has(activePianoItemId)) {
+    stopPianoUseMode(false);
+  }
   applyConfiguredPeerListenGains();
   if (restartAnnouncement) {
     setConnectionStatus(restartAnnouncement);
@@ -2015,6 +2197,44 @@ function handleMicGainEditModeInput(code: string, key: string, ctrlKey: boolean)
   applyTextInputEdit(code, key, 8, ctrlKey, true);
 }
 
+/** Handles realtime keyboard performance while piano item mode is active. */
+function handlePianoUseModeInput(code: string): void {
+  if (code === 'Escape' || code === 'Enter') {
+    stopPianoUseMode(true);
+    return;
+  }
+  const itemId = activePianoItemId;
+  if (!itemId) {
+    state.mode = 'normal';
+    return;
+  }
+  const item = state.items.get(itemId);
+  if (!item || item.type !== 'piano') {
+    stopPianoUseMode(false);
+    return;
+  }
+  const midi = getPianoMidiForCode(code);
+  if (midi === null) return;
+  if (activePianoKeys.has(code)) return;
+  activePianoKeys.add(code);
+  const ctx = audio.context;
+  const destination = audio.getOutputDestinationNode();
+  if (!ctx || !destination) return;
+  const config = getPianoParams(item);
+  const sourceX = item.carrierId === state.player.id ? state.player.x : item.x;
+  const sourceY = item.carrierId === state.player.id ? state.player.y : item.y;
+  pianoSynth.noteOn(
+    code,
+    midi,
+    config.instrument,
+    config.attack,
+    config.decay,
+    { audioCtx: ctx, destination },
+    { x: sourceX - state.player.x, y: sourceY - state.player.y, range: config.emitRange },
+  );
+  signaling.send({ type: 'item_piano_note', itemId, keyId: code, midi, on: true });
+}
+
 /** Handles effect menu list navigation and selection. */
 function handleEffectSelectModeInput(code: string, key: string): void {
   const control = handleListControlKey(code, key, EFFECT_SEQUENCE, state.effectSelectIndex, (effect) => effect.label);
@@ -2339,6 +2559,11 @@ function codeFromKey(key: string, location: number): string | null {
     if (key === '/' || key === '?') return 'Slash';
     if (key === ',' || key === '<') return 'Comma';
     if (key === '.' || key === '>') return 'Period';
+    if (key === ';' || key === ':') return 'Semicolon';
+    if (key === "'" || key === '"') return 'Quote';
+    if (key === '[' || key === '{') return 'BracketLeft';
+    if (key === ']' || key === '}') return 'BracketRight';
+    if (key === '\\' || key === '|') return 'Backslash';
   }
   return null;
 }
@@ -2411,6 +2636,7 @@ function setupInputHandlers(): void {
         nickname: handleNicknameModeInput,
         chat: handleChatModeInput,
         micGainEdit: handleMicGainEditModeInput,
+        pianoUse: (currentCode) => handlePianoUseModeInput(currentCode),
         effectSelect: (currentCode, currentKey) => handleEffectSelectModeInput(currentCode, currentKey),
         helpView: (currentCode) => handleHelpViewModeInput(currentCode),
         listUsers: (currentCode, currentKey) => handleListModeInput(currentCode, currentKey),
@@ -2431,6 +2657,16 @@ function setupInputHandlers(): void {
 
   document.addEventListener('keyup', (event) => {
     const code = normalizeInputCode(event);
+    if (state.mode === 'pianoUse' && code) {
+      if (activePianoKeys.delete(code)) {
+        pianoSynth.noteOff(code);
+        const itemId = activePianoItemId;
+        const midi = getPianoMidiForCode(code);
+        if (itemId && midi !== null) {
+          signaling.send({ type: 'item_piano_note', itemId, keyId: code, midi, on: false });
+        }
+      }
+    }
     if (code) {
       state.keysPressed[code] = false;
     }

@@ -42,7 +42,7 @@ class PingPacket(BasePacket):
 
 class ItemAddPacket(BasePacket):
     type: Literal["item_add"]
-    itemType: Literal["radio_station", "dice", "wheel", "clock", "widget"]
+    itemType: Literal["radio_station", "dice", "wheel", "clock", "widget", "piano"]
 
 
 class ItemPickupPacket(BasePacket):
@@ -67,6 +67,14 @@ class ItemUsePacket(BasePacket):
     itemId: str
 
 
+class ItemPianoNotePacket(BasePacket):
+    type: Literal["item_piano_note"]
+    itemId: str
+    keyId: str = Field(min_length=1, max_length=32)
+    midi: int = Field(ge=0, le=127)
+    on: bool
+
+
 class ItemUpdatePacket(BasePacket):
     type: Literal["item_update"]
     itemId: str
@@ -85,6 +93,7 @@ ClientPacket = (
     | ItemDropPacket
     | ItemDeletePacket
     | ItemUsePacket
+    | ItemPianoNotePacket
     | ItemUpdatePacket
 )
 
@@ -157,7 +166,7 @@ class NicknameResultPacket(BasePacket):
 
 class WorldItem(BaseModel):
     id: str
-    type: Literal["radio_station", "dice", "wheel", "clock", "widget"]
+    type: Literal["radio_station", "dice", "wheel", "clock", "widget", "piano"]
     title: str
     x: int
     y: int
@@ -175,7 +184,7 @@ class WorldItem(BaseModel):
 class PersistedWorldItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
-    type: Literal["radio_station", "dice", "wheel", "clock", "widget"]
+    type: Literal["radio_station", "dice", "wheel", "clock", "widget", "piano"]
     title: str
     x: int
     y: int
@@ -211,3 +220,18 @@ class ItemUseSoundPacket(BasePacket):
     sound: str
     x: int
     y: int
+
+
+class ItemPianoNoteBroadcastPacket(BasePacket):
+    type: Literal["item_piano_note"]
+    itemId: str
+    senderId: str
+    keyId: str
+    midi: int
+    on: bool
+    instrument: str
+    attack: int
+    decay: int
+    x: int
+    y: int
+    emitRange: int

@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from .items import clock, radio
+from .items import clock, piano, radio
 from .items.registry import ITEM_MODULES, ITEM_TYPE_ORDER
 
-ItemType = Literal["radio_station", "dice", "wheel", "clock", "widget"]
+ItemType = Literal["radio_station", "dice", "wheel", "clock", "widget", "piano"]
 ITEM_TYPE_SEQUENCE: tuple[ItemType, ...] = cast(tuple[ItemType, ...], ITEM_TYPE_ORDER)
 ITEM_TYPE_LABELS: dict[ItemType, str] = {item_type: ITEM_MODULES[item_type].LABEL for item_type in ITEM_TYPE_SEQUENCE}
 ITEM_TYPE_EDITABLE_PROPERTIES: dict[ItemType, tuple[str, ...]] = {
@@ -19,6 +19,7 @@ CLOCK_DEFAULT_TIME_ZONE = clock.DEFAULT_TIME_ZONE
 CLOCK_TIME_ZONE_OPTIONS = clock.TIME_ZONE_OPTIONS
 RADIO_EFFECT_OPTIONS = radio.EFFECT_OPTIONS
 RADIO_CHANNEL_OPTIONS = radio.CHANNEL_OPTIONS
+PIANO_INSTRUMENT_OPTIONS = piano.INSTRUMENT_OPTIONS
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,7 @@ ITEM_PROPERTY_OPTIONS: dict[str, tuple[str, ...]] = {
     "emitEffect": RADIO_EFFECT_OPTIONS,
     "mediaChannel": RADIO_CHANNEL_OPTIONS,
     "timeZone": CLOCK_TIME_ZONE_OPTIONS,
+    "instrument": PIANO_INSTRUMENT_OPTIONS,
 }
 
 ITEM_TYPE_TOOLTIPS: dict[ItemType, str] = {

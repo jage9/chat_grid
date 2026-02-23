@@ -74,6 +74,13 @@ Applies to effect select, user/item list modes, item selection, item property li
 - `Space`: Read tooltip/help for current option (where metadata is available)
 - First-letter navigation: jump to next matching entry
 
+## Piano Use Mode
+
+- `A S D F G H J K L ; '`: Play white keys (C major from C4 upward)
+- `W E T Y U O P ]`: Play sharps
+- Multiple keys can be held/played at once
+- `Enter` / `Escape`: Exit piano mode
+
 ## Help Viewer Mode
 
 - `ArrowUp` / `ArrowDown`: Previous/next help line

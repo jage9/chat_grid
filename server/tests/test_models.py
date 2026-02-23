@@ -16,3 +16,9 @@ def test_unknown_type_rejected() -> None:
     except ValidationError:
         return
     assert False, "validation should fail"
+
+
+def test_item_add_accepts_piano_type() -> None:
+    adapter = TypeAdapter(ClientPacket)
+    packet = adapter.validate_python({"type": "item_add", "itemType": "piano"})
+    assert packet.type == "item_add"

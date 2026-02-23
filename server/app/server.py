@@ -46,6 +46,8 @@ from .models import (
     ItemAddPacket,
     ItemDeletePacket,
     ItemDropPacket,
+    ItemPianoNoteBroadcastPacket,
+    ItemPianoNotePacket,
     ItemPickupPacket,
     ItemRemovePacket,
     ItemUpdatePacket,
@@ -654,6 +656,39 @@ class SignalingServer:
                         others_message=use_result.delayed_others_message,
                     )
                 )
+            return
+
+        if isinstance(packet, ItemPianoNotePacket):
+            item = self.items.get(packet.itemId)
+            if not item or item.type != "piano":
+                return
+            if item.carrierId not in (None, client.id):
+                return
+            if item.carrierId is None and (item.x != client.x or item.y != client.y):
+                return
+            instrument = str(item.params.get("instrument", "piano")).strip().lower()
+            attack = int(item.params.get("attack", 15)) if isinstance(item.params.get("attack", 15), (int, float)) else 15
+            decay = int(item.params.get("decay", 45)) if isinstance(item.params.get("decay", 45), (int, float)) else 45
+            emit_range = int(item.params.get("emitRange", 15)) if isinstance(item.params.get("emitRange", 15), (int, float)) else 15
+            source_x = client.x if item.carrierId == client.id else item.x
+            source_y = client.y if item.carrierId == client.id else item.y
+            await self._broadcast(
+                ItemPianoNoteBroadcastPacket(
+                    type="item_piano_note",
+                    itemId=item.id,
+                    senderId=client.id,
+                    keyId=packet.keyId,
+                    midi=packet.midi,
+                    on=packet.on,
+                    instrument=instrument,
+                    attack=max(0, min(100, attack)),
+                    decay=max(0, min(100, decay)),
+                    x=source_x,
+                    y=source_y,
+                    emitRange=max(5, min(20, emit_range)),
+                ),
+                exclude=client.websocket,
+            )
             return
 
         if isinstance(packet, ItemUpdatePacket):

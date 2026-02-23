@@ -151,6 +151,31 @@ This is behavior-focused documentation for item types and their defaults.
 - `useSound`: empty, filename (assumed under `sounds/`), or full URL
 - `emitSound`: empty, filename (assumed under `sounds/`), or full URL
 
+## `piano`
+
+### Defaults
+- Title: `piano`
+- Params:
+  - `instrument="piano"`
+  - `attack=15`
+  - `decay=45`
+  - `emitRange=15`
+- Global:
+  - `useSound=none`
+  - `emitSound=none`
+  - `useCooldownMs=1000`
+  - `emitRange=15`
+  - `directional=false`
+
+### Use
+- Announces that the user begins playing the piano (client enters piano key mode).
+
+### Validation
+- `instrument`: `piano | electric_piano | guitar | organ | bass | violin | synth_lead | drum_kit`
+- `attack`: integer `0..100`
+- `decay`: integer `0..100`
+- `emitRange`: integer `5..20`
+
 ## Adding A New Item Type (Registry V1)
 
 Item types are currently code-registered on both server and client. Server item logic is split per item module and wired through one registry.

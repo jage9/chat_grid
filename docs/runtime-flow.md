@@ -41,6 +41,7 @@ Core incoming message effects:
 - `item_remove`: remove item and cleanup runtimes.
 - `item_action_result`: success/error status for actions.
 - `item_use_sound`: play one-shot spatial sample (world layer gated).
+- `item_piano_note`: start/stop synthesized piano notes from remote users (item layer gated).
 - `pong`:
   - positive `clientSentAt`: user ping response (`P` command)
   - negative `clientSentAt`: internal heartbeat response

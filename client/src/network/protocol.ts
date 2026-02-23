@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const itemSchema = z.object({
   id: z.string(),
-  type: z.enum(['radio_station', 'dice', 'wheel', 'clock', 'widget']),
+  type: z.enum(['radio_station', 'dice', 'wheel', 'clock', 'widget', 'piano']),
   title: z.string(),
   x: z.number().int(),
   y: z.number().int(),
@@ -42,10 +42,10 @@ export const welcomeMessageSchema = z.object({
     .optional(),
   uiDefinitions: z
     .object({
-      itemTypeOrder: z.array(z.enum(['radio_station', 'dice', 'wheel', 'clock', 'widget'])),
+      itemTypeOrder: z.array(z.enum(['radio_station', 'dice', 'wheel', 'clock', 'widget', 'piano'])),
       itemTypes: z.array(
         z.object({
-          type: z.enum(['radio_station', 'dice', 'wheel', 'clock', 'widget']),
+          type: z.enum(['radio_station', 'dice', 'wheel', 'clock', 'widget', 'piano']),
           label: z.string().optional(),
           tooltip: z.string().optional(),
           editableProperties: z.array(z.string()),
@@ -150,6 +150,21 @@ export const itemUseSoundSchema = z.object({
   y: z.number().int(),
 });
 
+export const itemPianoNoteSchema = z.object({
+  type: z.literal('item_piano_note'),
+  itemId: z.string(),
+  senderId: z.string(),
+  keyId: z.string(),
+  midi: z.number().int().min(0).max(127),
+  on: z.boolean(),
+  instrument: z.string(),
+  attack: z.number().int().min(0).max(100),
+  decay: z.number().int().min(0).max(100),
+  x: z.number().int(),
+  y: z.number().int(),
+  emitRange: z.number().int().min(1),
+});
+
 export const incomingMessageSchema = z.discriminatedUnion('type', [
   welcomeMessageSchema,
   signalMessageSchema,
@@ -163,6 +178,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   itemRemoveSchema,
   itemActionResultSchema,
   itemUseSoundSchema,
+  itemPianoNoteSchema,
 ]);
 
 export type IncomingMessage = z.infer<typeof incomingMessageSchema>;
@@ -173,11 +189,12 @@ export type OutgoingMessage =
   | { type: 'update_nickname'; nickname: string }
   | { type: 'chat_message'; message: string }
   | { type: 'ping'; clientSentAt: number }
-  | { type: 'item_add'; itemType: 'radio_station' | 'dice' | 'wheel' | 'clock' | 'widget' }
+  | { type: 'item_add'; itemType: 'radio_station' | 'dice' | 'wheel' | 'clock' | 'widget' | 'piano' }
   | { type: 'item_pickup'; itemId: string }
   | { type: 'item_drop'; itemId: string; x: number; y: number }
   | { type: 'item_delete'; itemId: string }
   | { type: 'item_use'; itemId: string }
+  | { type: 'item_piano_note'; itemId: string; keyId: string; midi: number; on: boolean }
   | {
       type: 'item_update';
       itemId: string;

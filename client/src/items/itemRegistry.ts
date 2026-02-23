@@ -45,11 +45,22 @@ const DEFAULT_CLOCK_TIME_ZONE_OPTIONS = [
   'UTC',
 ] as const;
 
-const DEFAULT_ITEM_TYPE_SEQUENCE: ItemType[] = ['clock', 'dice', 'radio_station', 'wheel', 'widget'];
+const DEFAULT_ITEM_TYPE_SEQUENCE: ItemType[] = ['clock', 'dice', 'piano', 'radio_station', 'wheel', 'widget'];
+const DEFAULT_PIANO_INSTRUMENT_OPTIONS = [
+  'piano',
+  'electric_piano',
+  'guitar',
+  'organ',
+  'bass',
+  'violin',
+  'synth_lead',
+  'drum_kit',
+] as const;
 
 const DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES: Record<ItemType, string[]> = {
   radio_station: ['title', 'streamUrl', 'enabled', 'mediaVolume', 'mediaChannel', 'mediaEffect', 'mediaEffectValue', 'facing', 'emitRange'],
   dice: ['title', 'sides', 'number'],
+  piano: ['title', 'instrument', 'attack', 'decay', 'emitRange'],
   wheel: ['title', 'spaces'],
   clock: ['title', 'timeZone', 'use24Hour'],
   widget: ['title', 'enabled', 'directional', 'facing', 'emitRange', 'emitVolume', 'emitSoundSpeed', 'emitSoundTempo', 'emitEffect', 'emitEffectValue', 'useSound', 'emitSound'],
@@ -58,6 +69,7 @@ const DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES: Record<ItemType, string[]> = {
 const DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES: Record<ItemType, Record<string, string | number | boolean>> = {
   radio_station: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000, emitRange: 20, directional: true, emitSoundSpeed: 50, emitSoundTempo: 50 },
   dice: { useSound: 'sounds/roll.ogg', emitSound: 'none', useCooldownMs: 1000, emitRange: 15, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50 },
+  piano: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000, emitRange: 15, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50 },
   wheel: { useSound: 'sounds/spin.ogg', emitSound: 'none', useCooldownMs: 4000, emitRange: 15, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50 },
   clock: { useSound: 'none', emitSound: 'sounds/clock.ogg', useCooldownMs: 1000, emitRange: 10, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50 },
   widget: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000, emitRange: 15, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50 },
@@ -93,6 +105,7 @@ let itemTypeSequence: ItemType[] = [...DEFAULT_ITEM_TYPE_SEQUENCE];
 let itemTypeLabels: Record<ItemType, string> = {
   radio_station: 'radio',
   dice: 'dice',
+  piano: 'piano',
   wheel: 'wheel',
   clock: 'clock',
   widget: 'widget',
@@ -101,6 +114,7 @@ let itemTypeTooltips: Partial<Record<ItemType, string>> = {};
 let itemTypeEditableProperties: Record<ItemType, string[]> = {
   radio_station: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.radio_station],
   dice: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.dice],
+  piano: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.piano],
   wheel: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.wheel],
   clock: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.clock],
   widget: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.widget],
@@ -108,6 +122,7 @@ let itemTypeEditableProperties: Record<ItemType, string[]> = {
 let itemTypeGlobalProperties: Record<ItemType, Record<string, string | number | boolean>> = {
   radio_station: { ...DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES.radio_station },
   dice: { ...DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES.dice },
+  piano: { ...DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES.piano },
   wheel: { ...DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES.wheel },
   clock: { ...DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES.clock },
   widget: { ...DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES.widget },
@@ -116,6 +131,7 @@ let optionItemPropertyValues: Partial<Record<string, string[]>> = {
   mediaEffect: EFFECT_SEQUENCE.map((effect) => effect.id),
   emitEffect: EFFECT_SEQUENCE.map((effect) => effect.id),
   mediaChannel: [...RADIO_CHANNEL_OPTIONS],
+  instrument: [...DEFAULT_PIANO_INSTRUMENT_OPTIONS],
   timeZone: [...DEFAULT_CLOCK_TIME_ZONE_OPTIONS],
 };
 let itemTypePropertyMetadata: Partial<Record<ItemType, Record<string, ItemPropertyMetadata>>> = {};
@@ -221,6 +237,9 @@ export function itemPropertyLabel(key: string): string {
   if (key === 'mediaEffectValue') return 'media effect value';
   if (key === 'emitEffect') return 'emit effect';
   if (key === 'emitEffectValue') return 'emit effect value';
+  if (key === 'instrument') return 'instrument';
+  if (key === 'attack') return 'attack';
+  if (key === 'decay') return 'decay';
   if (key === 'useSound') return 'use sound';
   if (key === 'emitSound') return 'emit sound';
   return key;
