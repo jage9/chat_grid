@@ -1,7 +1,7 @@
 {
   "sections": [
     {
-      "title": "Chat Grid Help (press Escape to exit)",
+      "title": "Chat Grid Help",
       "items": [
         {
           "keys": "Arrow Keys",
@@ -30,7 +30,7 @@
         },
         {
           "keys": "Shift+L",
-          "description": "List users; Enter teleports to that user, left/right arrow adjust volume"
+          "description": "List users; Enter teleports to that user, left/right arrow adjusts volume"
         },
         {
           "keys": "U",
@@ -127,12 +127,12 @@
           "description": "Select voice effect"
         },
         {
-          "keys": "Dash or Equals",
-          "description": "Lower/raise master volume"
-        },
-        {
           "keys": "Underscore or Plus",
           "description": "Lower/raise active effect value"
+        },
+        {
+          "keys": "Dash or Equals",
+          "description": "Lower/raise master volume"
         },
         {
           "keys": "V",
