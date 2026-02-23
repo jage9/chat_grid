@@ -1212,6 +1212,7 @@ function gameLoop(): void {
     void refreshAudioSubscriptions();
   }
   audio.updateSpatialAudio(peerManager.getPeers(), { x: state.player.x, y: state.player.y });
+  audio.updateSpatialSamples({ x: state.player.x, y: state.player.y });
   radioRuntime.updateSpatialAudio(state.items, { x: state.player.x, y: state.player.y });
   itemEmitRuntime.updateSpatialAudio(state.items, { x: state.player.x, y: state.player.y });
   state.cursorVisible = Math.floor(Date.now() / 500) % 2 === 0;
@@ -1470,7 +1471,8 @@ const onAppMessage = createOnMessageHandler({
     const gain = url === TELEPORT_START_SOUND_URL ? TELEPORT_START_GAIN : FOOTSTEP_GAIN;
     void audio.playSpatialSample(
       url,
-      { x: peerX - state.player.x, y: peerY - state.player.y },
+      { x: peerX, y: peerY },
+      { x: state.player.x, y: state.player.y },
       gain,
     );
   },
@@ -1496,7 +1498,7 @@ const onAppMessage = createOnMessageHandler({
   playLocateToneAt: (x, y) => audio.sfxLocate({ x: x - state.player.x, y: y - state.player.y }),
   resolveIncomingSoundUrl,
   playIncomingItemUseSound: (url, x, y) => {
-    void audio.playSpatialSample(url, { x: x - state.player.x, y: y - state.player.y }, 1);
+    void audio.playSpatialSample(url, { x, y }, { x: state.player.x, y: state.player.y }, 1);
   },
 });
 
