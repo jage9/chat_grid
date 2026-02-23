@@ -51,7 +51,8 @@ export function resolveSpatialMix(options: SpatialMixOptions): SpatialMixResult 
   }
 
   const volumeRatio = Math.max(0, 1 - distance / effectiveRange);
-  let gain = baseGain * Math.pow(volumeRatio, 2);
+  const shapedVolume = volumeRatio * volumeRatio * (3 - 2 * volumeRatio);
+  let gain = baseGain * shapedVolume;
   const clampedX = Math.max(-range, Math.min(range, dx));
   let pan = Math.sin((clampedX / range) * (Math.PI / 2));
 

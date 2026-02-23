@@ -165,6 +165,7 @@ type RadioSpatialConfig = {
 
 const SUBSCRIBE_PRELOAD_SQUARES = 5;
 const UNSUBSCRIBE_HYSTERESIS_SQUARES = 8;
+const SPATIAL_RAMP_SECONDS = 0.2;
 
 export class RadioStationRuntime {
   private readonly sharedRadioSources = new Map<string, SharedRadioSource>();
@@ -295,10 +296,10 @@ export class RadioStationRuntime {
       });
       const gainValue = mix?.gain ?? 0;
       const panValue = mix?.pan ?? 0;
-      output.gain.gain.linearRampToValueAtTime(gainValue, audioCtx.currentTime + 0.1);
+      output.gain.gain.linearRampToValueAtTime(gainValue, audioCtx.currentTime + SPATIAL_RAMP_SECONDS);
       if (output.panner) {
         const resolvedPan = this.audio.getOutputMode() === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
-        output.panner.pan.linearRampToValueAtTime(resolvedPan, audioCtx.currentTime + 0.1);
+        output.panner.pan.linearRampToValueAtTime(resolvedPan, audioCtx.currentTime + SPATIAL_RAMP_SECONDS);
       }
     }
   }

@@ -29,6 +29,7 @@ type SoundSpec = {
 };
 
 type OutputMode = 'stereo' | 'mono';
+const SPATIAL_RAMP_SECONDS = 0.2;
 
 export class AudioEngine {
   private audioCtx: AudioContext | null = null;
@@ -300,7 +301,7 @@ export class AudioEngine {
       const gainValue = mix?.gain ?? 0;
       const listenGain = Number.isFinite(peer.listenGain) ? Math.max(0, peer.listenGain as number) : 1;
       const panValue = mix?.pan ?? 0;
-      peer.gain.gain.linearRampToValueAtTime(gainValue * listenGain, this.audioCtx.currentTime + 0.1);
+      peer.gain.gain.linearRampToValueAtTime(gainValue * listenGain, this.audioCtx.currentTime + SPATIAL_RAMP_SECONDS);
       if (peer.panner) {
         const resolvedPan = this.outputMode === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
         peer.panner.pan.setValueAtTime(resolvedPan, this.audioCtx.currentTime);
