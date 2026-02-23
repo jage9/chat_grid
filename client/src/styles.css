@@ -18,6 +18,12 @@ body {
   text-align: center;
 }
 
+#connectionStatus {
+  color: #93c5fd;
+  min-height: 1.25rem;
+  margin: 0.25rem 0 0.5rem;
+}
+
 #appVersion {
   display: block;
   color: #94a3b8;

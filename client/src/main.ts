@@ -89,6 +89,7 @@ declare global {
 }
 
 type Dom = {
+  connectionStatus: HTMLElement;
   appVersion: HTMLElement;
   updatesSection: HTMLElement;
   updatesToggle: HTMLButtonElement;
@@ -111,6 +112,7 @@ type Dom = {
 };
 
 const dom: Dom = {
+  connectionStatus: requiredById('connectionStatus'),
   appVersion: requiredById('appVersion'),
   updatesSection: requiredById('updatesSection'),
   updatesToggle: requiredById('updatesToggle'),
@@ -419,6 +421,11 @@ function updateStatus(message: string): void {
   }, 4000);
 }
 
+/** Updates persistent connection/update status shown under the page heading. */
+function setConnectionStatus(message: string): void {
+  dom.connectionStatus.textContent = String(message).trim();
+}
+
 /** Sanitizes user nicknames to printable/safe characters and enforces max length. */
 function sanitizeName(value: string): string {
   return value.replace(/[\u0000-\u001F\u007F<>]/g, '').trim().slice(0, NICKNAME_MAX_LENGTH);
@@ -577,11 +584,13 @@ function handleSignalingStatus(message: string): void {
     return;
   }
   if (message === 'Disconnected.' && state.running && !reconnectInFlight) {
+    setConnectionStatus('Disconnected from server. Reconnecting...');
     pushChatMessage('Disconnected from server. Reconnecting...');
     void reconnectAfterSocketClose();
     return;
   }
   if (message === 'Disconnected.') {
+    setConnectionStatus('Disconnected from server.');
     pushChatMessage('Disconnected from server.');
     return;
   }
@@ -1240,6 +1249,11 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
     dom,
     sanitizeName,
     updateStatus: (message) => {
+      if (message === 'Disconnected.') {
+        setConnectionStatus('Disconnected.');
+      } else if (message.startsWith('Connect failed.')) {
+        setConnectionStatus(message);
+      }
       if (reconnectInFlight && message === 'Disconnected.') {
         return;
       }
@@ -1271,6 +1285,7 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
 
 /** Performs end-to-end connect flow: validation, media setup, then signaling connection. */
 async function connect(): Promise<void> {
+  setConnectionStatus('Connecting...');
   await runConnectFlow(getConnectionFlowDeps());
 }
 
@@ -1278,6 +1293,7 @@ async function connect(): Promise<void> {
 function disconnect(): void {
   stopHeartbeat();
   runDisconnectFlow(getConnectionFlowDeps());
+  setConnectionStatus('Disconnected.');
   pendingEscapeDisconnect = false;
   restoreLoopbackAfterMicGainEdit();
   subscriptionRefreshPending = false;
@@ -1377,10 +1393,12 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   await onAppMessage(message);
   applyConfiguredPeerListenGains();
   if (restartAnnouncement) {
+    setConnectionStatus(restartAnnouncement);
     pushChatMessage(restartAnnouncement);
     audio.sfxUiConfirm();
   }
   if (connectedAnnouncement) {
+    setConnectionStatus(connectedAnnouncement);
     pushChatMessage(connectedAnnouncement);
   }
 }
@@ -2295,3 +2313,4 @@ updateStatus(
     ? 'Client updated, please reconnect.'
     : 'Welcome to the Chat Grid. Press the Settings button to configure your audio, then Connect to join the grid.',
 );
+setConnectionStatus(isVersionReloadedSession() ? 'Client updated, please reconnect.' : 'Not connected.');
