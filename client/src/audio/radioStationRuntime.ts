@@ -170,7 +170,7 @@ export class RadioStationRuntime {
   private readonly sharedRadioSources = new Map<string, SharedRadioSource>();
   private readonly itemRadioOutputs = new Map<string, ItemRadioOutput>();
   private layerEnabled = true;
-  private listenerPosition: { x: number; y: number } | null = null;
+  private listenerPositions: Array<{ x: number; y: number }> = [];
 
   constructor(
     private readonly audio: AudioEngine,
@@ -218,30 +218,33 @@ export class RadioStationRuntime {
     listenerPosition: { x: number; y: number } | null = null,
   ): Promise<void> {
     this.layerEnabled = enabled;
-    if (listenerPosition) {
-      this.listenerPosition = { ...listenerPosition };
-    }
+    this.listenerPositions = listenerPosition ? [{ ...listenerPosition }] : [];
     if (!enabled) {
       this.cleanupAll();
       return;
     }
-    await this.sync(items, this.listenerPosition);
+    await this.sync(items, this.listenerPositions);
   }
 
-  async sync(items: Iterable<WorldItem>, listenerPosition: { x: number; y: number } | null = null): Promise<void> {
+  async sync(
+    items: Iterable<WorldItem>,
+    listenerPositions: Array<{ x: number; y: number }> | { x: number; y: number } | null = null,
+  ): Promise<void> {
     if (!this.layerEnabled) {
       this.cleanupAll();
       return;
     }
-    if (listenerPosition) {
-      this.listenerPosition = { ...listenerPosition };
+    if (Array.isArray(listenerPositions)) {
+      this.listenerPositions = listenerPositions.map((listener) => ({ ...listener }));
+    } else if (listenerPositions) {
+      this.listenerPositions = [{ ...listenerPositions }];
     }
-    const listener = this.listenerPosition;
+    const listeners = this.listenerPositions;
     const validIds = new Set<string>();
     for (const item of items) {
       if (item.type !== 'radio_station') continue;
       validIds.add(item.id);
-      if (!this.shouldKeepRuntime(item, listener, this.itemRadioOutputs.has(item.id))) {
+      if (!this.shouldKeepRuntime(item, listeners, this.itemRadioOutputs.has(item.id))) {
         this.cleanup(item.id);
         continue;
       }
@@ -408,16 +411,18 @@ export class RadioStationRuntime {
 
   private shouldKeepRuntime(
     item: WorldItem,
-    listenerPosition: { x: number; y: number } | null,
+    listenerPositions: Array<{ x: number; y: number }>,
     currentlyActive: boolean,
   ): boolean {
     const streamUrl = String(item.params.streamUrl ?? '').trim();
-    if (!streamUrl || item.params.enabled === false || !listenerPosition) {
+    if (!streamUrl || item.params.enabled === false || listenerPositions.length === 0) {
       return false;
     }
     const spatialConfig = this.getSpatialConfig(item);
     const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
     const threshold = baseRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);
-    return Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold;
+    return listenerPositions.some((listenerPosition) =>
+      Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold,
+    );
   }
 }

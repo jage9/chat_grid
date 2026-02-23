@@ -63,7 +63,7 @@ function resolveEmitRates(item: WorldItem): { playbackRate: number; preservePitc
 export class ItemEmitRuntime {
   private readonly outputs = new Map<string, EmitOutput>();
   private layerEnabled = true;
-  private listenerPosition: { x: number; y: number } | null = null;
+  private listenerPositions: Array<{ x: number; y: number }> = [];
 
   constructor(
     private readonly audio: AudioEngine,
@@ -96,25 +96,28 @@ export class ItemEmitRuntime {
     listenerPosition: { x: number; y: number } | null = null,
   ): Promise<void> {
     this.layerEnabled = enabled;
-    if (listenerPosition) {
-      this.listenerPosition = { ...listenerPosition };
-    }
+    this.listenerPositions = listenerPosition ? [{ ...listenerPosition }] : [];
     if (!enabled) {
       this.cleanupAll();
       return;
     }
-    await this.sync(items, this.listenerPosition);
+    await this.sync(items, this.listenerPositions);
   }
 
-  async sync(items: Iterable<WorldItem>, listenerPosition: { x: number; y: number } | null = null): Promise<void> {
+  async sync(
+    items: Iterable<WorldItem>,
+    listenerPositions: Array<{ x: number; y: number }> | { x: number; y: number } | null = null,
+  ): Promise<void> {
     if (!this.layerEnabled) {
       this.cleanupAll();
       return;
     }
-    if (listenerPosition) {
-      this.listenerPosition = { ...listenerPosition };
+    if (Array.isArray(listenerPositions)) {
+      this.listenerPositions = listenerPositions.map((listener) => ({ ...listener }));
+    } else if (listenerPositions) {
+      this.listenerPositions = [{ ...listenerPositions }];
     }
-    const listener = this.listenerPosition;
+    const listeners = this.listenerPositions;
     const validIds = new Set<string>();
     let audioCtx = this.audio.context;
 
@@ -122,7 +125,7 @@ export class ItemEmitRuntime {
       const emitSound = String(item.params.emitSound ?? item.emitSound ?? '').trim();
       const enabled = item.params.enabled !== false;
       const soundUrl = enabled ? this.resolveSoundUrl(emitSound) : '';
-      if (!soundUrl || item.carrierId || !this.shouldKeepRuntime(item, listener, this.outputs.has(item.id))) {
+      if (!soundUrl || item.carrierId || !this.shouldKeepRuntime(item, listeners, this.outputs.has(item.id))) {
         this.cleanup(item.id);
         continue;
       }
@@ -230,13 +233,15 @@ export class ItemEmitRuntime {
 
   private shouldKeepRuntime(
     item: WorldItem,
-    listenerPosition: { x: number; y: number } | null,
+    listenerPositions: Array<{ x: number; y: number }>,
     currentlyActive: boolean,
   ): boolean {
-    if (!listenerPosition) return false;
+    if (listenerPositions.length === 0) return false;
     const spatialConfig = this.getSpatialConfig(item);
     const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
     const threshold = baseRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);
-    return Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold;
+    return listenerPositions.some((listenerPosition) =>
+      Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold,
+    );
   }
 }

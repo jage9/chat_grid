@@ -562,10 +562,20 @@ async function applyAudioLayerState(): Promise<void> {
 
 /** Refreshes distance-gated radio/item stream subscriptions for a listener position. */
 async function refreshAudioSubscriptionsAt(listenerPosition: { x: number; y: number }, force = false): Promise<void> {
+  await refreshAudioSubscriptionsForListeners([listenerPosition], force);
+}
+
+/** Refreshes distance-gated radio/item stream subscriptions for one or more listener positions. */
+async function refreshAudioSubscriptionsForListeners(
+  listenerPositions: Array<{ x: number; y: number }>,
+  force = false,
+): Promise<void> {
   if (!state.running) return;
+  if (listenerPositions.length === 0) return;
   const now = Date.now();
-  const tileX = Math.round(listenerPosition.x);
-  const tileY = Math.round(listenerPosition.y);
+  const anchorListener = listenerPositions[listenerPositions.length - 1];
+  const tileX = Math.round(anchorListener.x);
+  const tileY = Math.round(anchorListener.y);
   const moved = tileX !== lastSubscriptionRefreshTileX || tileY !== lastSubscriptionRefreshTileY;
   if (!force && !moved && now - lastSubscriptionRefreshAt < AUDIO_SUBSCRIPTION_REFRESH_MS) {
     return;
@@ -579,8 +589,8 @@ async function refreshAudioSubscriptionsAt(listenerPosition: { x: number; y: num
   lastSubscriptionRefreshTileX = tileX;
   lastSubscriptionRefreshTileY = tileY;
   try {
-    await radioRuntime.sync(state.items.values(), listenerPosition);
-    await itemEmitRuntime.sync(state.items.values(), listenerPosition);
+    await radioRuntime.sync(state.items.values(), listenerPositions);
+    await itemEmitRuntime.sync(state.items.values(), listenerPositions);
   } finally {
     subscriptionRefreshInFlight = false;
     if (subscriptionRefreshPending) {
@@ -593,7 +603,13 @@ async function refreshAudioSubscriptionsAt(listenerPosition: { x: number; y: num
 /** Refreshes distance-gated radio/item stream subscriptions on movement or timer cadence. */
 async function refreshAudioSubscriptions(force = false): Promise<void> {
   if (activeTeleport) {
-    await refreshAudioSubscriptionsAt({ x: activeTeleport.targetX, y: activeTeleport.targetY }, force);
+    await refreshAudioSubscriptionsForListeners(
+      [
+        { x: activeTeleport.startX, y: activeTeleport.startY },
+        { x: activeTeleport.targetX, y: activeTeleport.targetY },
+      ],
+      force,
+    );
     return;
   }
   await refreshAudioSubscriptionsAt({ x: state.player.x, y: state.player.y }, force);
@@ -1137,7 +1153,13 @@ function startTeleportTo(targetX: number, targetY: number, completionStatus: str
     }
     stopLoop();
   });
-  void refreshAudioSubscriptionsAt({ x: targetX, y: targetY }, true);
+  void refreshAudioSubscriptionsForListeners(
+    [
+      { x: startX, y: startY },
+      { x: targetX, y: targetY },
+    ],
+    true,
+  );
   state.keysPressed.ArrowUp = false;
   state.keysPressed.ArrowDown = false;
   state.keysPressed.ArrowLeft = false;
