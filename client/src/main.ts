@@ -178,6 +178,7 @@ const SYSTEM_SOUND_URLS = {
 const FOOTSTEP_SOUND_URLS = Array.from({ length: 11 }, (_, index) => withBase(`sounds/step-${index + 1}.ogg`));
 const FOOTSTEP_GAIN = 0.7;
 const TELEPORT_START_SOUND_URL = withBase('sounds/teleport_start.ogg');
+const TELEPORT_START_GAIN = 0.1;
 const TELEPORT_SOUND_URL = withBase('sounds/teleport.ogg');
 const WALL_SOUND_URL = withBase('sounds/wall.ogg');
 
@@ -1128,7 +1129,7 @@ function startTeleportTo(targetX: number, targetY: number, completionStatus: str
   stopTeleportLoopAudio();
   activeTeleportLoopToken += 1;
   const loopToken = activeTeleportLoopToken;
-  void audio.startLoopingSample(TELEPORT_START_SOUND_URL, FOOTSTEP_GAIN).then((stopLoop) => {
+  void audio.startLoopingSample(TELEPORT_START_SOUND_URL, TELEPORT_START_GAIN).then((stopLoop) => {
     if (!stopLoop) return;
     if (activeTeleport && loopToken === activeTeleportLoopToken) {
       activeTeleportLoopStop = stopLoop;
@@ -1443,10 +1444,11 @@ const onAppMessage = createOnMessageHandler({
   sanitizeName,
   randomFootstepUrl,
   playRemoteSpatialStepOrTeleport: (url, peerX, peerY) => {
+    const gain = url === TELEPORT_START_SOUND_URL ? TELEPORT_START_GAIN : FOOTSTEP_GAIN;
     void audio.playSpatialSample(
       url,
       { x: peerX - state.player.x, y: peerY - state.player.y },
-      FOOTSTEP_GAIN,
+      gain,
     );
   },
   TELEPORT_SOUND_URL,
