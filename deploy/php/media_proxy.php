@@ -130,6 +130,210 @@ function host_matches_suffix($host, $suffix)
     return substr($host, -strlen($needle)) === $needle;
 }
 
+function parse_allowlist_suffixes($allowlistEnv)
+{
+    $suffixes = array();
+    if ($allowlistEnv === false || trim((string) $allowlistEnv) === '') {
+        return $suffixes;
+    }
+    $parts = explode(',', (string) $allowlistEnv);
+    foreach ($parts as $part) {
+        $suffix = strtolower(trim((string) $part));
+        if ($suffix !== '') {
+            $suffixes[] = $suffix;
+        }
+    }
+    return $suffixes;
+}
+
+function resolve_host_ips($host)
+{
+    $ips = array();
+    $ipv4 = @gethostbynamel($host);
+    if (is_array($ipv4)) {
+        foreach ($ipv4 as $ip) {
+            $ip = trim((string) $ip);
+            if ($ip !== '') {
+                $ips[$ip] = true;
+            }
+        }
+    }
+    if (function_exists('dns_get_record')) {
+        $aaaa = @dns_get_record($host, DNS_AAAA);
+        if (is_array($aaaa)) {
+            foreach ($aaaa as $record) {
+                if (!isset($record['ipv6'])) {
+                    continue;
+                }
+                $ip = trim((string) $record['ipv6']);
+                if ($ip !== '') {
+                    $ips[$ip] = true;
+                }
+            }
+        }
+    }
+    return array_keys($ips);
+}
+
+function validate_public_ip($ip)
+{
+    return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+}
+
+function validate_target_url($url, $allowlistSuffixes, &$error)
+{
+    $error = '';
+    $parsed = parse_url($url);
+    if ($parsed === false || !isset($parsed['scheme']) || !isset($parsed['host'])) {
+        $error = 'invalid url';
+        return false;
+    }
+
+    $scheme = strtolower((string) $parsed['scheme']);
+    if ($scheme !== 'http' && $scheme !== 'https') {
+        $error = 'unsupported scheme';
+        return false;
+    }
+
+    $host = strtolower((string) $parsed['host']);
+    if ($host === 'localhost' || $host === '127.0.0.1' || $host === '::1') {
+        $error = 'forbidden host';
+        return false;
+    }
+
+    if (!empty($allowlistSuffixes)) {
+        $allowed = false;
+        foreach ($allowlistSuffixes as $suffix) {
+            if (host_matches_suffix($host, $suffix)) {
+                $allowed = true;
+                break;
+            }
+        }
+        if (!$allowed) {
+            $error = 'host not allowed';
+            return false;
+        }
+    }
+
+    $resolved = array();
+    if (filter_var($host, FILTER_VALIDATE_IP)) {
+        $resolved[] = $host;
+    } else {
+        $resolved = resolve_host_ips($host);
+    }
+    if (count($resolved) === 0) {
+        $error = 'dns resolution failed';
+        return false;
+    }
+    foreach ($resolved as $ip) {
+        if (!validate_public_ip($ip)) {
+            $error = 'resolved ip not allowed';
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function resolve_redirect_url($baseUrl, $location)
+{
+    $location = trim((string) $location);
+    if ($location === '') {
+        return '';
+    }
+    $target = parse_url($location);
+    if ($target !== false && isset($target['scheme']) && isset($target['host'])) {
+        return $location;
+    }
+
+    $base = parse_url($baseUrl);
+    if ($base === false || !isset($base['scheme']) || !isset($base['host'])) {
+        return '';
+    }
+    $scheme = strtolower((string) $base['scheme']);
+    $host = (string) $base['host'];
+    $port = isset($base['port']) ? ':' . (int) $base['port'] : '';
+
+    if (strpos($location, '//') === 0) {
+        return $scheme . ':' . $location;
+    }
+
+    $path = isset($base['path']) ? (string) $base['path'] : '/';
+    if ($path === '') {
+        $path = '/';
+    }
+    if ($location[0] === '/') {
+        return $scheme . '://' . $host . $port . $location;
+    }
+
+    $dir = preg_replace('#/[^/]*$#', '/', $path);
+    if ($dir === null || $dir === '') {
+        $dir = '/';
+    }
+    return $scheme . '://' . $host . $port . $dir . $location;
+}
+
+function resolve_safe_redirect_chain($initialUrl, $allowlistSuffixes, $requestHeaders, $maxRedirects, &$error)
+{
+    $error = '';
+    $currentUrl = $initialUrl;
+    for ($hop = 0; $hop <= $maxRedirects; $hop += 1) {
+        if (!validate_target_url($currentUrl, $allowlistSuffixes, $error)) {
+            return '';
+        }
+
+        $GLOBALS['CHGRID_PROXY_STATUS'] = 200;
+        $GLOBALS['CHGRID_PROXY_UP_HEADERS'] = array();
+        $GLOBALS['CHGRID_PROXY_HEADERS_SENT'] = false;
+
+        $ch = curl_init();
+        if (!$ch) {
+            $error = 'proxy init failed';
+            return '';
+        }
+
+        curl_setopt($ch, CURLOPT_URL, $currentUrl);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 0);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+        curl_setopt($ch, CURLOPT_HEADER, false);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_NOSIGNAL, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'ChatGridMediaProxy/1.0');
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
+        curl_setopt($ch, CURLOPT_HEADERFUNCTION, 'proxy_header_callback');
+        curl_setopt($ch, CURLOPT_NOBODY, true);
+
+        $ok = curl_exec($ch);
+        if ($ok === false) {
+            $error = 'upstream fetch failed: ' . curl_error($ch);
+            curl_close($ch);
+            return '';
+        }
+        curl_close($ch);
+
+        $status = isset($GLOBALS['CHGRID_PROXY_STATUS']) ? (int) $GLOBALS['CHGRID_PROXY_STATUS'] : 200;
+        if ($status < 300 || $status >= 400) {
+            return $currentUrl;
+        }
+        if ($hop >= $maxRedirects) {
+            $error = 'too many redirects';
+            return '';
+        }
+        $headers = isset($GLOBALS['CHGRID_PROXY_UP_HEADERS']) ? $GLOBALS['CHGRID_PROXY_UP_HEADERS'] : array();
+        $location = isset($headers['location']) ? (string) $headers['location'] : '';
+        $nextUrl = resolve_redirect_url($currentUrl, $location);
+        if ($nextUrl === '') {
+            $error = 'redirect location missing or invalid';
+            return '';
+        }
+        $currentUrl = $nextUrl;
+    }
+    $error = 'too many redirects';
+    return '';
+}
+
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, HEAD, OPTIONS');
 header('Access-Control-Allow-Headers: Range');
@@ -148,52 +352,9 @@ if ($rawUrl === '') {
     send_text(400, 'missing url query param');
 }
 
-$parsed = parse_url($rawUrl);
-if ($parsed === false || !isset($parsed['scheme']) || !isset($parsed['host'])) {
-    send_text(400, 'invalid url');
-}
-
-$scheme = strtolower((string) $parsed['scheme']);
-if ($scheme !== 'http' && $scheme !== 'https') {
-    send_text(400, 'unsupported scheme');
-}
-
-$host = strtolower((string) $parsed['host']);
-if ($host === 'localhost' || $host === '127.0.0.1' || $host === '::1') {
-    send_text(403, 'forbidden host');
-}
-
 // Optional allowlist env var: CHGRID_MEDIA_PROXY_ALLOWLIST=dropbox.com,example.com
 $allowlistEnv = getenv('CHGRID_MEDIA_PROXY_ALLOWLIST');
-if ($allowlistEnv !== false && trim($allowlistEnv) !== '') {
-    $allowed = false;
-    $parts = explode(',', (string) $allowlistEnv);
-    foreach ($parts as $part) {
-        $suffix = strtolower(trim((string) $part));
-        if ($suffix === '') {
-            continue;
-        }
-        if (host_matches_suffix($host, $suffix)) {
-            $allowed = true;
-            break;
-        }
-    }
-    if (!$allowed) {
-        send_text(403, 'host not allowed');
-    }
-}
-
-// Basic SSRF guard for IPv4.
-$resolved = @gethostbynamel($host);
-if ($resolved === false || count($resolved) === 0) {
-    send_text(502, 'dns resolution failed');
-}
-foreach ($resolved as $ip) {
-    $ok = filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
-    if ($ok === false) {
-        send_text(403, 'resolved ip not allowed');
-    }
-}
+$allowlistSuffixes = parse_allowlist_suffixes($allowlistEnv);
 
 if (!function_exists('curl_init')) {
     send_text(500, 'curl extension is required');
@@ -210,9 +371,28 @@ if ($range !== '') {
     $requestHeaders[] = 'Range: ' . $range;
 }
 
-curl_setopt($ch, CURLOPT_URL, $rawUrl);
-curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+$resolveError = '';
+$finalUrl = resolve_safe_redirect_chain($rawUrl, $allowlistSuffixes, $requestHeaders, 5, $resolveError);
+if ($finalUrl === '') {
+    if (strpos($resolveError, 'invalid url') === 0 || strpos($resolveError, 'unsupported scheme') === 0) {
+        send_text(400, $resolveError);
+    }
+    if (
+        strpos($resolveError, 'forbidden host') === 0 ||
+        strpos($resolveError, 'host not allowed') === 0 ||
+        strpos($resolveError, 'resolved ip not allowed') === 0
+    ) {
+        send_text(403, $resolveError);
+    }
+    if (strpos($resolveError, 'proxy init failed') === 0) {
+        send_text(500, $resolveError);
+    }
+    send_text(502, $resolveError !== '' ? $resolveError : 'redirect resolution failed');
+}
+
+curl_setopt($ch, CURLOPT_URL, $finalUrl);
+curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+curl_setopt($ch, CURLOPT_MAXREDIRS, 0);
 curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
 curl_setopt($ch, CURLOPT_TIMEOUT, 0);
 curl_setopt($ch, CURLOPT_HEADER, false);

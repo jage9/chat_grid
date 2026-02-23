@@ -48,7 +48,7 @@ type MessageHandlerDeps = {
   playRemoteSpatialStepOrTeleport: (url: string, peerX: number, peerY: number) => void;
   TELEPORT_SOUND_URL: string;
   TELEPORT_START_SOUND_URL: string;
-  audioLayers: { world: boolean };
+  getAudioLayers: () => { world: boolean };
   pushChatMessage: (message: string) => void;
   classifySystemMessageSound: (message: string) => 'logon' | 'logout' | 'notify' | null;
   SYSTEM_SOUND_URLS: { logon: string; logout: string; notify: string };
@@ -138,7 +138,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         if (peer) {
           const movementDelta = Math.hypot(message.x - prevX, message.y - prevY);
           const soundUrl = movementDelta > 1.5 ? deps.TELEPORT_START_SOUND_URL : deps.randomFootstepUrl();
-          if (deps.audioLayers.world) {
+          if (deps.getAudioLayers().world) {
             deps.playRemoteSpatialStepOrTeleport(soundUrl, peer.x, peer.y);
           }
         }
@@ -243,7 +243,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
       case 'item_use_sound': {
         const soundUrl = deps.resolveIncomingSoundUrl(message.sound);
         if (!soundUrl) break;
-        if (deps.audioLayers.world) {
+        if (deps.getAudioLayers().world) {
           deps.playIncomingItemUseSound(soundUrl, message.x, message.y);
         }
         break;

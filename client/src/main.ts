@@ -1476,7 +1476,7 @@ const onAppMessage = createOnMessageHandler({
   },
   TELEPORT_SOUND_URL,
   TELEPORT_START_SOUND_URL,
-  audioLayers,
+  getAudioLayers: () => audioLayers,
   pushChatMessage,
   classifySystemMessageSound,
   SYSTEM_SOUND_URLS,
