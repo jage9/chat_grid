@@ -113,24 +113,47 @@ const PIANO_SHARP_KEY_MIDI_BY_CODE: Record<string, number> = {
   BracketRight: 78,
 };
 const PIANO_DEMO_STEPS_F_MAJOR: Array<{ midi: number; durationMs: number; gapMs: number }> = [
-  { midi: 65, durationMs: 220, gapMs: 40 }, // F4
-  { midi: 69, durationMs: 220, gapMs: 40 }, // A4
-  { midi: 72, durationMs: 280, gapMs: 60 }, // C5
-  { midi: 74, durationMs: 220, gapMs: 40 }, // D5
-  { midi: 72, durationMs: 220, gapMs: 40 }, // C5
-  { midi: 69, durationMs: 260, gapMs: 60 }, // A4
-  { midi: 70, durationMs: 220, gapMs: 40 }, // Bb4
-  { midi: 69, durationMs: 220, gapMs: 40 }, // A4
-  { midi: 67, durationMs: 260, gapMs: 60 }, // G4
-  { midi: 65, durationMs: 360, gapMs: 90 }, // F4
-  { midi: 67, durationMs: 220, gapMs: 40 }, // G4
-  { midi: 69, durationMs: 220, gapMs: 40 }, // A4
-  { midi: 70, durationMs: 220, gapMs: 40 }, // Bb4
-  { midi: 72, durationMs: 280, gapMs: 60 }, // C5
-  { midi: 70, durationMs: 220, gapMs: 40 }, // Bb4
-  { midi: 69, durationMs: 220, gapMs: 40 }, // A4
-  { midi: 67, durationMs: 260, gapMs: 60 }, // G4
-  { midi: 65, durationMs: 420, gapMs: 120 }, // F4
+  // "Yama no Ongakuka" / "Das Lied vom Musikanten" core melody in F major.
+  { midi: 65, durationMs: 240, gapMs: 40 }, // F4
+  { midi: 69, durationMs: 240, gapMs: 40 }, // A4
+  { midi: 72, durationMs: 240, gapMs: 60 }, // C5
+  { midi: 72, durationMs: 240, gapMs: 40 }, // C5
+  { midi: 70, durationMs: 240, gapMs: 40 }, // Bb4
+  { midi: 69, durationMs: 240, gapMs: 60 }, // A4
+  { midi: 67, durationMs: 240, gapMs: 40 }, // G4
+  { midi: 69, durationMs: 240, gapMs: 40 }, // A4
+  { midi: 65, durationMs: 240, gapMs: 60 }, // F4
+  { midi: 65, durationMs: 480, gapMs: 120 }, // F4 (held)
+  { midi: 69, durationMs: 240, gapMs: 40 }, // A4
+  { midi: 70, durationMs: 240, gapMs: 40 }, // Bb4
+  { midi: 72, durationMs: 240, gapMs: 60 }, // C5
+  { midi: 72, durationMs: 240, gapMs: 40 }, // C5
+  { midi: 74, durationMs: 240, gapMs: 40 }, // D5
+  { midi: 72, durationMs: 240, gapMs: 60 }, // C5
+  { midi: 70, durationMs: 240, gapMs: 40 }, // Bb4
+  { midi: 69, durationMs: 240, gapMs: 40 }, // A4
+  { midi: 67, durationMs: 240, gapMs: 60 }, // G4
+  { midi: 65, durationMs: 480, gapMs: 120 }, // F4 (held)
+  { midi: 72, durationMs: 240, gapMs: 40 }, // C5
+  { midi: 72, durationMs: 240, gapMs: 40 }, // C5
+  { midi: 74, durationMs: 240, gapMs: 60 }, // D5
+  { midi: 65, durationMs: 240, gapMs: 40 }, // F4
+  { midi: 65, durationMs: 240, gapMs: 40 }, // F4
+  { midi: 65, durationMs: 240, gapMs: 60 }, // F4
+  { midi: 67, durationMs: 240, gapMs: 40 }, // G4
+  { midi: 65, durationMs: 240, gapMs: 40 }, // F4
+  { midi: 64, durationMs: 240, gapMs: 60 }, // E4
+  { midi: 65, durationMs: 480, gapMs: 120 }, // F4 (held)
+  { midi: 69, durationMs: 240, gapMs: 40 }, // A4
+  { midi: 70, durationMs: 240, gapMs: 40 }, // Bb4
+  { midi: 72, durationMs: 240, gapMs: 60 }, // C5
+  { midi: 72, durationMs: 240, gapMs: 40 }, // C5
+  { midi: 74, durationMs: 240, gapMs: 40 }, // D5
+  { midi: 72, durationMs: 240, gapMs: 60 }, // C5
+  { midi: 70, durationMs: 240, gapMs: 40 }, // Bb4
+  { midi: 69, durationMs: 240, gapMs: 40 }, // A4
+  { midi: 67, durationMs: 240, gapMs: 60 }, // G4
+  { midi: 65, durationMs: 520, gapMs: 140 }, // F4 (held, phrase ending)
 ];
 
 declare global {
