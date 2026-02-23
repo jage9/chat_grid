@@ -80,7 +80,6 @@ const HEARTBEAT_INTERVAL_MS = 10_000;
 const RECONNECT_DELAY_MS = 5_000;
 const RECONNECT_MAX_ATTEMPTS = 3;
 const AUDIO_SUBSCRIPTION_REFRESH_MS = 500;
-const AUTO_RECONNECT_AFTER_RELOAD_KEY = 'chatGridAutoReconnectAfterReload';
 
 declare global {
   interface Window {
@@ -589,13 +588,8 @@ function handleSignalingStatus(message: string): void {
   pushChatMessage(message);
 }
 
-/** Performs cache-busted navigation and marks session for one-time auto-connect. */
+/** Performs cache-busted navigation so the browser loads the newest client bundle. */
 function reloadClientForVersion(version: string): void {
-  try {
-    sessionStorage.setItem(AUTO_RECONNECT_AFTER_RELOAD_KEY, '1');
-  } catch {
-    // Ignore sessionStorage failures.
-  }
   const nextUrl = new URL(window.location.href);
   nextUrl.searchParams.set('v', version || 'unknown');
   nextUrl.searchParams.set('t', String(Date.now()));
@@ -2291,21 +2285,3 @@ if (storedNickname) {
 updateConnectAvailability();
 updateDeviceSummary();
 updateStatus('Welcome to the Chat Grid. Press the Settings button to configure your audio, then Connect to join the grid.');
-try {
-  if (sessionStorage.getItem(AUTO_RECONNECT_AFTER_RELOAD_KEY) === '1') {
-    sessionStorage.removeItem(AUTO_RECONNECT_AFTER_RELOAD_KEY);
-    window.setTimeout(() => {
-      const effectiveNickname = sanitizeName(dom.preconnectNickname.value || storedNickname);
-      if (effectiveNickname) {
-        dom.preconnectNickname.value = effectiveNickname;
-        state.player.nickname = effectiveNickname;
-        updateConnectAvailability();
-        void connect();
-        return;
-      }
-      updateConnectAvailability();
-    }, 250);
-  }
-} catch {
-  // Ignore sessionStorage failures.
-}
