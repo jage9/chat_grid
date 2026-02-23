@@ -1110,7 +1110,7 @@ function handleMovement(): void {
   persistPlayerPosition();
   state.player.lastMoveTime = now;
   void refreshAudioSubscriptions(true);
-  void audio.playSample(randomFootstepUrl(), FOOTSTEP_GAIN, 40);
+  void audio.playSample(randomFootstepUrl(), FOOTSTEP_GAIN, 100);
   signaling.send({ type: 'update_position', x: nextX, y: nextY });
 
   const namesOnTile = getPeerNamesAtPosition(nextX, nextY);

@@ -1,5 +1,7 @@
 import type { GameState } from '../state/gameState';
 
+const WELCOME_TIMEOUT_MS = 8_000;
+
 type DomRefs = {
   preconnectNickname: HTMLInputElement;
   nicknameContainer: HTMLDivElement;
@@ -103,6 +105,16 @@ export async function runConnectFlow(deps: ConnectFlowDeps): Promise<void> {
 
   try {
     await deps.signalingConnect(deps.onMessage);
+    window.setTimeout(() => {
+      if (deps.state.running || !deps.mediaIsConnecting()) {
+        return;
+      }
+      deps.mediaStopLocalMedia();
+      deps.signalingDisconnect();
+      deps.mediaSetConnecting(false);
+      deps.updateConnectAvailability();
+      deps.updateStatus('Connect failed. Timed out waiting for server welcome.');
+    }, WELCOME_TIMEOUT_MS);
   } catch (error) {
     console.error(error);
     deps.mediaStopLocalMedia();
