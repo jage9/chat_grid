@@ -40,6 +40,7 @@ type InstrumentPreset = {
   filter?: { type: BiquadFilterType; frequency: number; q?: number };
   gain: number;
   sustainRatio?: number;
+  holdSustain?: boolean;
   releaseScale?: number;
   vibrato?: { rateHz: number; depthCents: number };
 };
@@ -53,6 +54,7 @@ const PRESETS: Record<Exclude<PianoInstrumentId, 'drum_kit'>, InstrumentPreset> 
     filter: { type: 'lowpass', frequency: 5200, q: 0.7 },
     gain: 0.32,
     sustainRatio: 0.5,
+    holdSustain: false,
     releaseScale: 0.9,
   },
   electric_piano: {
@@ -63,6 +65,7 @@ const PRESETS: Record<Exclude<PianoInstrumentId, 'drum_kit'>, InstrumentPreset> 
     filter: { type: 'lowpass', frequency: 4200, q: 0.8 },
     gain: 0.3,
     sustainRatio: 0.52,
+    holdSustain: false,
     releaseScale: 0.8,
   },
   guitar: {
@@ -73,6 +76,7 @@ const PRESETS: Record<Exclude<PianoInstrumentId, 'drum_kit'>, InstrumentPreset> 
     filter: { type: 'lowpass', frequency: 3200, q: 0.9 },
     gain: 0.24,
     sustainRatio: 0.48,
+    holdSustain: false,
     releaseScale: 0.7,
   },
   organ: {
@@ -84,6 +88,7 @@ const PRESETS: Record<Exclude<PianoInstrumentId, 'drum_kit'>, InstrumentPreset> 
     filter: { type: 'lowpass', frequency: 6500, q: 0.6 },
     gain: 0.18,
     sustainRatio: 0.72,
+    holdSustain: true,
     releaseScale: 1.4,
   },
   bass: {
@@ -94,6 +99,7 @@ const PRESETS: Record<Exclude<PianoInstrumentId, 'drum_kit'>, InstrumentPreset> 
     filter: { type: 'lowpass', frequency: 1500, q: 1.1 },
     gain: 0.28,
     sustainRatio: 0.45,
+    holdSustain: false,
     releaseScale: 0.9,
   },
   violin: {
@@ -104,6 +110,7 @@ const PRESETS: Record<Exclude<PianoInstrumentId, 'drum_kit'>, InstrumentPreset> 
     filter: { type: 'lowpass', frequency: 3600, q: 1.0 },
     gain: 0.24,
     sustainRatio: 0.68,
+    holdSustain: true,
     releaseScale: 1.5,
     vibrato: { rateHz: 5.7, depthCents: 12 },
   },
@@ -115,6 +122,7 @@ const PRESETS: Record<Exclude<PianoInstrumentId, 'drum_kit'>, InstrumentPreset> 
     filter: { type: 'lowpass', frequency: 5400, q: 0.9 },
     gain: 0.2,
     sustainRatio: 0.6,
+    holdSustain: true,
     releaseScale: 1,
     vibrato: { rateHz: 6.8, depthCents: 9 },
   },
@@ -126,6 +134,7 @@ const PRESETS: Record<Exclude<PianoInstrumentId, 'drum_kit'>, InstrumentPreset> 
     filter: { type: 'lowpass', frequency: 3300, q: 1.05 },
     gain: 0.22,
     sustainRatio: 0.62,
+    holdSustain: true,
     releaseScale: 0.92,
     vibrato: { rateHz: 5.1, depthCents: 5 },
   },
@@ -137,6 +146,7 @@ const PRESETS: Record<Exclude<PianoInstrumentId, 'drum_kit'>, InstrumentPreset> 
     filter: { type: 'lowpass', frequency: 5200, q: 1.2 },
     gain: 0.22,
     sustainRatio: 0.62,
+    holdSustain: true,
     releaseScale: 0.65,
   },
 };
@@ -292,8 +302,14 @@ export class PianoSynth {
     voiceGain.gain.setValueAtTime(0.0001, now);
     const peakGain = Math.max(0.0001, preset.gain * spatialMix.gain);
     const sustainGain = Math.max(0.0001, peakGain * (preset.sustainRatio ?? 0.55));
+    const holdsSustain = preset.holdSustain !== false;
     voiceGain.gain.exponentialRampToValueAtTime(peakGain, now + attackSeconds);
-    voiceGain.gain.exponentialRampToValueAtTime(sustainGain, now + attackSeconds + decaySeconds * 0.6);
+    if (holdsSustain) {
+      voiceGain.gain.exponentialRampToValueAtTime(sustainGain, now + attackSeconds + decaySeconds * 0.6);
+    } else {
+      // Struck/plucked timbres naturally decay even if the key remains held.
+      voiceGain.gain.exponentialRampToValueAtTime(0.0001, now + attackSeconds + decaySeconds);
+    }
 
     let tailNode: AudioNode = voiceGain;
     if (preset.filter) {
