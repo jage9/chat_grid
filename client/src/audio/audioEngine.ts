@@ -13,6 +13,7 @@ export type SpatialPeerRuntime = {
   nickname: string;
   x: number;
   y: number;
+  listenGain?: number;
   gain?: GainNode;
   panner?: StereoPannerNode;
   audioElement?: HTMLAudioElement;
@@ -297,8 +298,9 @@ export class AudioEngine {
         nearFieldGain: 1,
       });
       const gainValue = mix?.gain ?? 0;
+      const listenGain = Number.isFinite(peer.listenGain) ? Math.max(0, peer.listenGain as number) : 1;
       const panValue = mix?.pan ?? 0;
-      peer.gain.gain.linearRampToValueAtTime(gainValue, this.audioCtx.currentTime + 0.1);
+      peer.gain.gain.linearRampToValueAtTime(gainValue * listenGain, this.audioCtx.currentTime + 0.1);
       if (peer.panner) {
         const resolvedPan = this.outputMode === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
         peer.panner.pan.setValueAtTime(resolvedPan, this.audioCtx.currentTime);

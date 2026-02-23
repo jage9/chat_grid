@@ -9,6 +9,7 @@ const AUDIO_OUTPUT_MODE_STORAGE_KEY = 'chatGridAudioOutputMode';
 const AUDIO_LAYER_STATE_STORAGE_KEY = 'chatGridAudioLayers';
 const MIC_INPUT_GAIN_STORAGE_KEY = 'chatGridMicInputGain';
 const MASTER_VOLUME_STORAGE_KEY = 'chatGridMasterVolume';
+const PEER_LISTEN_GAINS_STORAGE_KEY = 'chatGridPeerListenGains';
 const NICKNAME_STORAGE_KEY = 'spatialChatNickname';
 
 type DevicePreference = {
@@ -81,6 +82,27 @@ export class SettingsStore {
 
   saveMasterVolume(value: number): void {
     localStorage.setItem(MASTER_VOLUME_STORAGE_KEY, String(value));
+  }
+
+  loadPeerListenGains(): Record<string, number> {
+    const raw = localStorage.getItem(PEER_LISTEN_GAINS_STORAGE_KEY);
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const normalized: Record<string, number> = {};
+      for (const [key, value] of Object.entries(parsed)) {
+        const numeric = Number(value);
+        if (!key || !Number.isFinite(numeric)) continue;
+        normalized[key] = numeric;
+      }
+      return normalized;
+    } catch {
+      return {};
+    }
+  }
+
+  savePeerListenGains(values: Record<string, number>): void {
+    localStorage.setItem(PEER_LISTEN_GAINS_STORAGE_KEY, JSON.stringify(values));
   }
 
   loadNickname(): string {

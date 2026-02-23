@@ -37,6 +37,10 @@
           "description": "Speak connected users"
         },
         {
+          "keys": "Shift+U",
+          "description": "List users alphabetically; Left/Right adjusts selected user volume"
+        },
+        {
           "keys": "Slash",
           "description": "Start chat"
         },

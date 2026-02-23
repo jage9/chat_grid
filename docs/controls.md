@@ -14,6 +14,7 @@ This document is the authoritative keymap for the client.
 - `L`: Locate nearest user
 - `Shift+L`: List users and teleport to selected user with `Enter`
 - `U`: Speak connected users
+- `Shift+U`: List users alphabetically
 - `N`: Edit nickname
 - `/`: Start chat
 - `,` / `.`: Previous/next message
@@ -68,6 +69,7 @@ This document is the authoritative keymap for the client.
 Applies to effect select, user/item list modes, item selection, item property list, and property option select.
 
 - `ArrowUp` / `ArrowDown`: Move selection
+- `ArrowLeft` / `ArrowRight` in user list: Lower/raise selected user listen volume (`0.5..4.0`)
 - `Enter`: Confirm selection
 - `Escape`: Exit/cancel
 - `Space`: Read tooltip/help for current option (where metadata is available)

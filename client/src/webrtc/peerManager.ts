@@ -41,6 +41,7 @@ export class PeerManager {
       nickname: userData.nickname ?? 'user...',
       x: userData.x ?? 20,
       y: userData.y ?? 20,
+      listenGain: 1,
       pc,
     };
 
@@ -143,6 +144,18 @@ export class PeerManager {
     const peer = this.peers.get(id);
     if (!peer) return;
     peer.nickname = nickname;
+  }
+
+  setPeerListenGain(id: string, gain: number): void {
+    const peer = this.peers.get(id);
+    if (!peer) return;
+    peer.listenGain = gain;
+  }
+
+  getPeerListenGain(id: string): number {
+    const peer = this.peers.get(id);
+    if (!peer) return 1;
+    return Number.isFinite(peer.listenGain) ? Math.max(0, peer.listenGain as number) : 1;
   }
 
   async setOutputDevice(deviceId: string): Promise<void> {

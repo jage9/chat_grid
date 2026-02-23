@@ -205,6 +205,7 @@ let heartbeatAwaitingPong = false;
 let reconnectInFlight = false;
 let activeServerInstanceId: string | null = null;
 let reloadScheduledForVersionMismatch = false;
+let peerListenGainByNickname = settings.loadPeerListenGains();
 let audioLayers: AudioLayerState = {
   voice: true,
   item: true,
@@ -487,6 +488,33 @@ function loadMasterVolume(): void {
 /** Persists master output volume to local storage. */
 function persistMasterVolume(value: number): void {
   settings.saveMasterVolume(value);
+}
+
+/** Normalizes nickname for local per-user listen-gain preference keys. */
+function peerListenGainKey(nickname: string): string {
+  return nickname.trim().toLowerCase();
+}
+
+/** Returns configured listen gain for a nickname (default 1.0). */
+function getPeerListenGainForNickname(nickname: string): number {
+  const key = peerListenGainKey(nickname);
+  const raw = peerListenGainByNickname[key];
+  if (!Number.isFinite(raw)) return 1;
+  return clampMicInputGain(raw);
+}
+
+/** Persists local listen gain preference for a nickname. */
+function setPeerListenGainForNickname(nickname: string, gain: number): void {
+  const key = peerListenGainKey(nickname);
+  peerListenGainByNickname = { ...peerListenGainByNickname, [key]: clampMicInputGain(gain) };
+  settings.savePeerListenGains(peerListenGainByNickname);
+}
+
+/** Applies stored listen-gain preferences to currently known peer runtimes. */
+function applyConfiguredPeerListenGains(): void {
+  for (const [peerId, peerState] of state.peers.entries()) {
+    peerManager.setPeerListenGain(peerId, getPeerListenGainForNickname(peerState.nickname));
+  }
 }
 
 /** Applies current layer toggles to peer voice, media streams, and item emitters. */
@@ -1308,6 +1336,7 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
     startHeartbeat();
   }
   await onAppMessage(message);
+  applyConfiguredPeerListenGains();
   if (restartAnnouncement) {
     pushChatMessage(restartAnnouncement);
     audio.sfxUiConfirm();
@@ -1440,6 +1469,30 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
       audio.sfxUiBlip();
       return;
     }
+    case 'listUsersAlphabetical':
+      if (state.peers.size === 0) {
+        updateStatus('No users to list.');
+        audio.sfxUiCancel();
+        return;
+      }
+      state.sortedPeerIds = Array.from(state.peers.entries())
+        .sort((a, b) => a[1].nickname.localeCompare(b[1].nickname, undefined, { sensitivity: 'base' }))
+        .map(([id]) => id);
+      state.listIndex = 0;
+      state.mode = 'listUsers';
+      {
+        const first = state.peers.get(state.sortedPeerIds[0]);
+        if (first) {
+          const userCount = state.sortedPeerIds.length;
+          const userLabelText = userCount === 1 ? 'user' : 'users';
+          const gain = getPeerListenGainForNickname(first.nickname);
+          updateStatus(
+            `${userCount} ${userLabelText}. ${first.nickname}, volume ${formatSteppedNumber(gain, MIC_INPUT_GAIN_STEP)}.`,
+          );
+        }
+      }
+      audio.sfxUiBlip();
+      return;
     case 'addItem': {
       const itemTypeSequence = getItemTypeSequence();
       if (itemTypeSequence.length === 0) {
@@ -1813,13 +1866,32 @@ function handleListModeInput(code: string, key: string): void {
     return;
   }
 
+  if (code === 'ArrowLeft' || code === 'ArrowRight') {
+    const peer = state.peers.get(state.sortedPeerIds[state.listIndex]);
+    if (!peer) return;
+    const current = getPeerListenGainForNickname(peer.nickname);
+    const delta = code === 'ArrowRight' ? MIC_INPUT_GAIN_STEP : -MIC_INPUT_GAIN_STEP;
+    const attempted = snapNumberToStep(current + delta, MIC_INPUT_GAIN_STEP, MIC_CALIBRATION_MIN_GAIN);
+    const next = clampMicInputGain(attempted);
+    setPeerListenGainForNickname(peer.nickname, next);
+    peerManager.setPeerListenGain(peer.id, next);
+    updateStatus(`${peer.nickname} volume ${formatSteppedNumber(next, MIC_INPUT_GAIN_STEP)}.`);
+    if (Math.abs(next - current) < 1e-9 || Math.abs(next - attempted) > 1e-9) {
+      audio.sfxUiCancel();
+    } else {
+      audio.sfxUiBlip();
+    }
+    return;
+  }
+
   const control = handleListControlKey(code, key, state.sortedPeerIds, state.listIndex, (peerId) => state.peers.get(peerId)?.nickname ?? '');
   if (control.type === 'move') {
     state.listIndex = control.index;
     const peer = state.peers.get(state.sortedPeerIds[state.listIndex]);
     if (!peer) return;
+    const gain = getPeerListenGainForNickname(peer.nickname);
     updateStatus(
-      `${peer.nickname}, ${distanceDirectionPhrase(state.player.x, state.player.y, peer.x, peer.y)}, ${peer.x}, ${peer.y}`,
+      `${peer.nickname}, volume ${formatSteppedNumber(gain, MIC_INPUT_GAIN_STEP)}, ${distanceDirectionPhrase(state.player.x, state.player.y, peer.x, peer.y)}, ${peer.x}, ${peer.y}`,
     );
     if (control.reason === 'initial') {
       audio.sfxUiBlip();
