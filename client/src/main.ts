@@ -112,49 +112,19 @@ const PIANO_SHARP_KEY_MIDI_BY_CODE: Record<string, number> = {
   KeyP: 75,
   BracketRight: 78,
 };
-const PIANO_DEMO_STEPS_F_MAJOR: Array<{ midi: number; durationMs: number; gapMs: number }> = [
-  // "Yama no Ongakuka" / "Das Lied vom Musikanten" core melody in F major.
-  { midi: 65, durationMs: 240, gapMs: 40 }, // F4
-  { midi: 69, durationMs: 240, gapMs: 40 }, // A4
-  { midi: 72, durationMs: 240, gapMs: 60 }, // C5
-  { midi: 72, durationMs: 240, gapMs: 40 }, // C5
-  { midi: 70, durationMs: 240, gapMs: 40 }, // Bb4
-  { midi: 69, durationMs: 240, gapMs: 60 }, // A4
-  { midi: 67, durationMs: 240, gapMs: 40 }, // G4
-  { midi: 69, durationMs: 240, gapMs: 40 }, // A4
-  { midi: 65, durationMs: 240, gapMs: 60 }, // F4
-  { midi: 65, durationMs: 480, gapMs: 120 }, // F4 (held)
-  { midi: 69, durationMs: 240, gapMs: 40 }, // A4
-  { midi: 70, durationMs: 240, gapMs: 40 }, // Bb4
-  { midi: 72, durationMs: 240, gapMs: 60 }, // C5
-  { midi: 72, durationMs: 240, gapMs: 40 }, // C5
-  { midi: 74, durationMs: 240, gapMs: 40 }, // D5
-  { midi: 72, durationMs: 240, gapMs: 60 }, // C5
-  { midi: 70, durationMs: 240, gapMs: 40 }, // Bb4
-  { midi: 69, durationMs: 240, gapMs: 40 }, // A4
-  { midi: 67, durationMs: 240, gapMs: 60 }, // G4
-  { midi: 65, durationMs: 480, gapMs: 120 }, // F4 (held)
-  { midi: 72, durationMs: 240, gapMs: 40 }, // C5
-  { midi: 72, durationMs: 240, gapMs: 40 }, // C5
-  { midi: 74, durationMs: 240, gapMs: 60 }, // D5
-  { midi: 65, durationMs: 240, gapMs: 40 }, // F4
-  { midi: 65, durationMs: 240, gapMs: 40 }, // F4
-  { midi: 65, durationMs: 240, gapMs: 60 }, // F4
-  { midi: 67, durationMs: 240, gapMs: 40 }, // G4
-  { midi: 65, durationMs: 240, gapMs: 40 }, // F4
-  { midi: 64, durationMs: 240, gapMs: 60 }, // E4
-  { midi: 65, durationMs: 480, gapMs: 120 }, // F4 (held)
-  { midi: 69, durationMs: 240, gapMs: 40 }, // A4
-  { midi: 70, durationMs: 240, gapMs: 40 }, // Bb4
-  { midi: 72, durationMs: 240, gapMs: 60 }, // C5
-  { midi: 72, durationMs: 240, gapMs: 40 }, // C5
-  { midi: 74, durationMs: 240, gapMs: 40 }, // D5
-  { midi: 72, durationMs: 240, gapMs: 60 }, // C5
-  { midi: 70, durationMs: 240, gapMs: 40 }, // Bb4
-  { midi: 69, durationMs: 240, gapMs: 40 }, // A4
-  { midi: 67, durationMs: 240, gapMs: 60 }, // G4
-  { midi: 65, durationMs: 520, gapMs: 140 }, // F4 (held, phrase ending)
-];
+type PianoDemoEvent = {
+  t: number;
+  keyId: string;
+  midi: number;
+  on: boolean;
+  instrument?: string;
+  voiceMode?: 'mono' | 'poly';
+  attack?: number;
+  decay?: number;
+  release?: number;
+  brightness?: number;
+  emitRange?: number;
+};
 
 declare global {
   interface Window {
@@ -320,7 +290,8 @@ let activePianoMonophonicKey: string | null = null;
 let activePianoDemoRunToken = 0;
 let activePianoDemoItemId: string | null = null;
 const activePianoDemoTimeoutIds: number[] = [];
-const activePianoDemoNotes = new Map<string, number>();
+const activePianoDemoNotes = new Map<string, { runtimeKey: string; midi: number }>();
+let pianoDemoEvents: PianoDemoEvent[] = [];
 const activeRemotePianoKeys = new Set<string>();
 let pianoPreviewTimeoutId: number | null = null;
 let activeTeleport:
@@ -375,6 +346,7 @@ loadMicInputGain();
 loadMasterVolume();
 void loadHelp();
 void loadPianoHelp();
+void loadPianoDemo();
 void loadChangelog();
 
 /** Fetches a required DOM element and casts it to the requested element type. */
@@ -488,6 +460,45 @@ async function loadPianoHelp(): Promise<void> {
     pianoHelpViewerLines = buildHelpLines(help);
   } catch {
     // Keep piano help unavailable if loading fails.
+  }
+}
+
+/** Loads piano demo note events from `piano_demo.json` for Enter-key demo playback. */
+async function loadPianoDemo(): Promise<void> {
+  try {
+    const response = await fetch(withBase('piano_demo.json'), { cache: 'no-store' });
+    if (!response.ok) {
+      return;
+    }
+    const data = (await response.json()) as { recording?: unknown };
+    const rawEvents = Array.isArray(data.recording) ? data.recording : [];
+    const parsed: PianoDemoEvent[] = [];
+    for (const entry of rawEvents) {
+      if (!entry || typeof entry !== 'object') continue;
+      const record = entry as Record<string, unknown>;
+      const t = Number(record.t);
+      const midi = Number(record.midi);
+      const keyId = String(record.keyId ?? '').trim();
+      const on = record.on === true;
+      if (!Number.isFinite(t) || !Number.isFinite(midi) || !keyId) continue;
+      parsed.push({
+        t: Math.max(0, Math.round(t)),
+        keyId: keyId.slice(0, 32),
+        midi: Math.max(0, Math.min(127, Math.round(midi))),
+        on,
+        instrument: typeof record.instrument === 'string' ? record.instrument : undefined,
+        voiceMode: record.voiceMode === 'mono' ? 'mono' : record.voiceMode === 'poly' ? 'poly' : undefined,
+        attack: Number.isFinite(Number(record.attack)) ? Math.max(0, Math.min(100, Math.round(Number(record.attack)))) : undefined,
+        decay: Number.isFinite(Number(record.decay)) ? Math.max(0, Math.min(100, Math.round(Number(record.decay)))) : undefined,
+        release: Number.isFinite(Number(record.release)) ? Math.max(0, Math.min(100, Math.round(Number(record.release)))) : undefined,
+        brightness: Number.isFinite(Number(record.brightness)) ? Math.max(0, Math.min(100, Math.round(Number(record.brightness)))) : undefined,
+        emitRange: Number.isFinite(Number(record.emitRange)) ? Math.max(5, Math.min(20, Math.round(Number(record.emitRange)))) : undefined,
+      });
+    }
+    parsed.sort((a, b) => a.t - b.t);
+    pianoDemoEvents = parsed;
+  } catch {
+    // Demo remains unavailable if loading/parsing fails.
   }
 }
 
@@ -1035,13 +1046,13 @@ function stopPianoDemo(sendNoteOff = true): boolean {
     }
   }
   const itemId = activePianoDemoItemId;
-  for (const [keyId, midi] of Array.from(activePianoDemoNotes.entries())) {
-    pianoSynth.noteOff(keyId);
-    if (sendNoteOff && itemId && Number.isFinite(midi)) {
-      signaling.send({ type: 'item_piano_note', itemId, keyId, midi, on: false });
+  for (const [logicalKey, note] of Array.from(activePianoDemoNotes.entries())) {
+    pianoSynth.noteOff(note.runtimeKey);
+    if (sendNoteOff && itemId && Number.isFinite(note.midi)) {
+      signaling.send({ type: 'item_piano_note', itemId, keyId: note.runtimeKey, midi: note.midi, on: false });
     }
+    activePianoDemoNotes.delete(logicalKey);
   }
-  activePianoDemoNotes.clear();
   activePianoDemoItemId = null;
   return hadActiveDemo;
 }
@@ -1049,31 +1060,46 @@ function stopPianoDemo(sendNoteOff = true): boolean {
 /** Starts the built-in piano demo sequence from the beginning. */
 function startPianoDemo(item: WorldItem, itemId: string): void {
   stopPianoDemo(true);
+  if (pianoDemoEvents.length === 0) {
+    updateStatus('demo unavailable');
+    audio.sfxUiCancel();
+    return;
+  }
   const runToken = activePianoDemoRunToken;
   activePianoDemoItemId = itemId;
-  let atMs = 0;
-  for (let index = 0; index < PIANO_DEMO_STEPS_F_MAJOR.length; index += 1) {
-    const step = PIANO_DEMO_STEPS_F_MAJOR[index]!;
-    const startTimeoutId = window.setTimeout(() => {
+  for (let index = 0; index < pianoDemoEvents.length; index += 1) {
+    const event = pianoDemoEvents[index]!;
+    const timeoutId = window.setTimeout(() => {
       if (runToken !== activePianoDemoRunToken) return;
       const liveItem = state.items.get(itemId);
       if (!liveItem || liveItem.type !== 'piano') return;
-      const liveConfig = getPianoParams(liveItem);
-      const midi = Math.max(0, Math.min(127, step.midi + liveConfig.octave * 12));
-      const keyId = `__piano_demo_${runToken}_${index}`;
-      activePianoDemoNotes.set(keyId, midi);
-      playLocalPianoNote(liveItem, itemId, keyId, midi, liveConfig);
-      const stopTimeoutId = window.setTimeout(() => {
-        if (runToken !== activePianoDemoRunToken) return;
-        if (!activePianoDemoNotes.has(keyId)) return;
-        activePianoDemoNotes.delete(keyId);
-        pianoSynth.noteOff(keyId);
-        signaling.send({ type: 'item_piano_note', itemId, keyId, midi, on: false });
-      }, step.durationMs);
-      activePianoDemoTimeoutIds.push(stopTimeoutId);
-    }, atMs);
-    activePianoDemoTimeoutIds.push(startTimeoutId);
-    atMs += step.durationMs + step.gapMs;
+      const baseConfig = getPianoParams(liveItem);
+      const config = {
+        instrument: event.instrument ? normalizePianoInstrument(event.instrument) : baseConfig.instrument,
+        voiceMode: event.voiceMode ?? baseConfig.voiceMode,
+        octave: 0,
+        attack: event.attack ?? baseConfig.attack,
+        decay: event.decay ?? baseConfig.decay,
+        release: event.release ?? baseConfig.release,
+        brightness: event.brightness ?? baseConfig.brightness,
+        emitRange: event.emitRange ?? baseConfig.emitRange,
+      } as ReturnType<typeof getPianoParams>;
+      const logicalKey = event.keyId;
+      const runtimeKey = `__piano_demo_${logicalKey}`;
+      if (event.on) {
+        if (activePianoDemoNotes.has(logicalKey)) return;
+        activePianoDemoNotes.set(logicalKey, { runtimeKey, midi: event.midi });
+        playLocalPianoNote(liveItem, itemId, runtimeKey, event.midi, config);
+      } else {
+        const active = activePianoDemoNotes.get(logicalKey);
+        if (active) {
+          activePianoDemoNotes.delete(logicalKey);
+          pianoSynth.noteOff(active.runtimeKey);
+          signaling.send({ type: 'item_piano_note', itemId, keyId: active.runtimeKey, midi: active.midi, on: false });
+        }
+      }
+    }, event.t);
+    activePianoDemoTimeoutIds.push(timeoutId);
   }
 }
 
