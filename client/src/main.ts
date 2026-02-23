@@ -80,6 +80,8 @@ const HEARTBEAT_INTERVAL_MS = 10_000;
 const RECONNECT_DELAY_MS = 5_000;
 const RECONNECT_MAX_ATTEMPTS = 3;
 const AUDIO_SUBSCRIPTION_REFRESH_MS = 500;
+const TELEPORT_SQUARES_PER_SECOND = 20;
+const TELEPORT_SYNC_INTERVAL_MS = 100;
 
 declare global {
   interface Window {
@@ -213,10 +215,25 @@ let audioLayers: AudioLayerState = {
   world: true,
 };
 let lastSubscriptionRefreshAt = 0;
-let lastSubscriptionRefreshX = state.player.x;
-let lastSubscriptionRefreshY = state.player.y;
+let lastSubscriptionRefreshTileX = Math.round(state.player.x);
+let lastSubscriptionRefreshTileY = Math.round(state.player.y);
 let subscriptionRefreshInFlight = false;
 let subscriptionRefreshPending = false;
+let activeTeleport:
+  | {
+      startX: number;
+      startY: number;
+      targetX: number;
+      targetY: number;
+      startedAtMs: number;
+      durationMs: number;
+      lastStepAtMs: number;
+      lastSyncAtMs: number;
+      lastSentX: number;
+      lastSentY: number;
+      completionStatus: string;
+    }
+  | null = null;
 
 const signalingProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const signalingUrl = `${signalingProtocol}://${window.location.host}/ws`;
@@ -544,7 +561,9 @@ async function applyAudioLayerState(): Promise<void> {
 async function refreshAudioSubscriptions(force = false): Promise<void> {
   if (!state.running) return;
   const now = Date.now();
-  const moved = state.player.x !== lastSubscriptionRefreshX || state.player.y !== lastSubscriptionRefreshY;
+  const tileX = Math.round(state.player.x);
+  const tileY = Math.round(state.player.y);
+  const moved = tileX !== lastSubscriptionRefreshTileX || tileY !== lastSubscriptionRefreshTileY;
   if (!force && !moved && now - lastSubscriptionRefreshAt < AUDIO_SUBSCRIPTION_REFRESH_MS) {
     return;
   }
@@ -554,8 +573,8 @@ async function refreshAudioSubscriptions(force = false): Promise<void> {
   }
   subscriptionRefreshInFlight = true;
   lastSubscriptionRefreshAt = now;
-  lastSubscriptionRefreshX = state.player.x;
-  lastSubscriptionRefreshY = state.player.y;
+  lastSubscriptionRefreshTileX = tileX;
+  lastSubscriptionRefreshTileY = tileY;
   const listenerPosition = { x: state.player.x, y: state.player.y };
   try {
     await radioRuntime.sync(state.items.values(), listenerPosition);
@@ -1070,9 +1089,76 @@ function randomFootstepUrl(): string {
   return FOOTSTEP_SOUND_URLS[Math.floor(Math.random() * FOOTSTEP_SOUND_URLS.length)];
 }
 
+/** Starts animated teleport movement toward a target tile at fixed squares-per-second pace. */
+function startTeleportTo(targetX: number, targetY: number, completionStatus: string): void {
+  const startX = state.player.x;
+  const startY = state.player.y;
+  const distance = Math.hypot(targetX - startX, targetY - startY);
+  const durationMs = Math.max(1, (distance / TELEPORT_SQUARES_PER_SECOND) * 1000);
+  const nowMs = performance.now();
+  activeTeleport = {
+    startX,
+    startY,
+    targetX,
+    targetY,
+    startedAtMs: nowMs,
+    durationMs,
+    lastStepAtMs: nowMs,
+    lastSyncAtMs: nowMs,
+    lastSentX: Math.round(startX),
+    lastSentY: Math.round(startY),
+    completionStatus,
+  };
+  state.keysPressed.ArrowUp = false;
+  state.keysPressed.ArrowDown = false;
+  state.keysPressed.ArrowLeft = false;
+  state.keysPressed.ArrowRight = false;
+  lastWallCollisionDirection = null;
+}
+
+/** Advances active teleport animation, syncs intermediate server positions, and finalizes arrival. */
+function updateTeleport(): void {
+  if (!activeTeleport) return;
+  const nowMs = performance.now();
+  const elapsedMs = nowMs - activeTeleport.startedAtMs;
+  const progress = Math.max(0, Math.min(1, elapsedMs / activeTeleport.durationMs));
+  state.player.x = activeTeleport.startX + (activeTeleport.targetX - activeTeleport.startX) * progress;
+  state.player.y = activeTeleport.startY + (activeTeleport.targetY - activeTeleport.startY) * progress;
+
+  if (nowMs - activeTeleport.lastStepAtMs >= MOVE_COOLDOWN_MS) {
+    activeTeleport.lastStepAtMs = nowMs;
+    void audio.playSample(randomFootstepUrl(), FOOTSTEP_GAIN, MOVE_COOLDOWN_MS);
+  }
+
+  if (nowMs - activeTeleport.lastSyncAtMs >= TELEPORT_SYNC_INTERVAL_MS) {
+    activeTeleport.lastSyncAtMs = nowMs;
+    const syncX = Math.round(state.player.x);
+    const syncY = Math.round(state.player.y);
+    if (syncX !== activeTeleport.lastSentX || syncY !== activeTeleport.lastSentY) {
+      activeTeleport.lastSentX = syncX;
+      activeTeleport.lastSentY = syncY;
+      signaling.send({ type: 'update_position', x: syncX, y: syncY });
+    }
+  }
+
+  if (progress < 1) {
+    return;
+  }
+  const completionStatus = activeTeleport.completionStatus;
+  state.player.x = activeTeleport.targetX;
+  state.player.y = activeTeleport.targetY;
+  signaling.send({ type: 'update_position', x: activeTeleport.targetX, y: activeTeleport.targetY });
+  activeTeleport = null;
+  persistPlayerPosition();
+  void refreshAudioSubscriptions(true);
+  void audio.playSample(TELEPORT_SOUND_URL, FOOTSTEP_GAIN);
+  updateStatus(completionStatus);
+}
+
 /** Main animation/update loop for movement, spatial audio, and rendering. */
 function gameLoop(): void {
   if (!state.running) return;
+  updateTeleport();
   handleMovement();
   void refreshAudioSubscriptions();
   audio.updateSpatialAudio(peerManager.getPeers(), { x: state.player.x, y: state.player.y });
@@ -1086,6 +1172,7 @@ function gameLoop(): void {
 /** Applies held-arrow movement with bounds checks, tile cues, and server position sync. */
 function handleMovement(): void {
   if (state.mode !== 'normal') return;
+  if (activeTeleport) return;
   const now = Date.now();
   if (now - state.player.lastMoveTime < MOVE_COOLDOWN_MS) return;
 
@@ -1299,6 +1386,9 @@ function disconnect(): void {
   subscriptionRefreshPending = false;
   subscriptionRefreshInFlight = false;
   lastSubscriptionRefreshAt = 0;
+  lastSubscriptionRefreshTileX = Math.round(state.player.x);
+  lastSubscriptionRefreshTileY = Math.round(state.player.y);
+  activeTeleport = null;
 }
 
 const onAppMessage = createOnMessageHandler({
@@ -1943,14 +2033,8 @@ function handleListModeInput(code: string, key: string): void {
       updateStatus('Already here.');
       return;
     }
-    state.player.x = entry.x;
-    state.player.y = entry.y;
-    persistPlayerPosition();
-    void refreshAudioSubscriptions(true);
-    void audio.playSample(TELEPORT_SOUND_URL, FOOTSTEP_GAIN);
-    signaling.send({ type: 'update_position', x: entry.x, y: entry.y });
     state.mode = 'normal';
-    updateStatus(`Moved to ${entry.nickname}.`);
+    startTeleportTo(entry.x, entry.y, `Moved to ${entry.nickname}.`);
     return;
   }
 
@@ -1991,14 +2075,8 @@ function handleListItemsModeInput(code: string, key: string): void {
       updateStatus('Already here.');
       return;
     }
-    state.player.x = item.x;
-    state.player.y = item.y;
-    persistPlayerPosition();
-    void refreshAudioSubscriptions(true);
-    void audio.playSample(TELEPORT_SOUND_URL, FOOTSTEP_GAIN);
-    signaling.send({ type: 'update_position', x: item.x, y: item.y });
     state.mode = 'normal';
-    updateStatus(`Moved to ${itemLabel(item)}.`);
+    startTeleportTo(item.x, item.y, `Moved to ${itemLabel(item)}.`);
     return;
   }
   if (control.type === 'cancel') {
@@ -2174,6 +2252,10 @@ function setupInputHandlers(): void {
     if (document.activeElement !== dom.canvas) return;
     if (event.altKey) return;
     if (event.ctrlKey && !isTextEditingMode(state.mode)) return;
+    if (activeTeleport && code.startsWith('Arrow')) {
+      event.preventDefault();
+      return;
+    }
 
     const isNativePasteShortcut = event.ctrlKey && isTextEditingMode(state.mode) && code === 'KeyV';
     if ((state.mode !== 'normal' || !code.startsWith('Arrow')) && !isNativePasteShortcut) {
