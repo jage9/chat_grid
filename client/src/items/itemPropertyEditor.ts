@@ -85,6 +85,69 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       deps.sfxUiBlip();
       return;
     }
+    if (code === 'ArrowLeft' || code === 'ArrowRight') {
+      const selectedKey = deps.state.itemPropertyKeys[deps.state.itemPropertyIndex];
+      if (!deps.isItemPropertyEditable(item, selectedKey)) {
+        deps.updateStatus(`${deps.itemPropertyLabel(selectedKey)} is not editable.`);
+        deps.sfxUiCancel();
+        return;
+      }
+      const options = deps.getItemPropertyOptionValues(selectedKey);
+      if (options && options.length > 0) {
+        const currentRaw = String(item.params[selectedKey] ?? '').trim().toLowerCase();
+        const currentIndex = Math.max(
+          0,
+          options.findIndex((option) => option.toLowerCase() === currentRaw),
+        );
+        const delta = code === 'ArrowRight' ? 1 : -1;
+        const nextIndex = (currentIndex + delta + options.length) % options.length;
+        const nextValue = options[nextIndex];
+        deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: nextValue } });
+        deps.updateStatus(nextValue);
+        deps.sfxUiBlip();
+        return;
+      }
+      const metadata = deps.getItemPropertyMetadata(item.type, selectedKey);
+      if (metadata?.valueType === 'boolean') {
+        let current = item.params[selectedKey];
+        if (typeof current !== 'boolean') {
+          current = selectedKey === 'enabled' ? item.params.enabled !== false : item.params[selectedKey] === true;
+        }
+        const nextValue = !current;
+        deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: nextValue } });
+        deps.updateStatus(nextValue ? 'on' : 'off');
+        deps.sfxUiBlip();
+        return;
+      }
+      if (metadata?.valueType === 'number') {
+        const range = metadata.range;
+        const step = range?.step && range.step > 0 ? range.step : 1;
+        const min = range?.min;
+        const max = range?.max;
+        const currentRaw = Number(item.params[selectedKey]);
+        const currentValue = Number.isFinite(currentRaw)
+          ? currentRaw
+          : Number.isFinite(min)
+            ? min
+            : 0;
+        const delta = code === 'ArrowRight' ? step : -step;
+        const anchor = Number.isFinite(min) ? min : 0;
+        const attempted = snapNumberToStep(currentValue + delta, step, anchor);
+        let nextValue = attempted;
+        if (Number.isFinite(min)) nextValue = Math.max(min, nextValue);
+        if (Number.isFinite(max)) nextValue = Math.min(max, nextValue);
+        deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: nextValue } });
+        deps.updateStatus(formatSteppedNumber(nextValue, step));
+        if (Math.abs(nextValue - currentValue) < 1e-9 || Math.abs(nextValue - attempted) > 1e-9) {
+          deps.sfxUiCancel();
+        } else {
+          deps.sfxUiBlip();
+        }
+        return;
+      }
+      deps.sfxUiCancel();
+      return;
+    }
     if (control.type === 'select') {
       const selectedKey = deps.state.itemPropertyKeys[deps.state.itemPropertyIndex];
       if (!deps.isItemPropertyEditable(item, selectedKey)) {
