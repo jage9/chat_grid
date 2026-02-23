@@ -87,7 +87,7 @@
         },
         {
           "keys": "Piano mode",
-          "description": "When using a piano: 1-9 (and 0 for the 10th slot) changes instrument, -/= changes octave, ASDFGHJKL;' plays C major notes, WETYUOP] plays sharps, Z starts/stops recording, X plays recording, C stops playback, Escape exits"
+          "description": "When using a piano: press question mark for piano help. 1-9 (and 0 for the 10th slot) changes instrument, -/= changes octave, ASDFGHJKL;' plays C major notes, WETYUOP] plays sharps, Z starts/stops recording, X plays recording, C stops playback, Escape exits"
         }
       ]
     },

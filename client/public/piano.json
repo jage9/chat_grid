@@ -1,0 +1,41 @@
+{
+  "sections": [
+    {
+      "title": "Piano Mode",
+      "items": [
+        {
+          "keys": "A S D F G H J K L ; '",
+          "description": "Play white keys (C major scale from C4)."
+        },
+        {
+          "keys": "W E T Y U O P ]",
+          "description": "Play sharp keys."
+        },
+        {
+          "keys": "1-9, 0",
+          "description": "Change instrument presets."
+        },
+        {
+          "keys": "- / =",
+          "description": "Shift octave down or up."
+        },
+        {
+          "keys": "Z",
+          "description": "Start or stop recording (up to 30 seconds)."
+        },
+        {
+          "keys": "X",
+          "description": "Play the saved recording."
+        },
+        {
+          "keys": "C",
+          "description": "Stop recording playback."
+        },
+        {
+          "keys": "Escape",
+          "description": "Exit piano mode."
+        }
+      ]
+    }
+  ]
+}

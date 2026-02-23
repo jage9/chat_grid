@@ -80,6 +80,7 @@ Applies to effect select, user/item list modes, item selection, item property li
 - `A S D F G H J K L ; '`: Play white keys (C major from C4 upward)
 - `W E T Y U O P ]`: Play sharps
 - Multiple keys can be held/played at once
+- `?`: Open piano-mode help viewer
 - `-` / `=`: Shift octave down/up
 - `Z`: Start/stop recording on this piano (max 30s)
 - `X`: Play back saved recording on this piano

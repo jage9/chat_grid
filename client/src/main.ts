@@ -49,6 +49,7 @@ import {
   getDirection,
   getNearestItem,
   getNearestPeer,
+  type GameMode,
   type WorldItem,
 } from './state/gameState';
 import {
@@ -188,6 +189,18 @@ type HelpData = {
   sections: HelpSection[];
 };
 
+/** Builds linearized help-view lines from sectioned help content. */
+function buildHelpLines(help: HelpData): string[] {
+  const lines: string[] = [];
+  for (const section of help.sections) {
+    lines.push(section.title);
+    for (const item of section.items) {
+      lines.push(`${item.keys}: ${item.description}`);
+    }
+  }
+  return lines;
+}
+
 const APP_VERSION = String(window.CHGRID_WEB_VERSION ?? '').trim();
 const DISPLAY_TIME_ZONE = resolveDisplayTimeZone();
 dom.appVersion.textContent = APP_VERSION
@@ -230,8 +243,11 @@ let internalClipboardText = '';
 let replaceTextOnNextType = false;
 let pendingEscapeDisconnect = false;
 let micGainLoopbackRestoreState: boolean | null = null;
+let mainHelpViewerLines: string[] = [];
+let pianoHelpViewerLines: string[] = [];
 let helpViewerLines: string[] = [];
 let helpViewerIndex = 0;
+let helpViewerReturnMode: GameMode = 'normal';
 let heartbeatTimerId: number | null = null;
 let heartbeatNextPingId = -1;
 let heartbeatAwaitingPong = false;
@@ -311,6 +327,7 @@ loadAudioLayerState();
 loadMicInputGain();
 loadMasterVolume();
 void loadHelp();
+void loadPianoHelp();
 void loadChangelog();
 
 /** Fetches a required DOM element and casts it to the requested element type. */
@@ -369,7 +386,7 @@ function setUpdatesExpanded(expanded: boolean): void {
 
 /** Renders help sections into the footer help container and builds linearized viewer lines. */
 function renderHelp(help: HelpData): void {
-  const lines: string[] = [];
+  const lines = buildHelpLines(help);
   dom.instructions.innerHTML = '';
   const heading = document.createElement('h2');
   heading.textContent = 'Help';
@@ -386,9 +403,9 @@ function renderHelp(help: HelpData): void {
       line.appendChild(keys);
       line.append(` ${item.description}`);
       dom.instructions.appendChild(line);
-      lines.push(`${item.keys}: ${item.description}`);
     }
   }
+  mainHelpViewerLines = lines;
   helpViewerLines = lines;
   helpViewerIndex = 0;
 }
@@ -407,6 +424,23 @@ async function loadHelp(): Promise<void> {
     renderHelp(help);
   } catch {
     // Keep existing/static help if loading fails.
+  }
+}
+
+/** Loads piano-mode help content from `piano.json` for in-mode help viewing. */
+async function loadPianoHelp(): Promise<void> {
+  try {
+    const response = await fetch(withBase('piano.json'), { cache: 'no-store' });
+    if (!response.ok) {
+      return;
+    }
+    const help = (await response.json()) as HelpData;
+    if (!Array.isArray(help.sections) || help.sections.length === 0) {
+      return;
+    }
+    pianoHelpViewerLines = buildHelpLines(help);
+  } catch {
+    // Keep piano help unavailable if loading fails.
   }
 }
 
@@ -887,7 +921,7 @@ async function startPianoUseMode(itemId: string): Promise<void> {
   activePianoMonophonicKey = null;
   state.mode = 'pianoUse';
   await audio.ensureContext();
-  updateStatus(`using ${item.title}, press escape to stop.`);
+  updateStatus(`using ${item.title}, press question mark for help.`);
   audio.sfxUiBlip();
 }
 
@@ -1112,12 +1146,14 @@ function stopRemotePianoNotesForSource(senderId: string, itemId: string): void {
 }
 
 /** Enters help-view mode and announces the first help line. */
-function openHelpViewer(): void {
-  if (helpViewerLines.length === 0) {
+function openHelpViewer(lines: string[], returnMode: GameMode = 'normal'): void {
+  if (lines.length === 0) {
     updateStatus('Help unavailable.');
     audio.sfxUiCancel();
     return;
   }
+  helpViewerLines = lines;
+  helpViewerReturnMode = returnMode;
   state.mode = 'helpView';
   helpViewerIndex = 0;
   updateStatus(helpViewerLines[helpViewerIndex]);
@@ -2236,7 +2272,7 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
         return;
       }
     case 'openHelp':
-      openHelpViewer();
+      openHelpViewer(mainHelpViewerLines);
       return;
     case 'openChat':
       state.mode = 'chat';
@@ -2305,7 +2341,7 @@ function handleHelpViewModeInput(code: string): void {
     return;
   }
   if (code === 'Escape') {
-    state.mode = 'normal';
+    state.mode = helpViewerReturnMode;
     updateStatus('Closed help.');
     audio.sfxUiCancel();
   }
@@ -2404,6 +2440,10 @@ function handleMicGainEditModeInput(code: string, key: string, ctrlKey: boolean)
 function handlePianoUseModeInput(code: string): void {
   if (code === 'Escape') {
     stopPianoUseMode(true);
+    return;
+  }
+  if (code === 'Slash') {
+    openHelpViewer(pianoHelpViewerLines, 'pianoUse');
     return;
   }
   const itemId = activePianoItemId;
