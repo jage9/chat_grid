@@ -965,6 +965,7 @@ function getPianoParams(item: WorldItem): {
     rawInstrument === 'bass' ||
     rawInstrument === 'violin' ||
     rawInstrument === 'synth_lead' ||
+    rawInstrument === 'brass' ||
     rawInstrument === 'nintendo' ||
     rawInstrument === 'drum_kit'
       ? rawInstrument
