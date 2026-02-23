@@ -991,7 +991,7 @@ function getPianoParams(item: WorldItem): {
 
 /** Returns default voice mode for a given piano instrument. */
 function defaultsVoiceModeForInstrument(instrument: PianoInstrumentId): 'mono' | 'poly' {
-  if (instrument === 'bass' || instrument === 'violin' || instrument === 'brass') return 'mono';
+  if (instrument === 'bass' || instrument === 'violin') return 'mono';
   return 'poly';
 }
 
@@ -1243,7 +1243,7 @@ async function previewPianoSettingChange(
     'preview',
     Math.max(0, Math.min(127, 60 + octave * 12)),
     instrument,
-    'poly',
+    current.voiceMode,
     attack,
     decay,
     release,
