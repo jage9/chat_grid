@@ -596,6 +596,12 @@ function reloadClientForVersion(version: string): void {
   window.location.replace(nextUrl.toString());
 }
 
+/** Returns true when this page load came from the version-mismatch reload flow. */
+function isVersionReloadedSession(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  return params.has('v') && params.has('t');
+}
+
 /** Appends a chat/system line to the bounded status history buffer. */
 function pushChatMessage(message: string): void {
   messageBuffer.push(message);
@@ -2284,4 +2290,8 @@ if (storedNickname) {
 }
 updateConnectAvailability();
 updateDeviceSummary();
-updateStatus('Welcome to the Chat Grid. Press the Settings button to configure your audio, then Connect to join the grid.');
+updateStatus(
+  isVersionReloadedSession()
+    ? 'Client updated, please reconnect.'
+    : 'Welcome to the Chat Grid. Press the Settings button to configure your audio, then Connect to join the grid.',
+);
