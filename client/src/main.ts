@@ -1916,7 +1916,9 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
     message.type === 'item_action_result' &&
     message.ok &&
     message.action === 'use' &&
-    typeof message.itemId === 'string'
+    typeof message.itemId === 'string' &&
+    typeof message.message === 'string' &&
+    message.message.toLowerCase().includes('begin playing')
   ) {
     const item = state.items.get(message.itemId);
     if (item?.type === 'piano') {
@@ -2416,17 +2418,14 @@ function handlePianoUseModeInput(code: string): void {
   }
   if (code === 'KeyZ') {
     signaling.send({ type: 'item_piano_recording', itemId, action: 'toggle_record' });
-    audio.sfxUiBlip();
     return;
   }
   if (code === 'KeyX') {
     signaling.send({ type: 'item_piano_recording', itemId, action: 'playback' });
-    audio.sfxUiBlip();
     return;
   }
   if (code === 'KeyC') {
     signaling.send({ type: 'item_piano_recording', itemId, action: 'stop_playback' });
-    audio.sfxUiBlip();
     return;
   }
   if (code === 'Equal' || code === 'Minus') {
