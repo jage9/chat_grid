@@ -2303,10 +2303,59 @@ function isTypingKey(code: string): boolean {
   return code.startsWith('Key') || code === 'Space';
 }
 
+/** Maps normalized `event.key` values to canonical `event.code` strings when code is unavailable. */
+function codeFromKey(key: string, location: number): string | null {
+  if (key === 'Escape' || key === 'Esc') return 'Escape';
+  if (key === 'Enter' || key === 'Return') return 'Enter';
+  if (key === 'Backspace') return 'Backspace';
+  if (key === 'Delete' || key === 'Del') return 'Delete';
+  if (key === 'ArrowUp' || key === 'Up') return 'ArrowUp';
+  if (key === 'ArrowDown' || key === 'Down') return 'ArrowDown';
+  if (key === 'ArrowLeft' || key === 'Left') return 'ArrowLeft';
+  if (key === 'ArrowRight' || key === 'Right') return 'ArrowRight';
+  if (key === 'Home') return 'Home';
+  if (key === 'End') return 'End';
+  if (key === 'PageUp') return 'PageUp';
+  if (key === 'PageDown') return 'PageDown';
+  if (key === 'Tab') return 'Tab';
+  if (key === ' ' || key === 'Spacebar') return 'Space';
+  if (key.length === 1) {
+    if (/^[a-z]$/i.test(key)) return `Key${key.toUpperCase()}`;
+    if (/^[0-9]$/.test(key)) return `Digit${key}`;
+    if (key === '!') return 'Digit1';
+    if (key === '@') return 'Digit2';
+    if (key === '#') return 'Digit3';
+    if (key === '$') return 'Digit4';
+    if (key === '%') return 'Digit5';
+    if (key === '^') return 'Digit6';
+    if (key === '&') return 'Digit7';
+    if (key === '*') return 'Digit8';
+    if (key === '(') return 'Digit9';
+    if (key === ')') return 'Digit0';
+    if (key === '+' && location === 3) return 'NumpadAdd';
+    if (key === '-' && location === 3) return 'NumpadSubtract';
+    if (key === '+' || key === '=') return 'Equal';
+    if (key === '-' || key === '_') return 'Minus';
+    if (key === '/' || key === '?') return 'Slash';
+    if (key === ',' || key === '<') return 'Comma';
+    if (key === '.' || key === '>') return 'Period';
+  }
+  return null;
+}
+
+/** Returns best-effort canonical key code across desktop + Safari/iOS keyboard event variants. */
+function normalizeInputCode(event: KeyboardEvent): string {
+  if (event.code && event.code !== 'Unidentified') {
+    return event.code;
+  }
+  return codeFromKey(event.key, event.location) ?? event.code ?? '';
+}
+
 /** Wires global keyboard/paste input handlers and routes events by current mode. */
 function setupInputHandlers(): void {
   document.addEventListener('keydown', (event) => {
-    const code = event.code;
+    const code = normalizeInputCode(event);
+    if (!code) return;
 
     if (!dom.settingsModal.classList.contains('hidden') && code === 'Escape') {
       closeSettings();
@@ -2381,7 +2430,13 @@ function setupInputHandlers(): void {
   });
 
   document.addEventListener('keyup', (event) => {
-    state.keysPressed[event.code] = false;
+    const code = normalizeInputCode(event);
+    if (code) {
+      state.keysPressed[code] = false;
+    }
+    if (event.code && event.code !== code) {
+      state.keysPressed[event.code] = false;
+    }
   });
 
   document.addEventListener('paste', (event) => {
