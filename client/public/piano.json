@@ -25,11 +25,11 @@
         },
         {
           "keys": "X",
-          "description": "Play the saved recording. Stops demo if demo is active."
+          "description": "Play saved recording."
         },
         {
           "keys": "Enter",
-          "description": "Play demo melody. Press Enter again to restart it. Stops recording playback first."
+          "description": "Play demo melody."
         },
         {
           "keys": "C",
