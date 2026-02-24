@@ -39,6 +39,8 @@ class StorageConfigSection(BaseModel):
     """Persistent state file location."""
 
     state_file: str = "runtime/items.json"
+    state_save_debounce_ms: int = Field(default=200, gt=0)
+    state_save_max_delay_ms: int = Field(default=1000, gt=0)
 
 
 class WorldConfigSection(BaseModel):

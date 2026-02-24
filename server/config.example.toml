@@ -21,6 +21,10 @@ level = "INFO"
 [storage]
 # Item persistence file. Relative paths are resolved from this config file directory.
 state_file = "runtime/items.json"
+# Debounce window for coalesced item-state writes.
+state_save_debounce_ms = 200
+# Maximum delay before a pending state write is forced.
+state_save_max_delay_ms = 1000
 
 [world]
 # Grid width/height in cells. Valid coordinates are 0..grid_size-1.

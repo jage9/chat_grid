@@ -73,8 +73,6 @@ CLIENT_PACKET_ADAPTER = TypeAdapter(ClientPacket)
 MAX_ACTIVE_PIANO_KEYS_PER_CLIENT = 12
 PIANO_RECORDING_MAX_MS = 30_000
 PIANO_RECORDING_MAX_EVENTS = 4096
-STATE_SAVE_DEBOUNCE_MS = 200
-STATE_SAVE_MAX_DELAY_MS = 1000
 
 
 class SignalingServer:
@@ -89,6 +87,8 @@ class SignalingServer:
         max_message_size: int = 2_000_000,
         state_file: Path | None = None,
         grid_size: int = 41,
+        state_save_debounce_ms: int = 200,
+        state_save_max_delay_ms: int = 1000,
     ):
         """Initialize runtime state, TLS context, and item service."""
 
@@ -105,6 +105,8 @@ class SignalingServer:
         self.grid_size = max(1, grid_size)
         self.instance_id = str(uuid.uuid4())
         self.server_version = self._resolve_server_version()
+        self.state_save_debounce_ms = max(1, int(state_save_debounce_ms))
+        self.state_save_max_delay_ms = max(self.state_save_debounce_ms, int(state_save_max_delay_ms))
         self._pending_state_save_handle: asyncio.TimerHandle | None = None
         self._pending_state_save_started_at: float | None = None
 
@@ -160,13 +162,13 @@ class SignalingServer:
         if self._pending_state_save_started_at is None:
             self._pending_state_save_started_at = now
         elapsed_ms = int((now - self._pending_state_save_started_at) * 1000)
-        if elapsed_ms >= STATE_SAVE_MAX_DELAY_MS:
+        if elapsed_ms >= self.state_save_max_delay_ms:
             self._flush_state_save()
             return
         if self._pending_state_save_handle is not None:
             self._pending_state_save_handle.cancel()
-        remaining_ms = max(0, STATE_SAVE_MAX_DELAY_MS - elapsed_ms)
-        delay_ms = min(STATE_SAVE_DEBOUNCE_MS, remaining_ms)
+        remaining_ms = max(0, self.state_save_max_delay_ms - elapsed_ms)
+        delay_ms = min(self.state_save_debounce_ms, remaining_ms)
         self._pending_state_save_handle = loop.call_later(delay_ms / 1000, self._flush_state_save)
 
     def _is_nickname_taken(self, nickname: str, exclude_client_id: str | None = None) -> bool:
@@ -1344,5 +1346,7 @@ def run() -> None:
         max_message_size=config.network.max_message_bytes,
         state_file=state_file,
         grid_size=config.world.grid_size,
+        state_save_debounce_ms=config.storage.state_save_debounce_ms,
+        state_save_max_delay_ms=config.storage.state_save_max_delay_ms,
     )
     asyncio.run(server.start())
