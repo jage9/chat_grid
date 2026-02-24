@@ -11,7 +11,6 @@ When adding a new item type:
   - `definition.py` for metadata/constants
   - `validator.py` for `validate_update(item, next_params)`
   - `actions.py` for `use_item(item, nickname, clock_formatter)`
-  - `module.py` as thin exported surface
   - `plugin.py` for registration
 
 2. Server plugin file
@@ -20,11 +19,9 @@ When adding a new item type:
   - `order`
   - `module`
 
-3. Shared item-type unions
-- Add the type in:
-  - `server/app/models.py`
-  - `client/src/network/protocol.ts`
-  - `client/src/state/gameState.ts`
+3. Shared type acceptance
+- Item type ids are string-based in protocol/state models.
+- For generic new types, no enum/union list updates are required.
 
 4. Client runtime behavior (optional)
 - Default: no item-specific client module needed.
@@ -34,14 +31,19 @@ That is enough for a first working item type.
 
 ## Reference Sample Folder
 
-See `docs/examples/item-type-sample/` for a complete copyable folder with all five files.
+See `docs/examples/item-type-sample/` for a complete copyable folder.
 
-## Minimal `module.py` Example
+## Minimal `plugin.py` Example
 
 ```py
-from .actions import use_item
-from .definition import LABEL, TOOLTIP, EDITABLE_PROPERTIES, CAPABILITIES, USE_SOUND, EMIT_SOUND, USE_COOLDOWN_MS, EMIT_RANGE, DIRECTIONAL, DEFAULT_TITLE, DEFAULT_PARAMS, PROPERTY_METADATA
-from .validator import validate_update
+from ..plugin_helpers import build_item_module
+from . import actions, definition, validator
+
+ITEM_TYPE_PLUGIN = {
+    "type": "counter",
+    "order": 25,
+    "module": build_item_module(definition, validate_update=validator.validate_update, use_item=actions.use_item),
+}
 ```
 
 ## Checklist Before Commit

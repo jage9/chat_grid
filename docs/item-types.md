@@ -197,14 +197,12 @@ For a full copy/paste example with plain-English explanation, see `docs/item-typ
    - `definition.py` (defaults/capabilities/metadata/options)
    - `validator.py` (`validate_update`)
    - `actions.py` (`use_item`)
-   - `module.py` (thin exported surface)
 2. Server plugin: add `server/app/items/types/<item_type>/plugin.py` exporting `ITEM_TYPE_PLUGIN` with:
    - `type`
    - `order`
    - `module`
    The server auto-discovers plugins at boot, so no central registry edit is needed.
-3. Server models: extend `ItemType` literals in `server/app/models.py` and any packet enums that list item types.
-4. Client protocol/state types: update item-type unions in `client/src/network/protocol.ts` and `client/src/state/gameState.ts`.
+3. Server/client protocol/state models are now string-based for item type ids; for generic types no enum/union list updates are required.
 5. Client runtime behavior: add `client/src/items/types/<item_type>/behavior.ts` only if custom client runtime is needed (for example piano mode).
 6. Tests: add or update server tests under `server/tests/` for use/update validation, unknown-key stripping, and `uiDefinitions` completeness.
 

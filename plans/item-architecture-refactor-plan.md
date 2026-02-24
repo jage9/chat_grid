@@ -285,7 +285,8 @@ When adding a new item type:
   - Missing/invalid schema now disables item menus with explicit status.
 - Phase 4:
   - Property editor behavior is metadata-driven by `valueType/range/options/maxLength`.
-  - `visibleWhen` is supported and item property rows recompute live after updates.
+  - `visibleWhen` now survives protocol parsing and item property rows recompute live after updates.
+  - List options are now carried in `propertyMetadata[key].options` (no separate `propertyOptions` map).
 - Phase 5:
   - Client runtime behavior remains modular per item via behavior registry; `main.ts` orchestration no longer carries item-specific business branches.
 - Phase 6:
@@ -294,11 +295,16 @@ When adding a new item type:
   - Save timing now configurable via:
     - `storage.state_save_debounce_ms`
     - `storage.state_save_max_delay_ms`
+ - Additional:
+   - Added plugin contract tests to validate required item package files/exports.
+   - Added unknown-item-type rejection for `item_add`.
+   - Added `capabilities` in `welcome.uiDefinitions.itemTypes`.
+   - Removed hardcoded client/server item-type enum restrictions (string-based ids + runtime known-type checks).
 
 ### Notes
 - Client item-specific runtime is now reduced to only `piano`; simple items (`dice`, `wheel`, `clock`, `radio_station`, `widget`) run through generic client flows with no custom behavior module.
-- Server item implementations now live inside per-type folders (`server/app/items/types/*/module.py`) and plugins point directly to those modules.
-- Server type packages are now split into `definition.py` / `validator.py` / `actions.py` plus a thin `module.py` export surface.
+- Server item implementations now live inside per-type folders (`server/app/items/types/*/definition.py`, `validator.py`, `actions.py`).
+- Plugins now compose module surfaces via a shared helper (`server/app/items/types/plugin_helpers.py`), so per-type `module.py` is no longer required.
 - Added docs sample folder at `docs/examples/item-type-sample/` and updated template docs to reflect the package layout.
 ## Completion Review (2026-02-24)
 
@@ -306,64 +312,11 @@ When adding a new item type:
 - **Phase 0 (docs + guardrails):** ✅ Complete. `docs/item-schema.md` exists and server tests cover UI schema completeness + unknown-key stripping behavior.
 - **Phase 1 (server package standardization + auto-discovery):** ✅ Complete. Item types are standardized under `server/app/items/types/*` with `plugin.py` entrypoints and discovered by `server/app/items/registry.py`.
 - **Phase 2 (strict validation + unknown-key stripping):** ✅ Complete. Type validators enforce allowed keys and normalize values; tests verify unknown params are stripped.
-- **Phase 3 (client removes fallback authority):** ✅ Mostly complete. Client consumes `welcome.uiDefinitions` and disables item menus when schema is missing.
-- **Phase 4 (metadata-driven editor + visibility dependencies):** ⚠️ Partially complete. Generic metadata-driven editing is in place, but `visibleWhen` is not included in the client protocol schema, so dependency visibility rules from server metadata are dropped during message validation.
+- **Phase 3 (client removes fallback authority):** ✅ Complete. Client consumes `welcome.uiDefinitions` and disables item menus when schema is missing.
+- **Phase 4 (metadata-driven editor + visibility dependencies):** ✅ Complete. Generic metadata-driven editing is in place and `visibleWhen` survives client protocol parsing.
 - **Phase 5 (behavior registry completion):** ✅ Complete. Runtime behavior is registry-driven with generic path + optional piano module.
 - **Phase 6 (coalesced persistence):** ✅ Complete. Debounced/max-delay state save and flush-on-shutdown are implemented in server lifecycle.
 
-### Recommendations / Cleanup (for simplest new-item creation)
-1. **Unblock `visibleWhen` end-to-end (high priority).**  
-Scope:
-- Carry `visibleWhen` from server metadata through client protocol validation into `itemRegistry`.
-Problem today:
-- Server emits `visibleWhen`, but client protocol schema drops unknown metadata fields, so dependency visibility can silently fail.
-Implementation:
-- Update `client/src/network/protocol.ts` `welcome.uiDefinitions.itemTypes[].propertyMetadata` schema to allow `visibleWhen` object values of `string | number | boolean`.
-- Keep `client/src/items/itemRegistry.ts` normalization strict (ignore invalid `visibleWhen` entries).
-- Add a client test/fixture (or lightweight runtime assertion) that confirms `visibleWhen` survives parse.
-Acceptance criteria:
-- For a property like `facing` with `visibleWhen: { directional: true }`, toggling `directional` updates property visibility without hardcoded client logic.
-
-2. **Remove hardcoded item-type literals (high priority).**  
-Scope:
-- Reduce manual edits needed when adding a new item type.
-Problem today:
-- Type additions still touch multiple literal lists (`Literal[...]`, unions, enums) across server/client protocol/state models.
-Implementation:
-- Server:
-  - Keep runtime source of truth in plugin registry.
-  - Limit literal usage to protocol boundary where needed; validate item type membership against discovered registry set.
-- Client:
-  - Replace rigid item-type enums in parse paths with string + runtime membership checks from server-provided definitions where feasible.
-  - Keep compile-time unions only where they materially improve safety and can be generated/centralized.
-Acceptance criteria:
-- Adding a new item plugin does not require editing multiple type-literal lists in unrelated files.
-- New type appears in add/edit flows after server metadata update with minimal client changes.
-
-3. **Include `capabilities` in `welcome.uiDefinitions.itemTypes` (medium).**  
-Scope:
-- Complete server metadata contract for item UI/runtime decisions.
-Problem today:
-- `capabilities` exist on `WorldItem`, but not consistently in type definition metadata payload for menu/rules decisions.
-Implementation:
-- Add `capabilities` per item type in server `uiDefinitions.itemTypes[]` payload.
-- Parse/store on client registry model.
-- Use this metadata for UI gating where applicable (for example, show/hide unsupported actions for a type).
-Acceptance criteria:
-- Client can decide type-level action affordances from `uiDefinitions` alone, without extra hardcoded assumptions.
-
-4. **Move list options into per-property metadata (medium).**  
-Scope:
-- Consolidate split item property config sources.
-Problem today:
-- Options are split between `propertyOptions` and `propertyMetadata`, causing parallel maintenance.
-Implementation:
-- Server emits list options at `propertyMetadata[key].options`.
-- Client reads options from metadata first.
-- Remove separate `propertyOptions` map.
-Acceptance criteria:
-- One canonical place (`propertyMetadata`) defines type, range, tooltip, options, and visibility for each property.
-- New list property requires server-only metadata changes for options.
-
-5. **Eliminate manual property label mapping in client (medium):** either include labels in server metadata or auto-humanize keys so new properties are readable without code changes.
-6. **Add a script/check for “new item completeness” (low):** one CI check that verifies plugin discovery, protocol acceptance, docs presence, and test coverage for each discovered type.
+### Recommendations / Cleanup (remaining)
+1. **Eliminate manual property label mapping in client (medium):** either include labels for all properties in server metadata or auto-humanize keys so new properties are readable without code changes.
+2. **Strengthen new-item completeness checks (low):** extend the plugin contract tests to optionally assert docs coverage and richer protocol examples per discovered type.

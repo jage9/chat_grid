@@ -49,7 +49,7 @@
 
 - Persisted state stores only instance data.
 - Global/type-level properties are loaded from server registry in `server/app/item_catalog.py`.
-- Per-type use/update validation and message behavior are implemented in per-item modules under `server/app/items/types/*/module.py`, discovered via plugins in `server/app/items/types/*/plugin.py`.
+- Per-type use/update validation and message behavior are implemented in per-item modules under `server/app/items/types/*/definition.py`, `validator.py`, and `actions.py`, discovered via plugins in `server/app/items/types/*/plugin.py`.
 - Client-side add/edit metadata is consumed from `welcome.uiDefinitions` via `client/src/items/itemRegistry.ts` (no local fallback definitions).
 - End-to-end add-item template: `docs/item-type-template.md`.
 

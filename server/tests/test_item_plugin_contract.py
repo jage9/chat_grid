@@ -28,5 +28,4 @@ def test_item_plugin_folders_have_required_files() -> None:
         assert (type_dir / "definition.py").is_file()
         assert (type_dir / "validator.py").is_file()
         assert (type_dir / "actions.py").is_file()
-        assert (type_dir / "module.py").is_file()
         assert (type_dir / "plugin.py").is_file()
