@@ -42,7 +42,7 @@ This is behavior-focused documentation for item types and their defaults.
 - `mediaVolume`: integer `0..100`
 - `mediaEffect`: `reverb | echo | flanger | high_pass | low_pass | off`
 - `mediaEffectValue`: number `0..100` with `0.1` precision
-- `facing`: number `0..360` with `0.1` precision
+- `facing`: number `0..360` with step `1`
 - `emitRange`: integer `5..20`
 
 ## `dice`
@@ -141,7 +141,7 @@ This is behavior-focused documentation for item types and their defaults.
 ### Validation
 - `enabled`: boolean or on/off style input
 - `directional`: boolean or on/off style input
-- `facing`: number `0..360` with `0.1` precision
+- `facing`: number `0..360` with step `1`
 - `emitRange`: integer `1..20`
 - `emitVolume`: integer `0..100`
 - `emitSoundSpeed`: integer `0..100` (`0=0.5x`, `50=1.0x`, `100=2.0x`) for speed/pitch
@@ -193,7 +193,7 @@ Server is the source of truth for item type definitions and metadata. The client
 
 For a full copy/paste example with plain-English explanation, see `docs/item-type-template.md`.
 
-1. Server item module: add a new file under `server/app/items/` with:
+1. Server item module: add a new file under `server/app/items/types/<item_type>/module.py` with:
    - defaults/capabilities
    - property metadata/options
    - `validate_update` and `use_item`
@@ -204,7 +204,7 @@ For a full copy/paste example with plain-English explanation, see `docs/item-typ
    The server auto-discovers plugins at boot, so no central registry edit is needed.
 3. Server models: extend `ItemType` literals in `server/app/models.py` and any packet enums that list item types.
 4. Client protocol/state types: update item-type unions in `client/src/network/protocol.ts` and `client/src/state/gameState.ts`.
-5. Client runtime behavior: add `client/src/items/types/<item_type>/behavior.ts` only if custom client runtime is needed.
+5. Client runtime behavior: add `client/src/items/types/<item_type>/behavior.ts` only if custom client runtime is needed (for example piano mode).
 6. Tests: add or update server tests under `server/tests/` for use/update validation, unknown-key stripping, and `uiDefinitions` completeness.
 
 ### Example Shape

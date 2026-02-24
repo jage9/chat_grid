@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from ... import dice
+from . import module
 
 ITEM_TYPE_PLUGIN = {
     "type": "dice",
     "order": 20,
-    "module": dice,
+    "module": module,
 }

@@ -1,50 +1,54 @@
 # Item Type Template
 
-This page is a practical template for adding a new item type with the current per-item module + single registry system.
+This page is the practical template for the current plugin-driven item architecture.
 
 ## Plain-English Flow
 
-When a new item type is added, wire it in these places:
+When adding a new item type:
 
-1. Server item module (`server/app/items/<name>.py`)
-- Define item metadata constants:
-  - label/tooltip
-  - editable properties
-  - defaults/capabilities/sounds/cooldown/range/directional
-  - property metadata
+1. Server item module
+- Add `server/app/items/types/<item_type>/module.py`.
+- Define metadata/constants:
+  - `LABEL`, `TOOLTIP`
+  - `EDITABLE_PROPERTIES`
+  - `CAPABILITIES`
+  - `USE_SOUND`, `EMIT_SOUND`
+  - `USE_COOLDOWN_MS`, `EMIT_RANGE`, `DIRECTIONAL`
+  - `DEFAULT_TITLE`, `DEFAULT_PARAMS`
+  - `PROPERTY_METADATA`
 - Implement behavior:
   - `validate_update(item, next_params)`
   - `use_item(item, nickname, clock_formatter)`
 
-2. Server registry (`server/app/items/registry.py`)
-- Add one module entry in `ITEM_MODULES`.
-- Update `ITEM_TYPE_ORDER` if needed.
+2. Server plugin file
+- Add `server/app/items/types/<item_type>/plugin.py` exporting:
+  - `type`
+  - `order`
+  - `module`
 
-3. Shared item type unions
+3. Shared item-type unions
 - Add the type in:
   - `server/app/models.py`
   - `client/src/network/protocol.ts`
   - `client/src/state/gameState.ts`
 
-4. Client fallback metadata
-- Add defaults in `client/src/items/itemRegistry.ts`:
-  - `DEFAULT_ITEM_TYPE_SEQUENCE`
-  - `DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES`
-  - `DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES`
+4. Client runtime behavior (optional)
+- Default: no item-specific client module needed.
+- Add `client/src/items/types/<item_type>/behavior.ts` only if this item needs custom client runtime UX/audio logic (for example piano mode).
 
 That is enough for a first working item type.
 
 ## Minimal Server Module Example: `counter`
 
-`server/app/items/counter.py`:
+`server/app/items/types/counter/module.py`:
 
 ```py
 from __future__ import annotations
 
 from typing import Callable
 
-from ..item_types import ItemUseResult
-from ..models import WorldItem
+from ...item_types import ItemUseResult
+from ...models import WorldItem
 
 LABEL = "counter"
 TOOLTIP = "Counts up each time you use it."
@@ -84,19 +88,15 @@ def use_item(item: WorldItem, nickname: str, _clock_formatter: Callable[[dict], 
     )
 ```
 
-Then register it in `server/app/items/registry.py`:
+Then add plugin registration in `server/app/items/types/counter/plugin.py`:
 
 ```py
-from . import clock, counter, dice, radio, wheel
+from . import module
 
-ITEM_TYPE_ORDER: tuple[str, ...] = ("clock", "counter", "dice", "radio_station", "wheel")
-
-ITEM_MODULES: dict[str, ItemModule] = {
-    "clock": clock,
-    "counter": counter,
-    "dice": dice,
-    "radio_station": radio,
-    "wheel": wheel,
+ITEM_TYPE_PLUGIN = {
+    "type": "counter",
+    "order": 25,
+    "module": module,
 }
 ```
 

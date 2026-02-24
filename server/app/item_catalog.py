@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, cast
 
-from .items import clock, piano, radio
 from .items.registry import ITEM_MODULES, ITEM_TYPE_ORDER
 
 ItemType = Literal["radio_station", "dice", "wheel", "clock", "widget", "piano"]
@@ -15,12 +14,12 @@ ITEM_TYPE_EDITABLE_PROPERTIES: dict[ItemType, tuple[str, ...]] = {
     item_type: ITEM_MODULES[item_type].EDITABLE_PROPERTIES for item_type in ITEM_TYPE_SEQUENCE
 }
 
-CLOCK_DEFAULT_TIME_ZONE = clock.DEFAULT_TIME_ZONE
-CLOCK_TIME_ZONE_OPTIONS = clock.TIME_ZONE_OPTIONS
-RADIO_EFFECT_OPTIONS = radio.EFFECT_OPTIONS
-RADIO_CHANNEL_OPTIONS = radio.CHANNEL_OPTIONS
-PIANO_INSTRUMENT_OPTIONS = piano.INSTRUMENT_OPTIONS
-PIANO_VOICE_MODE_OPTIONS = piano.VOICE_MODE_OPTIONS
+CLOCK_DEFAULT_TIME_ZONE = cast(str, ITEM_MODULES["clock"].DEFAULT_TIME_ZONE)
+CLOCK_TIME_ZONE_OPTIONS = cast(tuple[str, ...], ITEM_MODULES["clock"].TIME_ZONE_OPTIONS)
+RADIO_EFFECT_OPTIONS = cast(tuple[str, ...], ITEM_MODULES["radio_station"].EFFECT_OPTIONS)
+RADIO_CHANNEL_OPTIONS = cast(tuple[str, ...], ITEM_MODULES["radio_station"].CHANNEL_OPTIONS)
+PIANO_INSTRUMENT_OPTIONS = cast(tuple[str, ...], ITEM_MODULES["piano"].INSTRUMENT_OPTIONS)
+PIANO_VOICE_MODE_OPTIONS = cast(tuple[str, ...], ITEM_MODULES["piano"].VOICE_MODE_OPTIONS)
 
 
 @dataclass(frozen=True)

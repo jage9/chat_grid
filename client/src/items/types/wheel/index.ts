@@ -1,2 +1,0 @@
-export { wheelDefinition } from './definition';
-

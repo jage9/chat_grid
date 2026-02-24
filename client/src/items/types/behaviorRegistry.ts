@@ -1,26 +1,14 @@
 import { type IncomingMessage } from '../../network/protocol';
 import { type GameMode, type WorldItem } from '../../state/gameState';
-import { createClockBehavior } from './clock/behavior';
-import { createDiceBehavior } from './dice/behavior';
 import { createPianoBehavior } from './piano/behavior';
-import { createRadioStationBehavior } from './radioStation/behavior';
 import { type ItemBehavior, type ItemBehaviorDeps } from './runtimeShared';
-import { createWheelBehavior } from './wheel/behavior';
-import { createWidgetBehavior } from './widget/behavior';
 
 /** Runtime registry that composes all per-item client behavior modules. */
 export class ItemBehaviorRegistry {
   private readonly behaviors: ItemBehavior[];
 
   constructor(deps: ItemBehaviorDeps) {
-    this.behaviors = [
-      createClockBehavior(deps),
-      createDiceBehavior(deps),
-      createPianoBehavior(deps),
-      createRadioStationBehavior(deps),
-      createWheelBehavior(deps),
-      createWidgetBehavior(deps),
-    ];
+    this.behaviors = [createPianoBehavior(deps)];
   }
 
   /** Runs per-item initialization hooks after app bootstrap. */

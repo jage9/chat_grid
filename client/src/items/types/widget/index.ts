@@ -1,2 +1,0 @@
-export { widgetDefinition } from './definition';
-

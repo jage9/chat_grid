@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Callable
 
-from ..item_types import ItemUseResult
-from ..models import WorldItem
-from .helpers import keep_only_known_params, parse_bool_like_or_none
+from ....item_types import ItemUseResult
+from ....models import WorldItem
+from ...helpers import keep_only_known_params, parse_bool_like_or_none
 
 LABEL = "clock"
 TOOLTIP = "It tells the time. What did you think it did?"

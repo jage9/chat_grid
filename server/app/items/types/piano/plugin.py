@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from ... import piano
+from . import module
 
 ITEM_TYPE_PLUGIN = {
     "type": "piano",
     "order": 30,
-    "module": piano,
+    "module": module,
 }

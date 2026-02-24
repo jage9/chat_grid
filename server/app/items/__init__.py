@@ -1,2 +1,1 @@
-"""Per-item modules containing item-specific schema and behavior."""
-
+"""Item subsystem package (shared helpers + type-plugin loader)."""

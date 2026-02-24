@@ -5,9 +5,9 @@ from __future__ import annotations
 import random
 from typing import Callable
 
-from ..item_types import ItemUseResult
-from ..models import WorldItem
-from .helpers import keep_only_known_params
+from ....item_types import ItemUseResult
+from ....models import WorldItem
+from ...helpers import keep_only_known_params
 
 LABEL = "dice"
 TOOLTIP = "Great for drinking games or boredom."
