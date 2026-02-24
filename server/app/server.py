@@ -73,6 +73,8 @@ CLIENT_PACKET_ADAPTER = TypeAdapter(ClientPacket)
 MAX_ACTIVE_PIANO_KEYS_PER_CLIENT = 12
 PIANO_RECORDING_MAX_MS = 30_000
 PIANO_RECORDING_MAX_EVENTS = 4096
+STATE_SAVE_DEBOUNCE_MS = 200
+STATE_SAVE_MAX_DELAY_MS = 1000
 
 
 class SignalingServer:
@@ -103,6 +105,8 @@ class SignalingServer:
         self.grid_size = max(1, grid_size)
         self.instance_id = str(uuid.uuid4())
         self.server_version = self._resolve_server_version()
+        self._pending_state_save_handle: asyncio.TimerHandle | None = None
+        self._pending_state_save_started_at: float | None = None
 
     @staticmethod
     def _resolve_server_version() -> str:
@@ -138,6 +142,32 @@ class SignalingServer:
         """Normalize nickname for case-insensitive comparisons."""
 
         return nickname.casefold()
+
+    def _flush_state_save(self) -> None:
+        """Immediately flush pending state persistence and clear debounce state."""
+
+        if self._pending_state_save_handle is not None:
+            self._pending_state_save_handle.cancel()
+            self._pending_state_save_handle = None
+        self._pending_state_save_started_at = None
+        self.item_service.save_state()
+
+    def _request_state_save(self) -> None:
+        """Debounce/coalesce item-state persistence to reduce write churn."""
+
+        loop = asyncio.get_running_loop()
+        now = loop.time()
+        if self._pending_state_save_started_at is None:
+            self._pending_state_save_started_at = now
+        elapsed_ms = int((now - self._pending_state_save_started_at) * 1000)
+        if elapsed_ms >= STATE_SAVE_MAX_DELAY_MS:
+            self._flush_state_save()
+            return
+        if self._pending_state_save_handle is not None:
+            self._pending_state_save_handle.cancel()
+        remaining_ms = max(0, STATE_SAVE_MAX_DELAY_MS - elapsed_ms)
+        delay_ms = min(STATE_SAVE_DEBOUNCE_MS, remaining_ms)
+        self._pending_state_save_handle = loop.call_later(delay_ms / 1000, self._flush_state_save)
 
     def _is_nickname_taken(self, nickname: str, exclude_client_id: str | None = None) -> bool:
         """Check whether nickname is already used by another active client."""
@@ -372,7 +402,7 @@ class SignalingServer:
         item.params.pop("recordingLengthMs", None)
         item.updatedAt = self.item_service.now_ms()
         item.version += 1
-        self.item_service.save_state()
+        self._request_state_save()
         await self._broadcast_item(item)
         owner_id = str(session.get("ownerClientId", ""))
         owner = self._get_client_by_id(owner_id) if owner_id else None
@@ -601,14 +631,17 @@ class SignalingServer:
 
         protocol = "wss" if self._ssl_context else "ws"
         LOGGER.info("starting signaling server on %s://%s:%d", protocol, self.host, self.port)
-        async with serve(
-            self._handle_client,
-            self.host,
-            self.port,
-            ssl=self._ssl_context,
-            max_size=self.max_message_size,
-        ):
-            await asyncio.Future()
+        try:
+            async with serve(
+                self._handle_client,
+                self.host,
+                self.port,
+                ssl=self._ssl_context,
+                max_size=self.max_message_size,
+            ):
+                await asyncio.Future()
+        finally:
+            self._flush_state_save()
 
     async def _handle_client(self, websocket: ServerConnection) -> None:
         """Handle one websocket client's connect/message/disconnect lifecycle."""
@@ -631,7 +664,7 @@ class SignalingServer:
                     await self._finalize_piano_recording(item_id)
                 for item in self.item_service.drop_carried_items_for_disconnect(disconnected):
                     await self._broadcast_item(item)
-                self.item_service.save_state()
+                self._request_state_save()
                 LOGGER.info(
                     "client disconnected id=%s nickname=%s total=%d",
                     disconnected.id,
@@ -865,7 +898,7 @@ class SignalingServer:
             item = self.item_service.default_item(client, packet.itemType)
             self.item_service.add_item(item)
             await self._broadcast_item(item)
-            self.item_service.save_state()
+            self._request_state_save()
             LOGGER.info(
                 "item created by=%s item_id=%s type=%s title=%s x=%d y=%d",
                 client.nickname,
@@ -913,7 +946,7 @@ class SignalingServer:
             item.y = client.y
             item.updatedAt = self.item_service.now_ms()
             await self._broadcast_item(item)
-            self.item_service.save_state()
+            self._request_state_save()
             await self._send_item_result(client, True, "pickup", f"Picked up {item.title}.", item.id)
             return
 
@@ -933,7 +966,7 @@ class SignalingServer:
             item.y = packet.y
             item.updatedAt = self.item_service.now_ms()
             await self._broadcast_item(item)
-            self.item_service.save_state()
+            self._request_state_save()
             await self._send_item_result(client, True, "drop", f"Dropped {item.title}.", item.id)
             return
 
@@ -968,7 +1001,7 @@ class SignalingServer:
             self.item_service.remove_item(item.id)
             self.item_last_use_ms.pop(item.id, None)
             await self._broadcast(ItemRemovePacket(type="item_remove", itemId=item.id))
-            self.item_service.save_state()
+            self._request_state_save()
             await self._send_item_result(client, True, "delete", f"Deleted {item.title}.", item.id)
             return
 
@@ -1011,7 +1044,7 @@ class SignalingServer:
                     await self._send_item_result(client, False, "use", str(exc), item.id)
                     return
                 item.updatedAt = now_ms
-                self.item_service.save_state()
+                self._request_state_save()
                 await self._broadcast_item(item)
 
             self.item_last_use_ms[item.id] = now_ms
@@ -1200,7 +1233,7 @@ class SignalingServer:
             item.updatedAt = self.item_service.now_ms()
             item.version += 1
             await self._broadcast_item(item)
-            self.item_service.save_state()
+            self._request_state_save()
             await self._send_item_result(client, True, "update", f"Updated {item.title}.", item.id)
             return
 
