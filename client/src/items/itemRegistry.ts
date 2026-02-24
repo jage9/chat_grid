@@ -1,82 +1,6 @@
-import { EFFECT_SEQUENCE } from '../audio/effects';
-import { RADIO_CHANNEL_OPTIONS } from '../audio/radioStationRuntime';
 import { type ItemType, type WorldItem } from '../state/gameState';
-
-const DEFAULT_CLOCK_TIME_ZONE_OPTIONS = [
-  'America/Anchorage',
-  'America/Argentina/Buenos_Aires',
-  'America/Chicago',
-  'America/Detroit',
-  'America/Halifax',
-  'America/Indiana/Indianapolis',
-  'America/Kentucky/Louisville',
-  'America/Los_Angeles',
-  'America/St_Johns',
-  'Asia/Bangkok',
-  'Asia/Dhaka',
-  'Asia/Dubai',
-  'Asia/Hong_Kong',
-  'Asia/Kabul',
-  'Asia/Karachi',
-  'Asia/Kathmandu',
-  'Asia/Kolkata',
-  'Asia/Seoul',
-  'Asia/Singapore',
-  'Asia/Tehran',
-  'Asia/Tokyo',
-  'Asia/Yangon',
-  'Atlantic/Azores',
-  'Atlantic/South_Georgia',
-  'Australia/Brisbane',
-  'Australia/Darwin',
-  'Australia/Eucla',
-  'Australia/Lord_Howe',
-  'Europe/Berlin',
-  'Europe/Helsinki',
-  'Europe/London',
-  'Europe/Moscow',
-  'Pacific/Apia',
-  'Pacific/Auckland',
-  'Pacific/Chatham',
-  'Pacific/Honolulu',
-  'Pacific/Kiritimati',
-  'Pacific/Noumea',
-  'Pacific/Pago_Pago',
-  'UTC',
-] as const;
-
-const DEFAULT_ITEM_TYPE_SEQUENCE: ItemType[] = ['clock', 'dice', 'piano', 'radio_station', 'wheel', 'widget'];
-const DEFAULT_PIANO_INSTRUMENT_OPTIONS = [
-  'piano',
-  'electric_piano',
-  'guitar',
-  'organ',
-  'bass',
-  'violin',
-  'synth_lead',
-  'brass',
-  'nintendo',
-  'drum_kit',
-] as const;
-const DEFAULT_PIANO_VOICE_MODE_OPTIONS = ['poly', 'mono'] as const;
-
-const DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES: Record<ItemType, string[]> = {
-  radio_station: ['title', 'streamUrl', 'enabled', 'mediaVolume', 'mediaChannel', 'mediaEffect', 'mediaEffectValue', 'facing', 'emitRange'],
-  dice: ['title', 'sides', 'number'],
-  piano: ['title', 'instrument', 'voiceMode', 'octave', 'attack', 'decay', 'release', 'brightness', 'emitRange'],
-  wheel: ['title', 'spaces'],
-  clock: ['title', 'timeZone', 'use24Hour'],
-  widget: ['title', 'enabled', 'directional', 'facing', 'emitRange', 'emitVolume', 'emitSoundSpeed', 'emitSoundTempo', 'emitEffect', 'emitEffectValue', 'useSound', 'emitSound'],
-};
-
-const DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES: Record<ItemType, Record<string, string | number | boolean>> = {
-  radio_station: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000, emitRange: 20, directional: true, emitSoundSpeed: 50, emitSoundTempo: 50 },
-  dice: { useSound: 'sounds/roll.ogg', emitSound: 'none', useCooldownMs: 1000, emitRange: 15, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50 },
-  piano: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000, emitRange: 15, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50 },
-  wheel: { useSound: 'sounds/spin.ogg', emitSound: 'none', useCooldownMs: 4000, emitRange: 15, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50 },
-  clock: { useSound: 'none', emitSound: 'sounds/clock.ogg', useCooldownMs: 1000, emitRange: 10, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50 },
-  widget: { useSound: 'none', emitSound: 'none', useCooldownMs: 1000, emitRange: 15, directional: false, emitSoundSpeed: 50, emitSoundTempo: 50 },
-};
+import { CLOCK_TIME_ZONE_OPTIONS } from './types/clock';
+import { DEFAULT_ITEM_TYPE_DEFINITIONS, DEFAULT_ITEM_TYPE_SEQUENCE } from './types';
 
 export type ItemPropertyValueType = 'boolean' | 'text' | 'number' | 'list' | 'sound';
 
@@ -105,40 +29,32 @@ type UiDefinitionsPayload = {
 };
 
 let itemTypeSequence: ItemType[] = [...DEFAULT_ITEM_TYPE_SEQUENCE];
-let itemTypeLabels: Record<ItemType, string> = {
-  radio_station: 'radio',
-  dice: 'dice',
-  piano: 'piano',
-  wheel: 'wheel',
-  clock: 'clock',
-  widget: 'widget',
-};
+let itemTypeLabels: Record<ItemType, string> = {} as Record<ItemType, string>;
 let itemTypeTooltips: Partial<Record<ItemType, string>> = {};
-let itemTypeEditableProperties: Record<ItemType, string[]> = {
-  radio_station: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.radio_station],
-  dice: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.dice],
-  piano: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.piano],
-  wheel: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.wheel],
-  clock: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.clock],
-  widget: [...DEFAULT_ITEM_TYPE_EDITABLE_PROPERTIES.widget],
-};
-let itemTypeGlobalProperties: Record<ItemType, Record<string, string | number | boolean>> = {
-  radio_station: { ...DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES.radio_station },
-  dice: { ...DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES.dice },
-  piano: { ...DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES.piano },
-  wheel: { ...DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES.wheel },
-  clock: { ...DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES.clock },
-  widget: { ...DEFAULT_ITEM_TYPE_GLOBAL_PROPERTIES.widget },
-};
-let optionItemPropertyValues: Partial<Record<string, string[]>> = {
-  mediaEffect: EFFECT_SEQUENCE.map((effect) => effect.id),
-  emitEffect: EFFECT_SEQUENCE.map((effect) => effect.id),
-  mediaChannel: [...RADIO_CHANNEL_OPTIONS],
-  instrument: [...DEFAULT_PIANO_INSTRUMENT_OPTIONS],
-  voiceMode: [...DEFAULT_PIANO_VOICE_MODE_OPTIONS],
-  timeZone: [...DEFAULT_CLOCK_TIME_ZONE_OPTIONS],
-};
+let itemTypeEditableProperties: Record<ItemType, string[]> = {} as Record<ItemType, string[]>;
+let itemTypeGlobalProperties: Record<ItemType, Record<string, string | number | boolean>> = {} as Record<
+  ItemType,
+  Record<string, string | number | boolean>
+>;
+let optionItemPropertyValues: Partial<Record<string, string[]>> = {};
 let itemTypePropertyMetadata: Partial<Record<ItemType, Record<string, ItemPropertyMetadata>>> = {};
+
+for (const definition of DEFAULT_ITEM_TYPE_DEFINITIONS) {
+  itemTypeLabels[definition.type] = definition.label;
+  if (definition.tooltip) {
+    itemTypeTooltips[definition.type] = definition.tooltip;
+  }
+  itemTypeEditableProperties[definition.type] = [...definition.editableProperties];
+  itemTypeGlobalProperties[definition.type] = { ...definition.globalProperties };
+  if (definition.propertyMetadata) {
+    itemTypePropertyMetadata[definition.type] = { ...definition.propertyMetadata };
+  }
+  if (definition.propertyOptions) {
+    for (const [key, values] of Object.entries(definition.propertyOptions)) {
+      optionItemPropertyValues[key] = [...values];
+    }
+  }
+}
 
 export let EDITABLE_ITEM_PROPERTY_KEYS = new Set<string>(
   Object.values(itemTypeEditableProperties).flatMap((keys) => keys),
@@ -190,7 +106,7 @@ function normalizePropertyMetadataRecord(raw: Record<string, unknown> | undefine
 
 /** Returns current timezone option list used by clock item properties. */
 export function getClockTimeZoneOptions(): string[] {
-  return [...(optionItemPropertyValues.timeZone ?? DEFAULT_CLOCK_TIME_ZONE_OPTIONS)];
+  return [...(optionItemPropertyValues.timeZone ?? CLOCK_TIME_ZONE_OPTIONS)];
 }
 
 /** Returns default timezone used by clock items when no override is set. */
