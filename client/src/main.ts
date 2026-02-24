@@ -57,7 +57,7 @@ import {
 } from './items/itemRegistry';
 import { createItemPropertyEditor } from './items/itemPropertyEditor';
 import { createItemPropertyPresentation } from './items/itemPropertyPresentation';
-import { PianoController } from './items/pianoController';
+import { PianoController } from './items/types/piano';
 import { NICKNAME_STORAGE_KEY, SettingsStore } from './settings/settingsStore';
 import { runConnectFlow, runDisconnectFlow, type ConnectFlowDeps } from './session/connectionFlow';
 import { MediaSession } from './session/mediaSession';

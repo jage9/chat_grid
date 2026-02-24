@@ -1,0 +1,2 @@
+export { diceDefinition } from './definition';
+

@@ -1,4 +1,4 @@
-import { type ItemTypeClientDefinition } from './shared';
+import { type ItemTypeClientDefinition } from '../shared';
 
 export const CLOCK_TIME_ZONE_OPTIONS = [
   'America/Anchorage',
@@ -61,4 +61,3 @@ export const clockDefinition: ItemTypeClientDefinition = {
     timeZone: [...CLOCK_TIME_ZONE_OPTIONS],
   },
 };
-

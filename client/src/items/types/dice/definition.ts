@@ -1,4 +1,4 @@
-import { type ItemTypeClientDefinition } from './shared';
+import { type ItemTypeClientDefinition } from '../shared';
 
 /** Default client-side UI definition for dice items. */
 export const diceDefinition: ItemTypeClientDefinition = {
@@ -15,4 +15,3 @@ export const diceDefinition: ItemTypeClientDefinition = {
     emitSoundTempo: 50,
   },
 };
-

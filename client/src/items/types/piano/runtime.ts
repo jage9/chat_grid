@@ -3,9 +3,9 @@ import {
   PIANO_INSTRUMENT_OPTIONS,
   PianoSynth,
   type PianoInstrumentId,
-} from '../audio/pianoSynth';
-import { type IncomingMessage, type OutgoingMessage } from '../network/protocol';
-import { type GameMode, type WorldItem } from '../state/gameState';
+} from '../../../audio/pianoSynth';
+import { type IncomingMessage, type OutgoingMessage } from '../../../network/protocol';
+import { type GameMode, type WorldItem } from '../../../state/gameState';
 
 const PIANO_WHITE_KEY_MIDI_BY_CODE: Record<string, number> = {
   KeyA: 60,
@@ -815,4 +815,3 @@ export class PianoController {
     }
   }
 }
-

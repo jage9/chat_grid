@@ -1,4 +1,4 @@
-import { type ItemTypeClientDefinition } from './shared';
+import { type ItemTypeClientDefinition } from '../shared';
 
 /** Default client-side UI definition for wheel items. */
 export const wheelDefinition: ItemTypeClientDefinition = {
@@ -15,4 +15,3 @@ export const wheelDefinition: ItemTypeClientDefinition = {
     emitSoundTempo: 50,
   },
 };
-

@@ -1,5 +1,5 @@
-import { EFFECT_SEQUENCE } from '../../audio/effects';
-import { type ItemTypeClientDefinition } from './shared';
+import { EFFECT_SEQUENCE } from '../../../audio/effects';
+import { type ItemTypeClientDefinition } from '../shared';
 
 /** Default client-side UI definition for widget items. */
 export const widgetDefinition: ItemTypeClientDefinition = {
@@ -32,4 +32,3 @@ export const widgetDefinition: ItemTypeClientDefinition = {
     emitEffect: EFFECT_SEQUENCE.map((effect) => effect.id),
   },
 };
-

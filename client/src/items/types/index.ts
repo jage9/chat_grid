@@ -19,4 +19,3 @@ export const DEFAULT_ITEM_TYPE_DEFINITIONS: ItemTypeClientDefinition[] = [
 
 /** Default add-item menu ordering derived from local item definitions. */
 export const DEFAULT_ITEM_TYPE_SEQUENCE: ItemType[] = DEFAULT_ITEM_TYPE_DEFINITIONS.map((definition) => definition.type);
-

@@ -1,6 +1,6 @@
-import { RADIO_CHANNEL_OPTIONS } from '../../audio/radioStationRuntime';
-import { EFFECT_SEQUENCE } from '../../audio/effects';
-import { type ItemTypeClientDefinition } from './shared';
+import { RADIO_CHANNEL_OPTIONS } from '../../../audio/radioStationRuntime';
+import { EFFECT_SEQUENCE } from '../../../audio/effects';
+import { type ItemTypeClientDefinition } from '../shared';
 
 /** Default client-side UI definition for radio_station items. */
 export const radioStationDefinition: ItemTypeClientDefinition = {
@@ -21,4 +21,3 @@ export const radioStationDefinition: ItemTypeClientDefinition = {
     mediaChannel: [...RADIO_CHANNEL_OPTIONS],
   },
 };
-

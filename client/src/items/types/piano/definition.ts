@@ -1,5 +1,5 @@
-import { PIANO_INSTRUMENT_OPTIONS } from '../../audio/pianoSynth';
-import { type ItemTypeClientDefinition } from './shared';
+import { PIANO_INSTRUMENT_OPTIONS } from '../../../audio/pianoSynth';
+import { type ItemTypeClientDefinition } from '../shared';
 
 /** Default client-side UI definition for piano items. */
 export const pianoDefinition: ItemTypeClientDefinition = {
@@ -20,4 +20,3 @@ export const pianoDefinition: ItemTypeClientDefinition = {
     voiceMode: ['poly', 'mono'],
   },
 };
-
