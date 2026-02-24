@@ -8,18 +8,9 @@ import {
 import {
   RadioStationRuntime,
   getProxyUrlForStream,
-  normalizeRadioChannel,
-  normalizeRadioEffect,
-  normalizeRadioEffectValue,
   shouldProxyStreamUrl,
 } from './audio/radioStationRuntime';
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
-import {
-  DEFAULT_PIANO_SETTINGS_BY_INSTRUMENT,
-  PIANO_INSTRUMENT_OPTIONS,
-  PianoSynth,
-  type PianoInstrumentId,
-} from './audio/pianoSynth';
 import { normalizeDegrees } from './audio/spatial';
 import {
   applyPastedText,
@@ -54,7 +45,6 @@ import {
 } from './state/gameState';
 import {
   applyServerItemUiDefinitions,
-  getDefaultClockTimeZone,
   getItemTypeGlobalProperties,
   getItemTypeSequence,
   getEditableItemPropertyKeys,
@@ -66,6 +56,8 @@ import {
   itemTypeLabel,
 } from './items/itemRegistry';
 import { createItemPropertyEditor } from './items/itemPropertyEditor';
+import { createItemPropertyPresentation } from './items/itemPropertyPresentation';
+import { PianoController } from './items/pianoController';
 import { NICKNAME_STORAGE_KEY, SettingsStore } from './settings/settingsStore';
 import { runConnectFlow, runDisconnectFlow, type ConnectFlowDeps } from './session/connectionFlow';
 import { MediaSession } from './session/mediaSession';
@@ -89,46 +81,6 @@ const RECONNECT_MAX_ATTEMPTS = 3;
 const AUDIO_SUBSCRIPTION_REFRESH_MS = 500;
 const TELEPORT_SQUARES_PER_SECOND = 20;
 const TELEPORT_SYNC_INTERVAL_MS = 100;
-const PIANO_WHITE_KEY_MIDI_BY_CODE: Record<string, number> = {
-  KeyA: 60,
-  KeyS: 62,
-  KeyD: 64,
-  KeyF: 65,
-  KeyG: 67,
-  KeyH: 69,
-  KeyJ: 71,
-  KeyK: 72,
-  KeyL: 74,
-  Semicolon: 76,
-  Quote: 77,
-};
-const PIANO_SHARP_KEY_MIDI_BY_CODE: Record<string, number> = {
-  KeyW: 61,
-  KeyE: 63,
-  KeyT: 66,
-  KeyY: 68,
-  KeyU: 70,
-  KeyO: 73,
-  KeyP: 75,
-  BracketRight: 78,
-};
-type PianoDemoEvent = {
-  t: number;
-  keyId: string;
-  midi: number;
-  on: boolean;
-  instrument?: string;
-  voiceMode?: 'mono' | 'poly';
-  attack?: number;
-  decay?: number;
-  release?: number;
-  brightness?: number;
-  emitRange?: number;
-};
-type PianoDemoSong = {
-  id: string;
-  events: PianoDemoEvent[];
-};
 
 declare global {
   interface Window {
@@ -261,7 +213,6 @@ let replaceTextOnNextType = false;
 let pendingEscapeDisconnect = false;
 let micGainLoopbackRestoreState: boolean | null = null;
 let mainHelpViewerLines: string[] = [];
-let pianoHelpViewerLines: string[] = [];
 let helpViewerLines: string[] = [];
 let helpViewerIndex = 0;
 let helpViewerReturnMode: GameMode = 'normal';
@@ -286,20 +237,6 @@ let subscriptionRefreshPending = false;
 let suppressItemPropertyEchoUntilMs = 0;
 let activeTeleportLoopStop: (() => void) | null = null;
 let activeTeleportLoopToken = 0;
-let activePianoItemId: string | null = null;
-const activePianoKeys = new Set<string>();
-const activePianoKeyMidi = new Map<string, number>();
-const activePianoHeldOrder: string[] = [];
-let activePianoMonophonicKey: string | null = null;
-let activePianoDemoRunToken = 0;
-let activePianoDemoItemId: string | null = null;
-const activePianoDemoTimeoutIds: number[] = [];
-const activePianoDemoNotes = new Map<string, { runtimeKey: string; midi: number }>();
-const pianoDemoSongs = new Map<string, PianoDemoSong>();
-let pianoDemoDefaultSongId = '';
-let activePianoRecordingState: 'idle' | 'recording' | 'paused' = 'idle';
-const activeRemotePianoKeys = new Set<string>();
-let pianoPreviewTimeoutId: number | null = null;
 let activeTeleport:
   | {
       startX: number;
@@ -314,7 +251,6 @@ let activeTeleport:
       completionStatus: string;
     }
   | null = null;
-const pianoSynth = new PianoSynth();
 
 const signalingProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const signalingUrl = `${signalingProtocol}://${window.location.host}/ws`;
@@ -344,6 +280,15 @@ const mediaSession = new MediaSession({
   micInputGainScaleMultiplier: MIC_INPUT_GAIN_SCALE_MULTIPLIER,
   micInputGainStep: MIC_INPUT_GAIN_STEP,
 });
+
+const pianoController = new PianoController({
+  state,
+  audio,
+  signalingSend: (message) => signaling.send(message),
+  updateStatus,
+  openHelpViewer: (lines, returnMode) => openHelpViewer(lines, returnMode),
+});
+
 audio.setOutputMode(outputMode);
 
 loadEffectLevels();
@@ -351,8 +296,8 @@ loadAudioLayerState();
 loadMicInputGain();
 loadMasterVolume();
 void loadHelp();
-void loadPianoHelp();
-void loadPianoDemo();
+void pianoController.loadHelpFromUrl(withBase('piano.json'));
+void pianoController.loadDemoFromUrl(withBase('piano_demo.json'));
 void loadChangelog();
 
 /** Fetches a required DOM element and casts it to the requested element type. */
@@ -400,6 +345,12 @@ function formatTimestampMs(value: unknown): string {
   const pick = (type: Intl.DateTimeFormatPartTypes): string => parts.find((part) => part.type === type)?.value ?? '00';
   return `${pick('year')}-${pick('month')}-${pick('day')} ${pick('hour')}:${pick('minute')}`;
 }
+
+const itemPropertyPresentation = createItemPropertyPresentation({ formatTimestampMs });
+const getItemPropertyValue = itemPropertyPresentation.getItemPropertyValue;
+const isItemPropertyEditable = itemPropertyPresentation.isItemPropertyEditable;
+const describeItemPropertyHelp = itemPropertyPresentation.describeItemPropertyHelp;
+const validateNumericItemPropertyInput = itemPropertyPresentation.validateNumericItemPropertyInput;
 
 /** Toggles updates panel visibility and syncs associated ARIA state. */
 function setUpdatesExpanded(expanded: boolean): void {
@@ -449,114 +400,6 @@ async function loadHelp(): Promise<void> {
     renderHelp(help);
   } catch {
     // Keep existing/static help if loading fails.
-  }
-}
-
-/** Loads piano-mode help content from `piano.json` for in-mode help viewing. */
-async function loadPianoHelp(): Promise<void> {
-  try {
-    const response = await fetch(withBase('piano.json'), { cache: 'no-store' });
-    if (!response.ok) {
-      return;
-    }
-    const help = (await response.json()) as HelpData;
-    if (!Array.isArray(help.sections) || help.sections.length === 0) {
-      return;
-    }
-    pianoHelpViewerLines = buildHelpLines(help);
-  } catch {
-    // Keep piano help unavailable if loading fails.
-  }
-}
-
-/** Loads piano demo note events from `piano_demo.json` for Enter-key demo playback. */
-async function loadPianoDemo(): Promise<void> {
-  try {
-    const response = await fetch(withBase('piano_demo.json'), { cache: 'no-store' });
-    if (!response.ok) {
-      return;
-    }
-    const data = (await response.json()) as {
-      defaultSongId?: unknown;
-      songs?: unknown;
-    };
-    pianoDemoSongs.clear();
-    pianoDemoDefaultSongId = '';
-
-    if (data.songs && typeof data.songs === 'object') {
-      const songs = data.songs as Record<string, unknown>;
-      for (const [songId, rawSong] of Object.entries(songs)) {
-        if (!rawSong || typeof rawSong !== 'object') continue;
-        const song = rawSong as Record<string, unknown>;
-        const meta = song.meta as Record<string, unknown> | undefined;
-        const states = Array.isArray(song.states) ? song.states : [];
-        const keys = Array.isArray(song.keys) ? song.keys.filter((value): value is string => typeof value === 'string') : [];
-        const compactEvents = Array.isArray(song.events) ? song.events : [];
-        const events: PianoDemoEvent[] = [];
-        const resolveState = (stateIndex: number): Partial<PianoDemoEvent> => {
-          if (stateIndex < 0 || stateIndex >= states.length) {
-            return {};
-          }
-          const row = states[stateIndex];
-          if (!Array.isArray(row) || row.length < 7) {
-            return {};
-          }
-          return {
-            instrument: typeof row[0] === 'string' ? row[0] : undefined,
-            voiceMode: row[1] === 'mono' ? 'mono' : row[1] === 'poly' ? 'poly' : undefined,
-            attack: typeof row[2] === 'number' ? Math.max(0, Math.min(100, Math.round(row[2]))) : undefined,
-            decay: typeof row[3] === 'number' ? Math.max(0, Math.min(100, Math.round(row[3]))) : undefined,
-            release: typeof row[4] === 'number' ? Math.max(0, Math.min(100, Math.round(row[4]))) : undefined,
-            brightness: typeof row[5] === 'number' ? Math.max(0, Math.min(100, Math.round(row[5]))) : undefined,
-            emitRange: typeof row[6] === 'number' ? Math.max(5, Math.min(20, Math.round(row[6]))) : undefined,
-          };
-        };
-        for (const compact of compactEvents) {
-          if (!Array.isArray(compact) || compact.length < 4) continue;
-          const [rawT, rawKeyIdx, rawMidi, rawOn, rawStateIdx] = compact;
-          if (typeof rawT !== 'number' || typeof rawKeyIdx !== 'number' || typeof rawMidi !== 'number') continue;
-          const keyId = keys[Math.max(0, Math.round(rawKeyIdx))];
-          if (!keyId) continue;
-          const eventState = typeof rawStateIdx === 'number' ? resolveState(Math.round(rawStateIdx)) : {};
-          events.push({
-            t: Math.max(0, Math.round(rawT)),
-            keyId: keyId.slice(0, 32),
-            midi: Math.max(0, Math.min(127, Math.round(rawMidi))),
-            on: Boolean(rawOn),
-            instrument: eventState.instrument ?? (typeof meta?.instrument === 'string' ? meta.instrument : undefined),
-            voiceMode: eventState.voiceMode ?? (meta?.voiceMode === 'mono' ? 'mono' : meta?.voiceMode === 'poly' ? 'poly' : undefined),
-            attack:
-              eventState.attack ??
-              (Number.isFinite(Number(meta?.attack)) ? Math.max(0, Math.min(100, Math.round(Number(meta?.attack)))) : undefined),
-            decay:
-              eventState.decay ??
-              (Number.isFinite(Number(meta?.decay)) ? Math.max(0, Math.min(100, Math.round(Number(meta?.decay)))) : undefined),
-            release:
-              eventState.release ??
-              (Number.isFinite(Number(meta?.release)) ? Math.max(0, Math.min(100, Math.round(Number(meta?.release)))) : undefined),
-            brightness:
-              eventState.brightness ??
-              (Number.isFinite(Number(meta?.brightness)) ? Math.max(0, Math.min(100, Math.round(Number(meta?.brightness)))) : undefined),
-            emitRange:
-              eventState.emitRange ??
-              (Number.isFinite(Number(meta?.emitRange)) ? Math.max(5, Math.min(20, Math.round(Number(meta?.emitRange)))) : undefined),
-          });
-        }
-        events.sort((a, b) => a.t - b.t);
-        if (events.length > 0) {
-          pianoDemoSongs.set(songId, { id: songId, events });
-        }
-      }
-      const preferredId = String(data.defaultSongId ?? '').trim();
-      if (preferredId && pianoDemoSongs.has(preferredId)) {
-        pianoDemoDefaultSongId = preferredId;
-      } else {
-        pianoDemoDefaultSongId = pianoDemoSongs.keys().next().value ?? '';
-      }
-      return;
-    }
-  } catch {
-    // Demo remains unavailable if loading/parsing fails.
   }
 }
 
@@ -946,397 +789,6 @@ function getItemSpatialConfig(item: WorldItem): { range: number; directional: bo
   return { range, directional, facingDeg };
 }
 
-/** Resolves piano params with safe defaults for local play mode. */
-function getPianoParams(item: WorldItem): {
-  instrument: PianoInstrumentId;
-  voiceMode: 'mono' | 'poly';
-  octave: number;
-  attack: number;
-  decay: number;
-  release: number;
-  brightness: number;
-  emitRange: number;
-} {
-  const rawInstrument = String(item.params.instrument ?? 'piano').trim().toLowerCase();
-  const instrument: PianoInstrumentId =
-    rawInstrument === 'electric_piano' ||
-    rawInstrument === 'guitar' ||
-    rawInstrument === 'organ' ||
-    rawInstrument === 'bass' ||
-    rawInstrument === 'violin' ||
-    rawInstrument === 'synth_lead' ||
-    rawInstrument === 'brass' ||
-    rawInstrument === 'nintendo' ||
-    rawInstrument === 'drum_kit'
-      ? rawInstrument
-      : 'piano';
-  const rawAttack = Number(item.params.attack);
-  const rawDecay = Number(item.params.decay);
-  const rawOctave = Number(item.params.octave);
-  const rawVoiceMode = String(item.params.voiceMode ?? defaultsVoiceModeForInstrument(instrument)).trim().toLowerCase();
-  const rawRelease = Number(item.params.release);
-  const rawBrightness = Number(item.params.brightness);
-  const rawEmitRange = Number(item.params.emitRange ?? getItemTypeGlobalProperties(item.type).emitRange ?? 15);
-  const defaults = DEFAULT_PIANO_SETTINGS_BY_INSTRUMENT[instrument];
-  return {
-    instrument,
-    voiceMode: rawVoiceMode === 'mono' ? 'mono' : 'poly',
-    octave: Math.max(-2, Math.min(2, Number.isFinite(rawOctave) ? Math.round(rawOctave) : defaultsOctaveForInstrument(instrument))),
-    attack: Math.max(0, Math.min(100, Number.isFinite(rawAttack) ? Math.round(rawAttack) : defaults.attack)),
-    decay: Math.max(0, Math.min(100, Number.isFinite(rawDecay) ? Math.round(rawDecay) : defaults.decay)),
-    release: Math.max(0, Math.min(100, Number.isFinite(rawRelease) ? Math.round(rawRelease) : defaults.release)),
-    brightness: Math.max(0, Math.min(100, Number.isFinite(rawBrightness) ? Math.round(rawBrightness) : defaults.brightness)),
-    emitRange: Math.max(5, Math.min(20, Number.isFinite(rawEmitRange) ? Math.round(rawEmitRange) : 15)),
-  };
-}
-
-/** Returns default voice mode for a given piano instrument. */
-function defaultsVoiceModeForInstrument(instrument: PianoInstrumentId): 'mono' | 'poly' {
-  if (instrument === 'bass' || instrument === 'violin') return 'mono';
-  return 'poly';
-}
-
-/** Returns default octave offset for a given piano instrument. */
-function defaultsOctaveForInstrument(instrument: PianoInstrumentId): number {
-  return instrument === 'bass' ? -1 : 0;
-}
-
-/** Normalizes arbitrary instrument strings into supported piano synth ids. */
-function normalizePianoInstrument(value: unknown): PianoInstrumentId {
-  const raw = String(value ?? 'piano').trim().toLowerCase();
-  if (raw === 'electric_piano') return 'electric_piano';
-  if (raw === 'guitar') return 'guitar';
-  if (raw === 'organ') return 'organ';
-  if (raw === 'bass') return 'bass';
-  if (raw === 'violin') return 'violin';
-  if (raw === 'synth_lead') return 'synth_lead';
-  if (raw === 'brass') return 'brass';
-  if (raw === 'nintendo') return 'nintendo';
-  if (raw === 'drum_kit') return 'drum_kit';
-  return 'piano';
-}
-
-/** Returns playable MIDI note for a piano-mode key code, or null when unmapped. */
-function getPianoMidiForCode(code: string): number | null {
-  if (code in PIANO_WHITE_KEY_MIDI_BY_CODE) {
-    return PIANO_WHITE_KEY_MIDI_BY_CODE[code]!;
-  }
-  if (code in PIANO_SHARP_KEY_MIDI_BY_CODE) {
-    return PIANO_SHARP_KEY_MIDI_BY_CODE[code]!;
-  }
-  return null;
-}
-
-/** Starts local piano key mode for one used piano item. */
-async function startPianoUseMode(itemId: string): Promise<void> {
-  const item = state.items.get(itemId);
-  if (!item || item.type !== 'piano') return;
-  activePianoItemId = itemId;
-  activePianoKeys.clear();
-  activePianoKeyMidi.clear();
-  activePianoHeldOrder.length = 0;
-  activePianoMonophonicKey = null;
-  activePianoRecordingState = 'idle';
-  state.mode = 'pianoUse';
-  await audio.ensureContext();
-  updateStatus(`using ${item.title}, press question mark for help.`);
-  audio.sfxUiBlip();
-}
-
-/** Exits local piano key mode and releases any held notes. */
-function stopPianoUseMode(announce = true): void {
-  if (!activePianoItemId) return;
-  stopPianoDemo(true);
-  const itemId = activePianoItemId;
-  for (const code of Array.from(activePianoKeys)) {
-    const midi = activePianoKeyMidi.get(code);
-    if (!Number.isFinite(midi)) continue;
-    signaling.send({ type: 'item_piano_note', itemId, keyId: code, midi, on: false });
-    pianoSynth.noteOff(code);
-  }
-  activePianoItemId = null;
-  activePianoKeys.clear();
-  activePianoKeyMidi.clear();
-  activePianoHeldOrder.length = 0;
-  activePianoMonophonicKey = null;
-  activePianoRecordingState = 'idle';
-  state.mode = 'normal';
-  if (announce) {
-    updateStatus('Stopped piano.');
-    audio.sfxUiCancel();
-  }
-}
-
-/** Starts one local piano note and sends the matching network note-on packet. */
-function playLocalPianoNote(
-  item: WorldItem,
-  itemId: string,
-  keyId: string,
-  midi: number,
-  config: ReturnType<typeof getPianoParams>,
-  sourceGroupId?: string,
-): void {
-  const ctx = audio.context;
-  const destination = audio.getOutputDestinationNode();
-  if (!ctx || !destination) return;
-  const sourceX = item.carrierId === state.player.id ? state.player.x : item.x;
-  const sourceY = item.carrierId === state.player.id ? state.player.y : item.y;
-  pianoSynth.noteOn(
-    keyId,
-    sourceGroupId ?? `local:${itemId}`,
-    midi,
-    config.instrument,
-    config.voiceMode,
-    config.attack,
-    config.decay,
-    config.release,
-    config.brightness,
-    { audioCtx: ctx, destination },
-    { x: sourceX - state.player.x, y: sourceY - state.player.y, range: config.emitRange },
-  );
-  signaling.send({ type: 'item_piano_note', itemId, keyId, midi, on: true });
-}
-
-/** Stops active piano demo notes/timeouts and optionally emits note-off packets. */
-function stopPianoDemo(sendNoteOff = true): boolean {
-  const hadActiveDemo = activePianoDemoNotes.size > 0 || activePianoDemoTimeoutIds.length > 0;
-  activePianoDemoRunToken += 1;
-  while (activePianoDemoTimeoutIds.length > 0) {
-    const timeoutId = activePianoDemoTimeoutIds.pop();
-    if (typeof timeoutId === 'number') {
-      window.clearTimeout(timeoutId);
-    }
-  }
-  const itemId = activePianoDemoItemId;
-  for (const [logicalKey, note] of Array.from(activePianoDemoNotes.entries())) {
-    pianoSynth.noteOff(note.runtimeKey);
-    if (sendNoteOff && itemId && Number.isFinite(note.midi)) {
-      signaling.send({ type: 'item_piano_note', itemId, keyId: note.runtimeKey, midi: note.midi, on: false });
-    }
-    activePianoDemoNotes.delete(logicalKey);
-  }
-  activePianoDemoItemId = null;
-  return hadActiveDemo;
-}
-
-/** Starts the built-in piano demo sequence from the beginning. */
-function startPianoDemo(item: WorldItem, itemId: string): void {
-  stopPianoDemo(true);
-  const requestedSongId = String(item.params.songId ?? '').trim();
-  const songId = (requestedSongId && pianoDemoSongs.has(requestedSongId) ? requestedSongId : pianoDemoDefaultSongId) || '';
-  const song = songId ? pianoDemoSongs.get(songId) ?? null : null;
-  if (!song || song.events.length === 0) {
-    updateStatus('demo unavailable');
-    audio.sfxUiCancel();
-    return;
-  }
-  const runToken = activePianoDemoRunToken;
-  activePianoDemoItemId = itemId;
-  for (let index = 0; index < song.events.length; index += 1) {
-    const event = song.events[index]!;
-    const timeoutId = window.setTimeout(() => {
-      if (runToken !== activePianoDemoRunToken) return;
-      const liveItem = state.items.get(itemId);
-      if (!liveItem || liveItem.type !== 'piano') return;
-      const baseConfig = getPianoParams(liveItem);
-      const config = {
-        instrument: event.instrument ? normalizePianoInstrument(event.instrument) : baseConfig.instrument,
-        voiceMode: event.voiceMode ?? baseConfig.voiceMode,
-        octave: 0,
-        attack: event.attack ?? baseConfig.attack,
-        decay: event.decay ?? baseConfig.decay,
-        release: event.release ?? baseConfig.release,
-        brightness: event.brightness ?? baseConfig.brightness,
-        emitRange: event.emitRange ?? baseConfig.emitRange,
-      } as ReturnType<typeof getPianoParams>;
-      const logicalKey = event.keyId;
-      const runtimeKey = `__piano_demo_${logicalKey}`;
-      if (event.on) {
-        if (activePianoDemoNotes.has(logicalKey)) return;
-        activePianoDemoNotes.set(logicalKey, { runtimeKey, midi: event.midi });
-        playLocalPianoNote(liveItem, itemId, runtimeKey, event.midi, config, `demo:${itemId}`);
-      } else {
-        const active = activePianoDemoNotes.get(logicalKey);
-        if (active) {
-          activePianoDemoNotes.delete(logicalKey);
-          pianoSynth.noteOff(active.runtimeKey);
-          signaling.send({ type: 'item_piano_note', itemId, keyId: active.runtimeKey, midi: active.midi, on: false });
-        }
-      }
-    }, event.t);
-    activePianoDemoTimeoutIds.push(timeoutId);
-  }
-}
-
-/** Handles key release while in piano mode, including mono fallback retrigger behavior. */
-function handlePianoUseModeKeyUp(code: string): void {
-  if (!activePianoKeys.delete(code)) return;
-  const orderIndex = activePianoHeldOrder.lastIndexOf(code);
-  if (orderIndex >= 0) {
-    activePianoHeldOrder.splice(orderIndex, 1);
-  }
-  const itemId = activePianoItemId;
-  const midi = activePianoKeyMidi.get(code);
-  activePianoKeyMidi.delete(code);
-  if (!itemId || !Number.isFinite(midi)) {
-    pianoSynth.noteOff(code);
-    if (activePianoMonophonicKey === code) {
-      activePianoMonophonicKey = null;
-    }
-    return;
-  }
-  const item = state.items.get(itemId);
-  if (!item || item.type !== 'piano') {
-    pianoSynth.noteOff(code);
-    if (activePianoMonophonicKey === code) {
-      activePianoMonophonicKey = null;
-    }
-    return;
-  }
-  const config = getPianoParams(item);
-  if (config.voiceMode !== 'mono') {
-    pianoSynth.noteOff(code);
-    signaling.send({ type: 'item_piano_note', itemId, keyId: code, midi, on: false });
-    return;
-  }
-  if (activePianoMonophonicKey !== code) {
-    return;
-  }
-  pianoSynth.noteOff(code);
-  signaling.send({ type: 'item_piano_note', itemId, keyId: code, midi, on: false });
-  const fallbackCode = activePianoHeldOrder[activePianoHeldOrder.length - 1] ?? null;
-  if (!fallbackCode) {
-    activePianoMonophonicKey = null;
-    return;
-  }
-  const fallbackMidi = activePianoKeyMidi.get(fallbackCode);
-  if (!Number.isFinite(fallbackMidi)) {
-    activePianoMonophonicKey = null;
-    return;
-  }
-  activePianoMonophonicKey = fallbackCode;
-  playLocalPianoNote(item, itemId, fallbackCode, fallbackMidi, config);
-}
-
-/** Plays one short C4 preview using the piano item's current/overridden envelope+instrument. */
-async function previewPianoSettingChange(
-  item: WorldItem,
-  overrides: Partial<{ instrument: PianoInstrumentId; octave: number; attack: number; decay: number; release: number; brightness: number }>,
-): Promise<void> {
-  if (item.type !== 'piano') return;
-  await audio.ensureContext();
-  const ctx = audio.context;
-  const destination = audio.getOutputDestinationNode();
-  if (!ctx || !destination) return;
-  const current = getPianoParams(item);
-  const instrument = overrides.instrument ?? current.instrument;
-  const octave = Math.max(-2, Math.min(2, Math.round(overrides.octave ?? current.octave)));
-  const attack = Math.max(0, Math.min(100, Math.round(overrides.attack ?? current.attack)));
-  const decay = Math.max(0, Math.min(100, Math.round(overrides.decay ?? current.decay)));
-  const release = Math.max(0, Math.min(100, Math.round(overrides.release ?? current.release)));
-  const brightness = Math.max(0, Math.min(100, Math.round(overrides.brightness ?? current.brightness)));
-  const sourceX = item.carrierId === state.player.id ? state.player.x : item.x;
-  const sourceY = item.carrierId === state.player.id ? state.player.y : item.y;
-  const previewKeyId = '__piano_preview_c4__';
-  pianoSynth.noteOff(previewKeyId);
-  pianoSynth.noteOn(
-    previewKeyId,
-    'preview',
-    Math.max(0, Math.min(127, 60 + octave * 12)),
-    instrument,
-    current.voiceMode,
-    attack,
-    decay,
-    release,
-    brightness,
-    { audioCtx: ctx, destination },
-    { x: sourceX - state.player.x, y: sourceY - state.player.y, range: current.emitRange },
-  );
-  if (pianoPreviewTimeoutId !== null) {
-    window.clearTimeout(pianoPreviewTimeoutId);
-  }
-  pianoPreviewTimeoutId = window.setTimeout(() => {
-    pianoSynth.noteOff(previewKeyId);
-    pianoPreviewTimeoutId = null;
-  }, 320);
-}
-
-/** Plays one inbound piano note from another user using item spatial position. */
-function playRemotePianoNote(note: {
-  itemId: string;
-  senderId: string;
-  keyId: string;
-  midi: number;
-  instrument: string;
-  voiceMode: 'mono' | 'poly';
-  octave: number;
-  attack: number;
-  decay: number;
-  release: number;
-  brightness: number;
-  x: number;
-  y: number;
-  emitRange: number;
-}): void {
-  const ctx = audio.context;
-  const destination = audio.getOutputDestinationNode();
-  if (!ctx || !destination) return;
-  const runtimeKey = `${note.senderId}:${note.itemId}:${note.keyId}`;
-  if (activeRemotePianoKeys.has(runtimeKey)) return;
-  if (note.voiceMode === 'mono') {
-    stopRemotePianoNotesForSource(note.senderId, note.itemId);
-  }
-  activeRemotePianoKeys.add(runtimeKey);
-  pianoSynth.noteOn(
-    runtimeKey,
-    `remote:${note.senderId}:${note.itemId}`,
-    Math.max(0, Math.min(127, Math.round(note.midi))),
-    normalizePianoInstrument(note.instrument),
-    note.voiceMode,
-    Math.max(0, Math.min(100, Math.round(note.attack))),
-    Math.max(0, Math.min(100, Math.round(note.decay))),
-    Math.max(0, Math.min(100, Math.round(note.release))),
-    Math.max(0, Math.min(100, Math.round(note.brightness))),
-    { audioCtx: ctx, destination },
-    {
-      x: note.x - state.player.x,
-      y: note.y - state.player.y,
-      range: Math.max(1, Math.round(note.emitRange)),
-    },
-  );
-}
-
-/** Stops one inbound piano note previously started for another user. */
-function stopRemotePianoNote(senderId: string, keyId: string): void {
-  const suffix = `:${keyId}`;
-  for (const runtimeKey of Array.from(activeRemotePianoKeys)) {
-    if (!runtimeKey.startsWith(`${senderId}:`)) continue;
-    if (!runtimeKey.endsWith(suffix)) continue;
-    activeRemotePianoKeys.delete(runtimeKey);
-    pianoSynth.noteOff(runtimeKey);
-  }
-}
-
-/** Stops all currently active remote piano notes for a sender id. */
-function stopAllRemotePianoNotesForSender(senderId: string): void {
-  const prefix = `${senderId}:`;
-  for (const runtimeKey of Array.from(activeRemotePianoKeys)) {
-    if (!runtimeKey.startsWith(prefix)) continue;
-    activeRemotePianoKeys.delete(runtimeKey);
-    pianoSynth.noteOff(runtimeKey);
-  }
-}
-
-/** Stops all remote piano notes for one sender+item source group. */
-function stopRemotePianoNotesForSource(senderId: string, itemId: string): void {
-  const prefix = `${senderId}:${itemId}:`;
-  for (const runtimeKey of Array.from(activeRemotePianoKeys)) {
-    if (!runtimeKey.startsWith(prefix)) continue;
-    activeRemotePianoKeys.delete(runtimeKey);
-    pianoSynth.noteOff(runtimeKey);
-  }
-}
-
 /** Enters help-view mode and announces the first help line. */
 function openHelpViewer(lines: string[], returnMode: GameMode = 'normal'): void {
   if (lines.length === 0) {
@@ -1494,182 +946,6 @@ function applyTextInputEdit(code: string, key: string, maxLength: number, ctrlKe
     const spoken = describeCursorCharacter(state.nicknameInput, state.cursorPos);
     if (spoken) updateStatus(spoken);
   }
-}
-
-/** Returns a formatted display value for an item property key, with per-key normalization. */
-function getItemPropertyValue(item: WorldItem, key: string): string {
-  const toSoundDisplayName = (rawValue: unknown): string => {
-    const raw = String(rawValue ?? '').trim();
-    if (!raw) return 'none';
-    if (raw.toLowerCase() === 'none') return 'none';
-    const withoutQuery = raw.split('?')[0].split('#')[0];
-    const segments = withoutQuery.split('/').filter((part) => part.length > 0);
-    return segments[segments.length - 1] ?? raw;
-  };
-  if (key === 'title') return item.title;
-  if (key === 'type') return item.type;
-  if (key === 'x') return String(item.x);
-  if (key === 'y') return String(item.y);
-  if (key === 'carrierId') return item.carrierId ?? 'none';
-  if (key === 'version') return String(item.version);
-  if (key === 'createdBy') return item.createdBy;
-  if (key === 'createdAt') return formatTimestampMs(item.createdAt);
-  if (key === 'updatedAt') return formatTimestampMs(item.updatedAt);
-  if (key === 'capabilities') return item.capabilities.join(', ') || 'none';
-  if (key === 'useSound') return toSoundDisplayName(item.params.useSound ?? item.useSound);
-  if (key === 'emitSound') return toSoundDisplayName(item.params.emitSound ?? item.emitSound);
-  if (key === 'enabled') return item.params.enabled === false ? 'off' : 'on';
-  if (key === 'directional') {
-    if (typeof item.params.directional === 'boolean') {
-      return item.params.directional ? 'on' : 'off';
-    }
-    return getItemTypeGlobalProperties(item.type).directional === true ? 'on' : 'off';
-  }
-  if (key === 'timeZone') return String(item.params.timeZone ?? getDefaultClockTimeZone());
-  if (key === 'use24Hour') return item.params.use24Hour === true ? 'on' : 'off';
-  if (key === 'mediaChannel') return normalizeRadioChannel(item.params.mediaChannel);
-  if (key === 'mediaEffect') return normalizeRadioEffect(item.params.mediaEffect);
-  if (key === 'mediaEffectValue') return String(normalizeRadioEffectValue(item.params.mediaEffectValue));
-  if (key === 'emitEffect') return normalizeRadioEffect(item.params.emitEffect);
-  if (key === 'emitEffectValue') return String(normalizeRadioEffectValue(item.params.emitEffectValue));
-  if (key === 'facing') {
-    const parsed = Number(item.params.facing ?? 0);
-    if (!Number.isFinite(parsed)) return '0';
-    return String(Math.round(normalizeDegrees(parsed) * 10) / 10);
-  }
-  if (key === 'emitRange') {
-    const parsed = Number(item.params.emitRange ?? getItemTypeGlobalProperties(item.type)?.emitRange ?? 15);
-    if (!Number.isFinite(parsed)) return '15';
-    return String(Math.round(parsed));
-  }
-  const paramValue = item.params[key];
-  if (paramValue !== undefined) return String(paramValue);
-  const globalValue = getItemTypeGlobalProperties(item.type)?.[key];
-  if (globalValue !== undefined) return String(globalValue);
-  return '';
-}
-
-/** Infers value type for item-property help when metadata is missing. */
-function inferItemPropertyValueType(item: WorldItem, key: string): string | undefined {
-  if (key === 'useSound' || key === 'emitSound') return 'sound';
-  if (key === 'enabled' || key === 'use24Hour' || key === 'directional') return 'boolean';
-  if (key === 'mediaChannel' || key === 'mediaEffect' || key === 'emitEffect' || key === 'timeZone' || key === 'instrument' || key === 'voiceMode') return 'list';
-  if (
-    key === 'x' ||
-    key === 'y' ||
-    key === 'version' ||
-    key === 'mediaVolume' ||
-    key === 'emitVolume' ||
-    key === 'emitSoundSpeed' ||
-    key === 'emitSoundTempo' ||
-    key === 'mediaEffectValue' ||
-    key === 'emitEffectValue' ||
-    key === 'facing' ||
-    key === 'emitRange' ||
-    key === 'octave' ||
-    key === 'attack' ||
-    key === 'decay' ||
-    key === 'release' ||
-    key === 'brightness' ||
-    key === 'sides' ||
-    key === 'number' ||
-    key === 'useCooldownMs'
-  ) {
-    return 'number';
-  }
-  if (key in item.params || key in getItemTypeGlobalProperties(item.type)) {
-    const value = item.params[key] ?? getItemTypeGlobalProperties(item.type)?.[key];
-    if (typeof value === 'boolean') return 'boolean';
-    if (typeof value === 'number') return 'number';
-    if (typeof value === 'string') return 'text';
-  }
-  return 'text';
-}
-
-/** Provides tooltip fallbacks for inspect-only/system item properties. */
-function getFallbackInspectPropertyTooltip(key: string): string | undefined {
-  if (key === 'type') return 'The item type identifier.';
-  if (key === 'x') return 'X coordinate on the grid.';
-  if (key === 'y') return 'Y coordinate on the grid.';
-  if (key === 'carrierId') return 'Current carrier user id, or none when on the ground.';
-  if (key === 'version') return 'Server version for this item, incremented after each update.';
-  if (key === 'createdBy') return 'User id of who created this item.';
-  if (key === 'createdAt') return 'Timestamp when this item was created.';
-  if (key === 'updatedAt') return 'Timestamp when this item was last updated.';
-  if (key === 'capabilities') return 'Server-declared actions supported by this item.';
-  if (key === 'useSound') return 'One-shot sound played when use succeeds.';
-  if (key === 'emitSound') return 'Looping emitted sound source for this item.';
-  if (key === 'useCooldownMs') return 'Global cooldown in milliseconds between uses.';
-  if (key === 'directional') return 'Whether emitted audio favors item facing direction.';
-  return undefined;
-}
-
-/** Returns whether a property is editable for the given item type. */
-function isItemPropertyEditable(item: WorldItem, key: string): boolean {
-  return getEditableItemPropertyKeys(item).includes(key);
-}
-
-/** Builds spoken tooltip/help text for the current item property row. */
-function describeItemPropertyHelp(item: WorldItem, key: string): string {
-  const metadata = getItemPropertyMetadata(item.type, key);
-  const parts: string[] = [];
-  const tooltip = metadata?.tooltip ?? getFallbackInspectPropertyTooltip(key);
-  if (tooltip) {
-    parts.push(tooltip);
-  } else {
-    parts.push('No tooltip available.');
-  }
-
-  const valueType = metadata?.valueType ?? inferItemPropertyValueType(item, key);
-  if (valueType) {
-    parts.push(`Type: ${valueType}.`);
-  }
-
-  if (metadata?.range) {
-    const stepText = metadata.range.step !== undefined ? ` step ${metadata.range.step}` : '';
-    parts.push(`Range: ${metadata.range.min} to ${metadata.range.max}${stepText}.`);
-  } else {
-    const options = getItemPropertyOptionValues(key);
-    if (options && options.length > 0) {
-      parts.push(`Options: ${options.join(', ')}.`);
-    }
-  }
-
-  if (metadata?.maxLength !== undefined) {
-    parts.push(`Max length: ${metadata.maxLength} characters.`);
-  }
-
-  parts.push(isItemPropertyEditable(item, key) ? 'Editable.' : 'Read only.');
-  return parts.join(' ');
-}
-
-/** Validates and normalizes numeric item-property edits using metadata ranges/steps. */
-function validateNumericItemPropertyInput(
-  item: WorldItem,
-  key: string,
-  rawValue: string,
-  requireInteger: boolean,
-): { ok: true; value: number } | { ok: false; message: string } {
-  const parsed = Number(rawValue);
-  if (!Number.isFinite(parsed)) {
-    return { ok: false, message: `${itemPropertyLabel(key)} must be a number.` };
-  }
-  if (requireInteger && !Number.isInteger(parsed)) {
-    return { ok: false, message: `${itemPropertyLabel(key)} must be an integer.` };
-  }
-  const range = getItemPropertyMetadata(item.type, key)?.range;
-  if (range && (parsed < range.min || parsed > range.max)) {
-    return { ok: false, message: `${itemPropertyLabel(key)} must be between ${range.min} and ${range.max}.` };
-  }
-  if (!range) {
-    return { ok: true, value: parsed };
-  }
-  const step = range.step;
-  if (step && step > 0) {
-    const normalized = snapNumberToStep(parsed, step, range.min);
-    return { ok: true, value: normalized };
-  }
-  return { ok: true, value: parsed };
 }
 
 /** Returns singular/plural square wording for distance announcements. */
@@ -2032,15 +1308,7 @@ function disconnect(): void {
   lastSubscriptionRefreshTileY = Math.round(state.player.y);
   stopTeleportLoopAudio();
   activeTeleport = null;
-  stopPianoUseMode(false);
-  for (const key of Array.from(activeRemotePianoKeys)) {
-    activeRemotePianoKeys.delete(key);
-    pianoSynth.noteOff(key);
-  }
-  if (pianoPreviewTimeoutId !== null) {
-    window.clearTimeout(pianoPreviewTimeoutId);
-    pianoPreviewTimeoutId = null;
-  }
+  pianoController.cleanup();
 }
 
 const onAppMessage = createOnMessageHandler({
@@ -2076,9 +1344,9 @@ const onAppMessage = createOnMessageHandler({
       gain,
     );
   },
-  playRemotePianoNote,
-  stopRemotePianoNote,
-  stopAllRemotePianoNotesForSender,
+  playRemotePianoNote: (note) => pianoController.playRemoteNote(note),
+  stopRemotePianoNote: (senderId, keyId) => pianoController.stopRemoteNote(senderId, keyId),
+  stopAllRemotePianoNotesForSender: (senderId) => pianoController.stopAllRemoteNotesForSender(senderId),
   TELEPORT_SOUND_URL,
   TELEPORT_START_SOUND_URL,
   getAudioLayers: () => audioLayers,
@@ -2140,22 +1408,7 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
     startHeartbeat();
   }
   await onAppMessage(message);
-  if (
-    message.type === 'item_action_result' &&
-    message.ok &&
-    message.action === 'use' &&
-    typeof message.itemId === 'string' &&
-    activePianoItemId &&
-    message.itemId === activePianoItemId
-  ) {
-    if (message.message === 'record' || message.message === 'resume') {
-      activePianoRecordingState = 'recording';
-    } else if (message.message === 'pause') {
-      activePianoRecordingState = 'paused';
-    } else if (message.message === 'stop') {
-      activePianoRecordingState = 'idle';
-    }
-  }
+  pianoController.onUseResultMessage(message);
   if (
     message.type === 'item_action_result' &&
     message.ok &&
@@ -2166,12 +1419,10 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   ) {
     const item = state.items.get(message.itemId);
     if (item?.type === 'piano') {
-      await startPianoUseMode(item.id);
+      await pianoController.startUseMode(item.id);
     }
   }
-  if (activePianoItemId && !state.items.has(activePianoItemId)) {
-    stopPianoUseMode(false);
-  }
+  pianoController.syncAfterWorldUpdate();
   applyConfiguredPeerListenGains();
   if (restartAnnouncement) {
     setConnectionStatus(restartAnnouncement);
@@ -2644,125 +1895,6 @@ function handleMicGainEditModeInput(code: string, key: string, ctrlKey: boolean)
   applyTextInputEdit(code, key, 8, ctrlKey, true);
 }
 
-/** Handles realtime keyboard performance while piano item mode is active. */
-function handlePianoUseModeInput(code: string): void {
-  if (code === 'Escape') {
-    stopPianoUseMode(true);
-    return;
-  }
-  if (code === 'Slash') {
-    openHelpViewer(pianoHelpViewerLines, 'pianoUse');
-    return;
-  }
-  const itemId = activePianoItemId;
-  if (!itemId) {
-    state.mode = 'normal';
-    return;
-  }
-  const item = state.items.get(itemId);
-  if (!item || item.type !== 'piano') {
-    stopPianoUseMode(false);
-    return;
-  }
-  if (code === 'Enter') {
-    if (activePianoRecordingState !== 'idle') {
-      updateStatus('Stop or pause recording first.');
-      audio.sfxUiCancel();
-      return;
-    }
-    signaling.send({ type: 'item_piano_recording', itemId, action: 'stop_playback' });
-    startPianoDemo(item, itemId);
-    updateStatus('demo play');
-    audio.sfxUiBlip();
-    return;
-  }
-  if (code === 'KeyZ') {
-    signaling.send({ type: 'item_piano_recording', itemId, action: 'toggle_record' });
-    return;
-  }
-  if (code === 'KeyX') {
-    if (activePianoRecordingState !== 'idle') {
-      updateStatus('Stop or pause recording first.');
-      audio.sfxUiCancel();
-      return;
-    }
-    stopPianoDemo(true);
-    signaling.send({ type: 'item_piano_recording', itemId, action: 'playback' });
-    return;
-  }
-  if (code === 'KeyC') {
-    stopPianoDemo(true);
-    signaling.send({ type: 'item_piano_recording', itemId, action: 'stop_playback' });
-    signaling.send({ type: 'item_piano_recording', itemId, action: 'stop_record' });
-    activePianoRecordingState = 'idle';
-    return;
-  }
-  if (code === 'Equal' || code === 'Minus') {
-    const current = getPianoParams(item).octave;
-    const next = Math.max(-2, Math.min(2, current + (code === 'Equal' ? 1 : -1)));
-    item.params.octave = next;
-    signaling.send({ type: 'item_update', itemId, params: { octave: next } });
-    updateStatus(`octave ${next}.`);
-    return;
-  }
-  if (code.startsWith('Digit')) {
-    const digit = Number(code.slice(5));
-    const instrumentIndex = digit === 0 ? 9 : digit - 1;
-    if (Number.isInteger(instrumentIndex) && instrumentIndex >= 0 && instrumentIndex < PIANO_INSTRUMENT_OPTIONS.length) {
-      const instrument = PIANO_INSTRUMENT_OPTIONS[instrumentIndex];
-      if (instrument) {
-        const defaults = DEFAULT_PIANO_SETTINGS_BY_INSTRUMENT[instrument];
-        const voiceMode = defaultsVoiceModeForInstrument(instrument);
-        const octave = defaultsOctaveForInstrument(instrument);
-        item.params.instrument = instrument;
-        item.params.voiceMode = voiceMode;
-        item.params.octave = octave;
-        item.params.attack = defaults.attack;
-        item.params.decay = defaults.decay;
-        item.params.release = defaults.release;
-        item.params.brightness = defaults.brightness;
-        signaling.send({
-          type: 'item_update',
-          itemId,
-          params: {
-            instrument,
-          },
-        });
-        void previewPianoSettingChange(item, {
-          instrument,
-          octave,
-          attack: defaults.attack,
-          decay: defaults.decay,
-          release: defaults.release,
-          brightness: defaults.brightness,
-        });
-        updateStatus(`Instrument ${instrument}.`);
-      }
-      return;
-    }
-  }
-  const midi = getPianoMidiForCode(code);
-  if (midi === null) return;
-  if (activePianoKeys.has(code)) return;
-  const config = getPianoParams(item);
-  const playedMidi = Math.max(0, Math.min(127, midi + config.octave * 12));
-  activePianoKeys.add(code);
-  activePianoKeyMidi.set(code, playedMidi);
-  activePianoHeldOrder.push(code);
-  if (config.voiceMode === 'mono') {
-    const previousCode = activePianoMonophonicKey;
-    if (previousCode && previousCode !== code) {
-      const previousMidi = activePianoKeyMidi.get(previousCode);
-      pianoSynth.noteOff(previousCode);
-      if (Number.isFinite(previousMidi)) {
-        signaling.send({ type: 'item_piano_note', itemId, keyId: previousCode, midi: previousMidi, on: false });
-      }
-    }
-    activePianoMonophonicKey = code;
-  }
-  playLocalPianoNote(item, itemId, code, playedMidi, config);
-}
-
 /** Handles effect menu list navigation and selection. */
 function handleEffectSelectModeInput(code: string, key: string): void {
   const control = handleListControlKey(code, key, EFFECT_SEQUENCE, state.effectSelectIndex, (effect) => effect.label);
@@ -3013,50 +2145,7 @@ const itemPropertyEditor = createItemPropertyEditor({
     suppressItemPropertyEchoUntilMs = Math.max(suppressItemPropertyEchoUntilMs, Date.now() + Math.max(0, ms));
   },
   onPreviewPropertyChange: (item, key, value) => {
-    if (item.type !== 'piano') return;
-    if (key === 'instrument') {
-      const instrument = normalizePianoInstrument(value);
-      const defaults = DEFAULT_PIANO_SETTINGS_BY_INSTRUMENT[instrument];
-      const octave = defaultsOctaveForInstrument(instrument);
-      void previewPianoSettingChange(item, {
-        instrument,
-        octave,
-        attack: defaults.attack,
-        decay: defaults.decay,
-        release: defaults.release,
-        brightness: defaults.brightness,
-      });
-      return;
-    }
-    if (key === 'attack') {
-      const attack = Number(value);
-      if (!Number.isFinite(attack)) return;
-      void previewPianoSettingChange(item, { attack });
-      return;
-    }
-    if (key === 'decay') {
-      const decay = Number(value);
-      if (!Number.isFinite(decay)) return;
-      void previewPianoSettingChange(item, { decay });
-      return;
-    }
-    if (key === 'release') {
-      const release = Number(value);
-      if (!Number.isFinite(release)) return;
-      void previewPianoSettingChange(item, { release });
-      return;
-    }
-    if (key === 'brightness') {
-      const brightness = Number(value);
-      if (!Number.isFinite(brightness)) return;
-      void previewPianoSettingChange(item, { brightness });
-      return;
-    }
-    if (key === 'octave') {
-      const octave = Number(value);
-      if (!Number.isFinite(octave)) return;
-      void previewPianoSettingChange(item, { octave });
-    }
+    pianoController.onPreviewPropertyChange(item, key, value);
   },
   updateStatus,
   sfxUiBlip: () => audio.sfxUiBlip(),
@@ -3210,7 +2299,7 @@ function setupInputHandlers(): void {
         nickname: handleNicknameModeInput,
         chat: handleChatModeInput,
         micGainEdit: handleMicGainEditModeInput,
-        pianoUse: (currentCode) => handlePianoUseModeInput(currentCode),
+        pianoUse: (currentCode) => pianoController.handleModeInput(currentCode),
         effectSelect: (currentCode, currentKey) => handleEffectSelectModeInput(currentCode, currentKey),
         helpView: (currentCode) => handleHelpViewModeInput(currentCode),
         listUsers: (currentCode, currentKey) => handleListModeInput(currentCode, currentKey),
@@ -3232,7 +2321,7 @@ function setupInputHandlers(): void {
   document.addEventListener('keyup', (event) => {
     const code = normalizeInputCode(event);
     if (state.mode === 'pianoUse' && code) {
-      handlePianoUseModeKeyUp(code);
+      pianoController.handleModeKeyUp(code);
     }
     if (code) {
       state.keysPressed[code] = false;
