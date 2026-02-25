@@ -29,6 +29,7 @@ const SUBSCRIBE_PRELOAD_SQUARES = 5;
 const UNSUBSCRIBE_HYSTERESIS_SQUARES = 8;
 const SPATIAL_RAMP_SECONDS = 0.2;
 const SPATIAL_TIME_CONSTANT_SECONDS = SPATIAL_RAMP_SECONDS / 3;
+const STREAM_PLAY_RETRY_MS = 5000;
 
 /** Maps a 0-100 speed control to playback-rate range used by emitted audio. */
 function resolveEmitPlaybackRate(raw: unknown): number {
@@ -64,6 +65,8 @@ function resolveEmitRates(item: WorldItem): { playbackRate: number; preservePitc
 
 export class ItemEmitRuntime {
   private readonly outputs = new Map<string, EmitOutput>();
+  private readonly pendingEmitStarts = new Set<string>();
+  private readonly nextEmitStartAtMs = new Map<string, number>();
   private layerEnabled = true;
   private listenerPositions: Array<{ x: number; y: number }> = [];
 
@@ -84,6 +87,8 @@ export class ItemEmitRuntime {
     output.gain.disconnect();
     output.panner?.disconnect();
     this.outputs.delete(itemId);
+    this.pendingEmitStarts.delete(itemId);
+    this.nextEmitStartAtMs.delete(itemId);
   }
 
   cleanupAll(): void {
@@ -170,7 +175,7 @@ export class ItemEmitRuntime {
         gain.connect(destination);
       }
       this.outputs.set(item.id, { soundUrl, element, source, effectInput, effectRuntime, effect, effectValue, gain, panner });
-      void element.play().catch(() => undefined);
+      this.tryStartEmitPlayback(item.id, element);
     }
 
     for (const itemId of Array.from(this.outputs.keys())) {
@@ -226,6 +231,7 @@ export class ItemEmitRuntime {
       const panValue = mix?.pan ?? 0;
       const emitVolume = volumePercentToGain(item.params.emitVolume, 100);
       output.gain.gain.setTargetAtTime(gainValue * emitVolume, audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
+      this.tryStartEmitPlayback(itemId, output.element);
       if (output.panner) {
         const resolvedPan = this.audio.getOutputMode() === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
         output.panner.pan.setTargetAtTime(resolvedPan, audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
@@ -245,5 +251,39 @@ export class ItemEmitRuntime {
     return listenerPositions.some((listenerPosition) =>
       Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold,
     );
+  }
+
+  private tryStartEmitPlayback(itemId: string, element: HTMLAudioElement): void {
+    if (!element.paused) {
+      this.nextEmitStartAtMs.delete(itemId);
+      return;
+    }
+    if (this.pendingEmitStarts.has(itemId)) {
+      return;
+    }
+    const now = Date.now();
+    const retryAt = this.nextEmitStartAtMs.get(itemId) ?? 0;
+    if (now < retryAt) {
+      return;
+    }
+    this.pendingEmitStarts.add(itemId);
+    if (element.error) {
+      try {
+        element.load();
+      } catch {
+        // Ignore stale media reload failures.
+      }
+    }
+    void element
+      .play()
+      .then(() => {
+        this.nextEmitStartAtMs.delete(itemId);
+      })
+      .catch(() => {
+        this.nextEmitStartAtMs.set(itemId, Date.now() + STREAM_PLAY_RETRY_MS);
+      })
+      .finally(() => {
+        this.pendingEmitStarts.delete(itemId);
+      });
   }
 }

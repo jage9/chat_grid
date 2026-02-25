@@ -273,6 +273,49 @@ function resolve_redirect_url($baseUrl, $location)
     return $scheme . '://' . $host . $port . $dir . $location;
 }
 
+function normalize_dropbox_url($url)
+{
+    $parts = parse_url($url);
+    if ($parts === false || !isset($parts['host'])) {
+        return $url;
+    }
+    $host = strtolower((string) $parts['host']);
+    if (!host_matches_suffix($host, 'dropbox.com')) {
+        return $url;
+    }
+
+    $query = array();
+    if (isset($parts['query']) && $parts['query'] !== '') {
+        parse_str((string) $parts['query'], $query);
+    }
+    // Dropbox direct media playback is most reliable with raw=1.
+    $query['raw'] = '1';
+    unset($query['dl']);
+
+    $scheme = isset($parts['scheme']) ? (string) $parts['scheme'] : 'https';
+    $user = isset($parts['user']) ? (string) $parts['user'] : '';
+    $pass = isset($parts['pass']) ? (string) $parts['pass'] : '';
+    $auth = '';
+    if ($user !== '') {
+        $auth = $user;
+        if ($pass !== '') {
+            $auth .= ':' . $pass;
+        }
+        $auth .= '@';
+    }
+    $hostPort = (string) $parts['host'];
+    if (isset($parts['port'])) {
+        $hostPort .= ':' . (int) $parts['port'];
+    }
+    $path = isset($parts['path']) ? (string) $parts['path'] : '/';
+    $fragment = isset($parts['fragment']) && $parts['fragment'] !== '' ? '#' . (string) $parts['fragment'] : '';
+    $queryString = http_build_query($query);
+    if ($queryString !== '') {
+        $queryString = '?' . $queryString;
+    }
+    return $scheme . '://' . $auth . $hostPort . $path . $queryString . $fragment;
+}
+
 function resolve_safe_redirect_chain($initialUrl, $allowlistSuffixes, $requestHeaders, $maxRedirects, &$error)
 {
     $error = '';
@@ -351,6 +394,7 @@ $rawUrl = isset($_GET['url']) ? trim((string) $_GET['url']) : '';
 if ($rawUrl === '') {
     send_text(400, 'missing url query param');
 }
+$rawUrl = normalize_dropbox_url($rawUrl);
 
 // Optional allowlist env var: CHGRID_MEDIA_PROXY_ALLOWLIST=dropbox.com,example.com
 $allowlistEnv = getenv('CHGRID_MEDIA_PROXY_ALLOWLIST');

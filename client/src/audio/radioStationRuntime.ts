@@ -167,10 +167,13 @@ const SUBSCRIBE_PRELOAD_SQUARES = 5;
 const UNSUBSCRIBE_HYSTERESIS_SQUARES = 8;
 const SPATIAL_RAMP_SECONDS = 0.2;
 const SPATIAL_TIME_CONSTANT_SECONDS = SPATIAL_RAMP_SECONDS / 3;
+const STREAM_PLAY_RETRY_MS = 5000;
 
 export class RadioStationRuntime {
   private readonly sharedRadioSources = new Map<string, SharedRadioSource>();
   private readonly itemRadioOutputs = new Map<string, ItemRadioOutput>();
+  private readonly pendingSharedStarts = new Set<string>();
+  private readonly nextSharedStartAtMs = new Map<string, number>();
   private layerEnabled = true;
   private listenerPositions: Array<{ x: number; y: number }> = [];
 
@@ -279,6 +282,10 @@ export class RadioStationRuntime {
         output.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
         continue;
       }
+      const shared = this.sharedRadioSources.get(output.streamUrl);
+      if (shared) {
+        this.tryStartSharedPlayback(shared);
+      }
       const spatialConfig = this.getSpatialConfig(item);
       const mix = resolveSpatialMix({
         dx: item.x - playerPosition.x,
@@ -330,6 +337,8 @@ export class RadioStationRuntime {
     shared.element.src = '';
     shared.source.disconnect();
     this.sharedRadioSources.delete(streamUrl);
+    this.pendingSharedStarts.delete(streamUrl);
+    this.nextSharedStartAtMs.delete(streamUrl);
   }
 
   private getOrCreateSharedSource(streamUrl: string): SharedRadioSource | null {
@@ -345,7 +354,6 @@ export class RadioStationRuntime {
     element.loop = true;
     element.preload = 'none';
     const source = audioCtx.createMediaElementSource(element);
-    void element.play().catch(() => undefined);
     const shared: SharedRadioSource = {
       streamUrl,
       element,
@@ -353,7 +361,42 @@ export class RadioStationRuntime {
       refCount: 1,
     };
     this.sharedRadioSources.set(streamUrl, shared);
+    this.tryStartSharedPlayback(shared);
     return shared;
+  }
+
+  private tryStartSharedPlayback(shared: SharedRadioSource): void {
+    if (!shared.element.paused) {
+      this.nextSharedStartAtMs.delete(shared.streamUrl);
+      return;
+    }
+    if (this.pendingSharedStarts.has(shared.streamUrl)) {
+      return;
+    }
+    const now = Date.now();
+    const retryAt = this.nextSharedStartAtMs.get(shared.streamUrl) ?? 0;
+    if (now < retryAt) {
+      return;
+    }
+    this.pendingSharedStarts.add(shared.streamUrl);
+    if (shared.element.error) {
+      try {
+        shared.element.load();
+      } catch {
+        // Ignore stale media reload failures.
+      }
+    }
+    void shared.element
+      .play()
+      .then(() => {
+        this.nextSharedStartAtMs.delete(shared.streamUrl);
+      })
+      .catch(() => {
+        this.nextSharedStartAtMs.set(shared.streamUrl, Date.now() + STREAM_PLAY_RETRY_MS);
+      })
+      .finally(() => {
+        this.pendingSharedStarts.delete(shared.streamUrl);
+      });
   }
 
   private async ensureRuntime(item: WorldItem): Promise<void> {
