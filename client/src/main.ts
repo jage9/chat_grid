@@ -196,6 +196,7 @@ const renderer = new CanvasRenderer(dom.canvas);
 const audio = new AudioEngine();
 const settings = new SettingsStore();
 let worldGridSize = GRID_SIZE;
+let movementTickMs = MOVE_COOLDOWN_MS;
 let lastWallCollisionDirection: string | null = null;
 let statusTimeout: number | null = null;
 let lastFocusedElement: Element | null = null;
@@ -1122,7 +1123,7 @@ function handleMovement(): void {
   if (state.mode !== 'normal') return;
   if (activeTeleport) return;
   const now = Date.now();
-  if (now - state.player.lastMoveTime < MOVE_COOLDOWN_MS) return;
+  if (now - state.player.lastMoveTime < movementTickMs) return;
 
   let dx = 0;
   let dy = 0;
@@ -1154,7 +1155,7 @@ function handleMovement(): void {
   persistPlayerPosition();
   state.player.lastMoveTime = now;
   void refreshAudioSubscriptions(true);
-  void audio.playSample(randomFootstepUrl(), FOOTSTEP_GAIN, MOVE_COOLDOWN_MS);
+  void audio.playSample(randomFootstepUrl(), FOOTSTEP_GAIN, movementTickMs);
   signaling.send({ type: 'update_position', x: nextX, y: nextY });
 
   const namesOnTile = getPeerNamesAtPosition(nextX, nextY);
@@ -1307,7 +1308,6 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
     signalingConnect: (handler) => signaling.connect(handler as (message: IncomingMessage) => Promise<void>),
     signalingDisconnect: () => signaling.disconnect(),
     onMessage: (message) => onSignalingMessage(message as IncomingMessage),
-    worldGridSize,
     persistPlayerPosition,
     peerManagerCleanupAll: () => peerManager.cleanupAll(),
     radioCleanupAll: () => radioRuntime.cleanupAll(),
@@ -1345,6 +1345,9 @@ const onAppMessage = createOnMessageHandler({
   getWorldGridSize: () => worldGridSize,
   setWorldGridSize: (size) => {
     worldGridSize = size;
+  },
+  setMovementTickMs: (value) => {
+    movementTickMs = Math.max(1, value);
   },
   setConnecting: (value) => {
     mediaSession.setConnecting(value);

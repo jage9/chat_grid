@@ -115,6 +115,7 @@ class RemoteUser(BaseModel):
 class WelcomePacket(BasePacket):
     type: Literal["welcome"]
     id: str
+    player: RemoteUser
     users: list[RemoteUser]
     items: list[dict] | None = None
     worldConfig: dict | None = None

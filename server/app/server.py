@@ -9,6 +9,7 @@ from importlib.metadata import PackageNotFoundError, version as package_version
 import json
 import logging
 import os
+import random
 import re
 import ssl
 import time
@@ -88,6 +89,8 @@ class SignalingServer:
         max_message_size: int = 2_000_000,
         state_file: Path | None = None,
         grid_size: int = 41,
+        movement_tick_ms: int = 100,
+        movement_max_steps_per_tick: int = 2,
         state_save_debounce_ms: int = 200,
         state_save_max_delay_ms: int = 1000,
     ):
@@ -104,6 +107,8 @@ class SignalingServer:
         self.piano_recording_state_by_item: dict[str, dict] = {}
         self.piano_playback_tasks_by_item: dict[str, asyncio.Task[None]] = {}
         self.grid_size = max(1, grid_size)
+        self.movement_tick_ms = max(1, int(movement_tick_ms))
+        self.movement_max_steps_per_tick = max(1, int(movement_max_steps_per_tick))
         self.instance_id = str(uuid.uuid4())
         self.server_version = self._resolve_server_version()
         self.state_save_debounce_ms = max(1, int(state_save_debounce_ms))
@@ -564,6 +569,13 @@ class SignalingServer:
 
         return 0 <= x < self.grid_size and 0 <= y < self.grid_size
 
+    def _max_allowed_position_delta(self, client: ClientConnection, now_ms: int) -> int:
+        """Compute max allowed movement delta using server-authoritative rate policy."""
+
+        elapsed_ms = max(0, now_ms - max(0, client.last_position_update_ms))
+        windows = max(1, elapsed_ms // self.movement_tick_ms)
+        return max(1, windows * self.movement_max_steps_per_tick)
+
     @staticmethod
     def _normalize_clock_timezone(value: object) -> str:
         """Normalize timezone input to one of supported clock zones."""
@@ -650,6 +662,9 @@ class SignalingServer:
         """Handle one websocket client's connect/message/disconnect lifecycle."""
 
         client = ClientConnection(websocket=websocket, id=str(uuid.uuid4()))
+        client.x = random.randrange(self.grid_size)
+        client.y = random.randrange(self.grid_size)
+        client.last_position_update_ms = self.item_service.now_ms()
         self.clients[websocket] = client
         LOGGER.info("client connected id=%s total=%d", client.id, len(self.clients))
 
@@ -695,9 +710,14 @@ class SignalingServer:
         packet = WelcomePacket(
             type="welcome",
             id=client.id,
+            player=RemoteUser(id=client.id, nickname=client.nickname, x=client.x, y=client.y),
             users=users,
             items=[item.model_dump(exclude_none=True) for item in self.items.values()],
-            worldConfig={"gridSize": self.grid_size},
+            worldConfig={
+                "gridSize": self.grid_size,
+                "movementTickMs": self.movement_tick_ms,
+                "movementMaxStepsPerTick": self.movement_max_steps_per_tick,
+            },
             uiDefinitions=self._build_ui_definitions(),
             serverInfo={"instanceId": self.instance_id, "version": self.server_version},
         )
@@ -770,8 +790,24 @@ class SignalingServer:
                     self.grid_size,
                 )
                 return
+            now_ms = self.item_service.now_ms()
+            requested_delta = max(abs(packet.x - client.x), abs(packet.y - client.y))
+            max_delta = self._max_allowed_position_delta(client, now_ms)
+            if requested_delta > max_delta:
+                PACKET_LOGGER.warning(
+                    "position rate limit ignored id=%s from=%d,%d to=%d,%d requested_delta=%d max_delta=%d",
+                    client.id,
+                    client.x,
+                    client.y,
+                    packet.x,
+                    packet.y,
+                    requested_delta,
+                    max_delta,
+                )
+                return
             client.x = packet.x
             client.y = packet.y
+            client.last_position_update_ms = now_ms
             await self._broadcast(
                 BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
                 exclude=client.websocket,
@@ -1345,6 +1381,8 @@ def run() -> None:
         max_message_size=config.network.max_message_bytes,
         state_file=state_file,
         grid_size=config.world.grid_size,
+        movement_tick_ms=config.world.movement_tick_ms,
+        movement_max_steps_per_tick=config.world.movement_max_steps_per_tick,
         state_save_debounce_ms=config.storage.state_save_debounce_ms,
         state_save_max_delay_ms=config.storage.state_save_max_delay_ms,
     )

@@ -7,6 +7,7 @@ import { type WorldItem } from '../state/gameState';
 type MessageHandlerDeps = {
   getWorldGridSize: () => number;
   setWorldGridSize: (size: number) => void;
+  setMovementTickMs: (value: number) => void;
   setConnecting: (value: boolean) => void;
   rendererSetGridSize: (size: number) => void;
   applyServerItemUiDefinitions: (defs: unknown) => boolean;
@@ -82,6 +83,9 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         if (message.worldConfig?.gridSize && Number.isInteger(message.worldConfig.gridSize) && message.worldConfig.gridSize > 0) {
           deps.setWorldGridSize(message.worldConfig.gridSize);
         }
+        if (message.worldConfig?.movementTickMs && Number.isInteger(message.worldConfig.movementTickMs) && message.worldConfig.movementTickMs > 0) {
+          deps.setMovementTickMs(message.worldConfig.movementTickMs);
+        }
         deps.rendererSetGridSize(deps.getWorldGridSize());
         const schemaReady = deps.applyServerItemUiDefinitions(message.uiDefinitions);
         if (!schemaReady) {
@@ -92,8 +96,8 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.state.player.id = message.id;
         deps.state.running = true;
         deps.setConnecting(false);
-        deps.state.player.x = Math.max(0, Math.min(deps.getWorldGridSize() - 1, deps.state.player.x));
-        deps.state.player.y = Math.max(0, Math.min(deps.getWorldGridSize() - 1, deps.state.player.y));
+        deps.state.player.x = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.x));
+        deps.state.player.y = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.y));
         deps.dom.nicknameContainer.classList.add('hidden');
         deps.dom.connectButton.classList.add('hidden');
         deps.dom.disconnectButton.classList.remove('hidden');

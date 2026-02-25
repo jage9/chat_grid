@@ -8,10 +8,13 @@
 4. Server sends `welcome` with users/items snapshot.
 5. Client:
    - applies `welcome.worldConfig.gridSize` for authoritative grid bounds/rendering
+   - applies `welcome.worldConfig.movementTickMs` as movement pacing guidance
+   - applies `welcome.worldConfig.movementMaxStepsPerTick` for movement-rate parity
+   - uses `welcome.player` as authoritative starting position
    - records `welcome.serverInfo` (`instanceId`, `version`) for restart detection
    - if `welcome.serverInfo.version` differs from running client version, auto-reloads the page
    - applies `welcome.uiDefinitions` for item menus/properties/options
-   - sends initial `update_position`
+   - sends initial `update_position` echo from server-assigned starting tile
    - sends initial `update_nickname`
    - creates peer runtimes for known users
    - syncs item runtimes (`radio`, `emit`)
@@ -24,6 +27,7 @@
 Each frame:
 
 - Handle local movement input.
+- Send movement intents; server remains authoritative on accepted movement updates.
 - Update spatial voice audio.
 - Update spatial radio audio.
 - Update spatial item emit audio.

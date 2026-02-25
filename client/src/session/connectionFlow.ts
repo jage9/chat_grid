@@ -31,7 +31,6 @@ export type ConnectFlowDeps = {
   signalingConnect: (onMessage: (message: unknown) => Promise<void>) => Promise<void>;
   signalingDisconnect: () => void;
   onMessage: (message: unknown) => Promise<void>;
-  worldGridSize: number;
   persistPlayerPosition: () => void;
   peerManagerCleanupAll: () => void;
   radioCleanupAll: () => void;
@@ -64,25 +63,6 @@ export async function runConnectFlow(deps: ConnectFlowDeps): Promise<void> {
     deps.mediaSetConnecting(false);
     deps.updateConnectAvailability();
     return;
-  }
-
-  deps.state.player.x = Math.floor(Math.random() * deps.worldGridSize);
-  deps.state.player.y = Math.floor(Math.random() * deps.worldGridSize);
-  const storedPosition = localStorage.getItem('spatialChatPosition');
-  if (storedPosition) {
-    try {
-      const parsed = JSON.parse(storedPosition) as { x?: number; y?: number };
-      if (Number.isFinite(parsed.x) && Number.isFinite(parsed.y)) {
-        const x = Math.floor(parsed.x as number);
-        const y = Math.floor(parsed.y as number);
-        if (x >= 0 && x < deps.worldGridSize && y >= 0 && y < deps.worldGridSize) {
-          deps.state.player.x = x;
-          deps.state.player.y = y;
-        }
-      }
-    } catch {
-      // Ignore malformed saved positions.
-    }
   }
 
   try {

@@ -29,3 +29,7 @@ state_save_max_delay_ms = 1000
 [world]
 # Grid width/height in cells. Valid coordinates are 0..grid_size-1.
 grid_size = 41
+# Server-authoritative movement rate window in milliseconds.
+movement_tick_ms = 100
+# Max grid steps allowed per movement tick window.
+movement_max_steps_per_tick = 2

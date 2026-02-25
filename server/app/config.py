@@ -47,6 +47,8 @@ class WorldConfigSection(BaseModel):
     """Authoritative world geometry options."""
 
     grid_size: int = Field(default=41, ge=1)
+    movement_tick_ms: int = Field(default=100, ge=1)
+    movement_max_steps_per_tick: int = Field(default=2, ge=1)
 
 
 class AppConfig(BaseModel):

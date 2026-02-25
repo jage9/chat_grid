@@ -10,7 +10,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 
 ## Client -> Server
 
-- `update_position`: authoritative player position update.
+- `update_position`: client movement intent; server enforces world bounds and movement rate policy.
 - `update_nickname`: nickname change request (server enforces uniqueness).
 - `chat_message`: player chat.
 - `ping`: latency measurement.
@@ -45,6 +45,9 @@ This is a behavior guide for packet semantics beyond raw schemas.
 ## Welcome Metadata
 
 - `welcome.worldConfig.gridSize`: server-authoritative grid size used by clients for bounds/drawing.
+- `welcome.worldConfig.movementTickMs`: server movement-rate window used for client movement pacing.
+- `welcome.worldConfig.movementMaxStepsPerTick`: max allowed grid steps per movement window.
+- `welcome.player`: server-assigned spawn/current self position at connect time.
 - `welcome.serverInfo`: server process identity/version metadata:
   - `instanceId`: unique id generated at server startup
   - `version`: server package version (or `unknown` fallback)
@@ -60,6 +63,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 ## Validation Boundaries
 
 - Server is authoritative for all action validation and normalization.
+- Server is authoritative for movement acceptance (bounds + rate/delta checks).
 - Client validates incoming packet shapes and applies runtime behavior.
 - Client-side item edit validation is convenience only; server remains source of truth.
 

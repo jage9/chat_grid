@@ -16,6 +16,7 @@ class ClientConnection:
     nickname: str = "user..."
     x: int = 20
     y: int = 20
+    last_position_update_ms: int = 0
 
     def summary(self) -> dict[str, str | int]:
         """Return a compact serializable snapshot for logs/diagnostics."""

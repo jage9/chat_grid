@@ -20,6 +20,12 @@ export const itemSchema = z.object({
 export const welcomeMessageSchema = z.object({
   type: z.literal('welcome'),
   id: z.string(),
+  player: z.object({
+    id: z.string(),
+    nickname: z.string(),
+    x: z.number().int(),
+    y: z.number().int(),
+  }),
   users: z.array(
     z.object({
       id: z.string(),
@@ -32,6 +38,8 @@ export const welcomeMessageSchema = z.object({
   worldConfig: z
     .object({
       gridSize: z.number().int().positive(),
+      movementTickMs: z.number().int().positive().optional(),
+      movementMaxStepsPerTick: z.number().int().positive().optional(),
     })
     .optional(),
   serverInfo: z
