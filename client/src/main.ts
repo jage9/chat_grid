@@ -1428,7 +1428,6 @@ function sendAuthRequest(): void {
   const packet = buildAuthRequestPacket();
   if (!packet) {
     setConnectionStatus('Enter username and password.');
-    audio.sfxUiCancel();
     mediaSession.setConnecting(false);
     updateConnectAvailability();
     signaling.disconnect();
@@ -1459,9 +1458,6 @@ async function handleAuthResult(message: Extract<IncomingMessage, { type: 'auth_
       settings.saveAuthSessionToken('');
     }
     setConnectionStatus(message.message);
-    if (message.message.trim().toLowerCase() !== 'invalid username or password.') {
-      audio.sfxUiCancel();
-    }
     mediaSession.setConnecting(false);
     updateConnectAvailability();
     signaling.disconnect();

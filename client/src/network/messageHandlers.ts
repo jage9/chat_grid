@@ -98,7 +98,6 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         const schemaReady = deps.applyServerItemUiDefinitions(message.uiDefinitions);
         if (!schemaReady) {
           deps.updateStatus('Item schema missing from server. Item menus unavailable.');
-          deps.audioUiCancel();
         }
         deps.state.addItemTypeIndex = 0;
         deps.state.player.id = message.id;
