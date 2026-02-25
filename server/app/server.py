@@ -849,6 +849,10 @@ class SignalingServer:
                     packet.y,
                     self.grid_size,
                 )
+                await self._send(
+                    client.websocket,
+                    BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
+                )
                 return
             now_ms = self.item_service.now_ms()
             requested_delta = max(abs(packet.x - client.x), abs(packet.y - client.y))
@@ -865,10 +869,18 @@ class SignalingServer:
                     remaining,
                     client.movement_window_index,
                 )
+                await self._send(
+                    client.websocket,
+                    BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
+                )
                 return
             client.x = packet.x
             client.y = packet.y
             client.last_position_update_ms = now_ms
+            await self._send(
+                client.websocket,
+                BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
+            )
             await self._broadcast(
                 BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
                 exclude=client.websocket,
@@ -882,6 +894,37 @@ class SignalingServer:
             return
 
         if isinstance(packet, TeleportCompletePacket):
+            if not self._is_in_bounds(packet.x, packet.y):
+                PACKET_LOGGER.warning(
+                    "out-of-bounds teleport ignored id=%s x=%d y=%d grid_size=%d",
+                    client.id,
+                    packet.x,
+                    packet.y,
+                    self.grid_size,
+                )
+                await self._send(
+                    client.websocket,
+                    BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
+                )
+                return
+
+            client.x = packet.x
+            client.y = packet.y
+            client.last_position_update_ms = self.item_service.now_ms()
+            await self._send(
+                client.websocket,
+                BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
+            )
+            await self._broadcast(
+                BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
+                exclude=client.websocket,
+            )
+            carried = self.item_service.find_carried_item(client.id)
+            if carried:
+                carried.x = client.x
+                carried.y = client.y
+                carried.updatedAt = self.item_service.now_ms()
+                await self._broadcast_item(carried)
             await self._broadcast(
                 BroadcastTeleportCompletePacket(
                     type="teleport_complete",

@@ -140,6 +140,11 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
       }
 
       case 'update_position': {
+        if (message.id === deps.state.player.id) {
+          deps.state.player.x = message.x;
+          deps.state.player.y = message.y;
+          break;
+        }
         const peer = deps.state.peers.get(message.id);
         const prevX = peer?.x ?? message.x;
         const prevY = peer?.y ?? message.y;

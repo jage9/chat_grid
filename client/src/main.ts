@@ -1094,8 +1094,7 @@ function updateTeleport(): void {
   const completionStatus = activeTeleport.completionStatus;
   state.player.x = activeTeleport.targetX;
   state.player.y = activeTeleport.targetY;
-  signaling.send({ type: 'update_position', x: activeTeleport.targetX, y: activeTeleport.targetY });
-  signaling.send({ type: 'teleport_complete' });
+  signaling.send({ type: 'teleport_complete', x: activeTeleport.targetX, y: activeTeleport.targetY });
   activeTeleport = null;
   stopTeleportLoopAudio();
   persistPlayerPosition();

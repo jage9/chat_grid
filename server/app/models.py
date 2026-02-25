@@ -27,6 +27,8 @@ class UpdatePositionPacket(BasePacket):
 
 class TeleportCompletePacket(BasePacket):
     type: Literal["teleport_complete"]
+    x: int
+    y: int
 
 
 class UpdateNicknamePacket(BasePacket):

@@ -225,7 +225,7 @@ export type IncomingMessage = z.infer<typeof incomingMessageSchema>;
 export type OutgoingMessage =
   | { type: 'signal'; targetId: string; sdp?: RTCSessionDescriptionInit; ice?: RTCIceCandidateInit }
   | { type: 'update_position'; x: number; y: number }
-  | { type: 'teleport_complete' }
+  | { type: 'teleport_complete'; x: number; y: number }
   | { type: 'update_nickname'; nickname: string }
   | { type: 'chat_message'; message: string }
   | { type: 'ping'; clientSentAt: number }

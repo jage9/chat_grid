@@ -149,13 +149,56 @@ async def test_teleport_complete_broadcasts_spatial_event(monkeypatch: pytest.Mo
     async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
         broadcast_payloads.append(packet)
 
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        return None
+
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+    monkeypatch.setattr(server, "_send", fake_send)
+
+    await server._handle_message(client, json.dumps({"type": "teleport_complete", "x": 12, "y": 13}))
+
+    assert len(broadcast_payloads) == 2
+    assert broadcast_payloads[0].type == "update_position"
+    assert broadcast_payloads[0].id == "u1"
+    assert broadcast_payloads[0].x == 12
+    assert broadcast_payloads[0].y == 13
+    assert broadcast_payloads[1].type == "teleport_complete"
+    assert broadcast_payloads[1].id == "u1"
+    assert broadcast_payloads[1].x == 12
+    assert broadcast_payloads[1].y == 13
+
+
+@pytest.mark.asyncio
+async def test_update_position_rate_reject_sends_self_correction(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5)
+    server.clients[ws] = client
+    server.movement_tick_ms = 100
+    server.movement_max_steps_per_tick = 1
+
+    fixed_now = 10_000
+    monkeypatch.setattr(server.item_service, "now_ms", lambda: fixed_now)
+
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+        return None
+
+    monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server._handle_message(client, json.dumps({"type": "teleport_complete"}))
+    # 2-tile move exceeds per-window budget and should be rejected with correction.
+    await server._handle_message(client, json.dumps({"type": "update_position", "x": 7, "y": 5}))
 
-    assert len(broadcast_payloads) == 1
-    packet = broadcast_payloads[0]
-    assert packet.type == "teleport_complete"
-    assert packet.id == "u1"
-    assert packet.x == 12
-    assert packet.y == 13
+    assert client.x == 5
+    assert client.y == 5
+    assert send_payloads
+    correction = send_payloads[-1]
+    assert correction.type == "update_position"
+    assert correction.id == "u1"
+    assert correction.x == 5
+    assert correction.y == 5
