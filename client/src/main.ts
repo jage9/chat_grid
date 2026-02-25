@@ -1130,39 +1130,6 @@ function formatCoordinate(value: number): string {
   return value.toFixed(2).replace(/\.?0+$/, '');
 }
 
-/** Persists current local player coordinates for reconnect/refresh restore. */
-function persistPlayerPosition(): void {
-  try {
-    const positionKey = getPlayerPositionStorageKey();
-    localStorage.setItem(
-      positionKey,
-      JSON.stringify({ x: state.player.x, y: state.player.y }),
-    );
-  } catch {
-    // Ignore storage failures (private mode/quota/blocked storage).
-  }
-}
-
-/** Loads previously persisted local player coordinates, when available and valid. */
-function getPersistedPlayerPosition(): { x: number; y: number } | null {
-  const raw = localStorage.getItem(getPlayerPositionStorageKey());
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as { x?: unknown; y?: unknown };
-    if (typeof parsed.x !== 'number' || typeof parsed.y !== 'number') return null;
-    if (!Number.isFinite(parsed.x) || !Number.isFinite(parsed.y)) return null;
-    return { x: Math.round(parsed.x), y: Math.round(parsed.y) };
-  } catch {
-    return null;
-  }
-}
-
-/** Resolves local storage key for per-account saved player position. */
-function getPlayerPositionStorageKey(): string {
-  const usernameKey = sanitizeAuthUsername(authUsername);
-  return usernameKey ? `spatialChatPosition:${usernameKey}` : 'spatialChatPosition';
-}
-
 /** Picks one random footstep sample URL. */
 function randomFootstepUrl(): string {
   return FOOTSTEP_SOUND_URLS[Math.floor(Math.random() * FOOTSTEP_SOUND_URLS.length)];
@@ -1248,7 +1215,6 @@ function updateTeleport(): void {
   signaling.send({ type: 'teleport_complete', x: activeTeleport.targetX, y: activeTeleport.targetY });
   activeTeleport = null;
   stopTeleportLoopAudio();
-  persistPlayerPosition();
   void refreshAudioSubscriptions(true);
   void audio.playSample(TELEPORT_SOUND_URL, FOOTSTEP_GAIN);
   updateStatus(completionStatus);
@@ -1305,7 +1271,6 @@ function handleMovement(): void {
   state.player.x = nextX;
   state.player.y = nextY;
   lastWallCollisionDirection = null;
-  persistPlayerPosition();
   state.player.lastMoveTime = now;
   void refreshAudioSubscriptions(true);
   void audio.playSample(randomFootstepUrl(), FOOTSTEP_GAIN, movementTickMs);
@@ -1557,7 +1522,6 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
       pushChatMessage(message);
     },
     updateConnectAvailability,
-    settingsSaveNickname: (value) => settings.saveNickname(value),
     mediaIsConnecting: () => mediaSession.isConnecting(),
     mediaSetConnecting: (value) => mediaSession.setConnecting(value),
     mediaCheckMicPermission: () => checkMicPermission(),
@@ -1570,7 +1534,6 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
     signalingSendAuth: () => sendAuthRequest(),
     signalingDisconnect: () => signaling.disconnect(),
     onMessage: (message) => onSignalingMessage(message as IncomingMessage),
-    persistPlayerPosition,
     peerManagerCleanupAll: () => peerManager.cleanupAll(),
     radioCleanupAll: () => radioRuntime.cleanupAll(),
     emitCleanupAll: () => itemEmitRuntime.cleanupAll(),
@@ -1615,7 +1578,6 @@ const onAppMessage = createOnMessageHandler({
     mediaSession.setConnecting(value);
     updateConnectAvailability();
   },
-  getPersistedPlayerPosition,
   rendererSetGridSize: (size) => renderer.setGridSize(size),
   applyServerItemUiDefinitions: (defs) => applyServerItemUiDefinitions(defs as Parameters<typeof applyServerItemUiDefinitions>[0]),
   state,
@@ -2670,10 +2632,6 @@ function setupUiHandlers(): void {
     },
     updateDeviceSummary,
     setOutputDevice: (id) => peerManager.setOutputDevice(id),
-    persistOnUnload: () => {
-      if (!state.running) return;
-      persistPlayerPosition();
-    },
   });
   dom.showRegisterButton.addEventListener('click', () => {
     setAuthMode('register');

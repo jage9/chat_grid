@@ -88,6 +88,7 @@ PIANO_RECORDING_MAX_MS = 30_000
 PIANO_RECORDING_MAX_EVENTS = 4096
 MOVEMENT_TICK_MS = 200
 MOVEMENT_MAX_STEPS_PER_TICK = 1
+POSITION_PERSIST_DEBOUNCE_MS = 5_000
 
 
 class SignalingServer:
@@ -141,6 +142,7 @@ class SignalingServer:
         self.state_save_max_delay_ms = max(self.state_save_debounce_ms, int(state_save_max_delay_ms))
         self._pending_state_save_handle: asyncio.TimerHandle | None = None
         self._pending_state_save_started_at: float | None = None
+        self._last_position_persist_ms_by_user: dict[str, int] = {}
 
     @staticmethod
     def _resolve_server_version() -> str:
@@ -176,6 +178,19 @@ class SignalingServer:
         """Normalize nickname for case-insensitive comparisons."""
 
         return nickname.casefold()
+
+    def _persist_client_position(self, client: ClientConnection, *, force: bool = False) -> None:
+        """Persist one authenticated client's last known position with debounce."""
+
+        if not client.user_id:
+            return
+        now_ms = self.item_service.now_ms()
+        if not force:
+            last_saved_ms = self._last_position_persist_ms_by_user.get(client.user_id, 0)
+            if now_ms - last_saved_ms < POSITION_PERSIST_DEBOUNCE_MS:
+                return
+        self.auth_service.set_last_position(client.user_id, client.x, client.y)
+        self._last_position_persist_ms_by_user[client.user_id] = now_ms
 
     def _auth_policy(self) -> dict[str, int]:
         """Return server-auth policy limits advertised to clients."""
@@ -770,6 +785,9 @@ class SignalingServer:
             if websocket in self.clients:
                 disconnected = self.clients.pop(websocket)
                 self.active_piano_keys_by_client.pop(disconnected.id, None)
+                self._persist_client_position(disconnected, force=True)
+                if disconnected.user_id:
+                    self._last_position_persist_ms_by_user.pop(disconnected.user_id, None)
                 for item_id, session in list(self.piano_recording_state_by_item.items()):
                     if session.get("ownerClientId") != disconnected.id:
                         continue
@@ -829,8 +847,14 @@ class SignalingServer:
 
         if client.websocket in self.clients:
             return
-        client.x = random.randrange(self.grid_size)
-        client.y = random.randrange(self.grid_size)
+        saved_x = getattr(client, "saved_x", None)
+        saved_y = getattr(client, "saved_y", None)
+        if isinstance(saved_x, int) and isinstance(saved_y, int) and self._is_in_bounds(saved_x, saved_y):
+            client.x = saved_x
+            client.y = saved_y
+        else:
+            client.x = random.randrange(self.grid_size)
+            client.y = random.randrange(self.grid_size)
         now_ms = self.item_service.now_ms()
         client.last_position_update_ms = now_ms
         client.movement_window_index = self._movement_window_index(now_ms)
@@ -910,6 +934,8 @@ class SignalingServer:
         client.role = session.user.role
         client.session_token = session.token
         client.nickname = session.user.last_nickname or client.nickname
+        client.saved_x = session.user.last_x
+        client.saved_y = session.user.last_y
         await self._send(
             client.websocket,
             AuthResultPacket(
@@ -1036,6 +1062,7 @@ class SignalingServer:
             client.x = packet.x
             client.y = packet.y
             client.last_position_update_ms = now_ms
+            self._persist_client_position(client)
             await self._send(
                 client.websocket,
                 BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),
@@ -1070,6 +1097,7 @@ class SignalingServer:
             client.x = packet.x
             client.y = packet.y
             client.last_position_update_ms = self.item_service.now_ms()
+            self._persist_client_position(client, force=True)
             await self._send(
                 client.websocket,
                 BroadcastPositionPacket(type="update_position", id=client.id, x=client.x, y=client.y),

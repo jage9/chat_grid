@@ -31,6 +31,8 @@ class AuthUser:
     status: str
     email: str | None
     last_nickname: str | None
+    last_x: int | None
+    last_y: int | None
 
 
 @dataclass(frozen=True)
@@ -115,8 +117,8 @@ class AuthService:
             self._conn.execute(
                 """
                 INSERT INTO users (
-                    username, password_hash, email, role, status, last_nickname, created_at_ms, updated_at_ms, last_login_at_ms
-                ) VALUES (?, ?, ?, ?, 'active', NULL, ?, ?, ?)
+                    username, password_hash, email, role, status, created_at_ms, updated_at_ms, last_login_at_ms
+                ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
                 """,
                 (normalized_username, password_hash, normalized_email, role, now_ms, now_ms, now_ms),
             )
@@ -131,6 +133,24 @@ class AuthService:
         user = self._get_user_by_username(normalized_username)
         if user is None:
             raise AuthError("Failed to load newly created user.")
+        self._conn.execute(
+            """
+            INSERT OR IGNORE INTO user_state (user_id, last_nickname, last_x, last_y, updated_at_ms)
+            VALUES (?, ?, NULL, NULL, ?)
+            """,
+            (int(user.id), user.username, now_ms),
+        )
+        self._conn.commit()
+        user = AuthUser(
+            id=user.id,
+            username=user.username,
+            role=user.role,
+            status=user.status,
+            email=user.email,
+            last_nickname=user.username,
+            last_x=user.last_x,
+            last_y=user.last_y,
+        )
         return self._create_session(user)
 
     def login(self, username: str, password: str) -> AuthSession:
@@ -139,9 +159,19 @@ class AuthService:
         normalized_username = self._normalize_username(username)
         user_row = self._conn.execute(
             """
-            SELECT id, username, password_hash, email, role, status, last_nickname
-            FROM users
-            WHERE username = ?
+            SELECT
+                u.id,
+                u.username,
+                u.password_hash,
+                u.email,
+                u.role,
+                u.status,
+                us.last_nickname,
+                us.last_x,
+                us.last_y
+            FROM users u
+            LEFT JOIN user_state us ON us.user_id = u.id
+            WHERE u.username = ?
             """,
             (normalized_username,),
         ).fetchone()
@@ -161,6 +191,8 @@ class AuthService:
                 status=user.status,
                 email=user.email,
                 last_nickname=user.username,
+                last_x=user.last_x,
+                last_y=user.last_y,
             )
         self._conn.execute(
             "UPDATE users SET last_login_at_ms = ?, updated_at_ms = ? WHERE id = ?",
@@ -179,9 +211,10 @@ class AuthService:
         row = self._conn.execute(
             """
             SELECT s.id AS session_id, s.user_id, s.expires_at_ms, s.revoked_at_ms,
-                   u.username, u.role, u.status, u.email, u.last_nickname
+                   u.username, u.role, u.status, u.email, us.last_nickname, us.last_x, us.last_y
             FROM sessions s
             JOIN users u ON u.id = s.user_id
+            LEFT JOIN user_state us ON us.user_id = u.id
             WHERE s.token_hash = ?
             """,
             (token_hash,),
@@ -210,6 +243,8 @@ class AuthService:
             status=row["status"],
             email=row["email"],
             last_nickname=row["last_nickname"],
+            last_x=row["last_x"] if "last_x" in row.keys() else None,
+            last_y=row["last_y"] if "last_y" in row.keys() else None,
         )
         if not user.last_nickname:
             self.set_last_nickname(user.id, user.username)
@@ -220,6 +255,8 @@ class AuthService:
                 status=user.status,
                 email=user.email,
                 last_nickname=user.username,
+                last_x=user.last_x,
+                last_y=user.last_y,
             )
         return AuthSession(session_id=row["session_id"], token=cleaned, user=user)
 
@@ -242,11 +279,47 @@ class AuthService:
         cleaned = nickname.strip()
         if not cleaned:
             return
-        self._conn.execute(
-            "UPDATE users SET last_nickname = ?, updated_at_ms = ? WHERE id = ?",
-            (cleaned, self.now_ms(), user_id),
-        )
-        self._conn.commit()
+        try:
+            user_id_value = int(user_id)
+        except (TypeError, ValueError):
+            return
+        try:
+            self._conn.execute(
+                """
+                INSERT INTO user_state (user_id, last_nickname, last_x, last_y, updated_at_ms)
+                VALUES (?, ?, NULL, NULL, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    last_nickname = excluded.last_nickname,
+                    updated_at_ms = excluded.updated_at_ms
+                """,
+                (user_id_value, cleaned, self.now_ms()),
+            )
+            self._conn.commit()
+        except sqlite3.IntegrityError:
+            self._conn.rollback()
+
+    def set_last_position(self, user_id: str, x: int, y: int) -> None:
+        """Persist last known world position for one user."""
+
+        try:
+            user_id_value = int(user_id)
+        except (TypeError, ValueError):
+            return
+        try:
+            self._conn.execute(
+                """
+                INSERT INTO user_state (user_id, last_nickname, last_x, last_y, updated_at_ms)
+                VALUES (?, NULL, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    last_x = excluded.last_x,
+                    last_y = excluded.last_y,
+                    updated_at_ms = excluded.updated_at_ms
+                """,
+                (user_id_value, int(x), int(y), self.now_ms()),
+            )
+            self._conn.commit()
+        except sqlite3.IntegrityError:
+            self._conn.rollback()
 
     @staticmethod
     def now_ms() -> int:
@@ -267,7 +340,6 @@ class AuthService:
                 email TEXT UNIQUE,
                 role TEXT NOT NULL CHECK(role IN ('user', 'admin')) DEFAULT 'user',
                 status TEXT NOT NULL CHECK(status IN ('active', 'disabled')) DEFAULT 'active',
-                last_nickname TEXT,
                 created_at_ms INTEGER NOT NULL,
                 updated_at_ms INTEGER NOT NULL,
                 last_login_at_ms INTEGER
@@ -290,6 +362,18 @@ class AuthService:
             )
             """
         )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_state (
+                user_id INTEGER PRIMARY KEY,
+                last_nickname TEXT,
+                last_x INTEGER,
+                last_y INTEGER,
+                updated_at_ms INTEGER NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
         self._conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)")
         self._conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL"
@@ -297,6 +381,7 @@ class AuthService:
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at_ms)")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash)")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_user_state_updated ON user_state(updated_at_ms)")
         self._conn.commit()
 
     def _create_session(self, user: AuthUser) -> AuthSession:
@@ -321,7 +406,20 @@ class AuthService:
         """Fetch one user by normalized username."""
 
         row = self._conn.execute(
-            "SELECT id, username, role, status, email, last_nickname FROM users WHERE username = ?",
+            """
+            SELECT
+                u.id,
+                u.username,
+                u.role,
+                u.status,
+                u.email,
+                us.last_nickname,
+                us.last_x,
+                us.last_y
+            FROM users u
+            LEFT JOIN user_state us ON us.user_id = u.id
+            WHERE u.username = ?
+            """,
             (username,),
         ).fetchone()
         if row is None:
@@ -338,7 +436,9 @@ class AuthService:
             role=row["role"],
             status=row["status"],
             email=row["email"],
-            last_nickname=row["last_nickname"],
+            last_nickname=row["last_nickname"] if "last_nickname" in row.keys() else None,
+            last_x=row["last_x"] if "last_x" in row.keys() else None,
+            last_y=row["last_y"] if "last_y" in row.keys() else None,
         )
 
     @staticmethod

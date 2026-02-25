@@ -17,7 +17,6 @@ export type ConnectFlowDeps = {
   sanitizeName: (value: string) => string;
   updateStatus: (message: string) => void;
   updateConnectAvailability: () => void;
-  settingsSaveNickname: (value: string) => void;
   mediaIsConnecting: () => boolean;
   mediaSetConnecting: (value: boolean) => void;
   mediaCheckMicPermission: () => Promise<boolean>;
@@ -30,7 +29,6 @@ export type ConnectFlowDeps = {
   signalingSendAuth: () => void;
   signalingDisconnect: () => void;
   onMessage: (message: unknown) => Promise<void>;
-  persistPlayerPosition: () => void;
   peerManagerCleanupAll: () => void;
   radioCleanupAll: () => void;
   emitCleanupAll: () => void;
@@ -46,9 +44,6 @@ export async function runConnectFlow(deps: ConnectFlowDeps): Promise<void> {
   }
   const nickname = deps.sanitizeName(deps.state.player.nickname);
   deps.state.player.nickname = nickname || deps.state.player.nickname;
-  if (nickname) {
-    deps.settingsSaveNickname(nickname);
-  }
   deps.mediaSetConnecting(true);
   deps.updateConnectAvailability();
 
@@ -105,9 +100,6 @@ export async function runConnectFlow(deps: ConnectFlowDeps): Promise<void> {
  */
 export function runDisconnectFlow(deps: ConnectFlowDeps): void {
   const wasRunning = deps.state.running;
-  if (deps.state.running) {
-    deps.persistPlayerPosition();
-  }
 
   deps.signalingDisconnect();
   deps.mediaStopLocalMedia();

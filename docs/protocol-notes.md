@@ -86,6 +86,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 
 - Server is authoritative for all action validation and normalization.
 - Server is authoritative for movement acceptance (bounds + rate/delta checks).
+- Server persists account state (last nickname + last position) and restores spawn from that state on auth login/resume.
 - Client validates incoming packet shapes and applies runtime behavior.
 - Sound/media field normalization uses shared server policy helpers:
   - `none/off` normalize to empty values

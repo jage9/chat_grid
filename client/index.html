@@ -19,7 +19,6 @@
           <label for="authPassword">Password</label>
           <input id="authPassword" type="password" maxlength="64" autocomplete="current-password" />
         </div>
-        <button id="showRegisterButton" type="button">Register</button>
       </section>
       <section id="registerView" class="auth-panel hidden">
         <h2>Register</h2>
@@ -43,11 +42,12 @@
         <button id="showLoginButton" type="button">Login</button>
       </section>
       <section id="authSessionView" class="auth-panel hidden">
-        <h2>Session</h2>
+        <h2>Logged In</h2>
         <p id="authSessionText" class="auth-hint"></p>
       </section>
       <div class="controls" id="button-container">
         <button id="connectButton">Connect</button>
+        <button id="showRegisterButton" type="button">Register</button>
         <button id="logoutButton" class="hidden">Log out</button>
         <button id="settingsButton">Audio setup</button>
         <button id="disconnectButton" class="hidden">Disconnect</button>

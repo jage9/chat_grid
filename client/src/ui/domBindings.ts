@@ -30,16 +30,12 @@ type UiBindingsDeps = {
   setPreferredOutput: (id: string, name: string) => void;
   updateDeviceSummary: () => void;
   setOutputDevice: (id: string) => Promise<void>;
-  persistOnUnload: () => void;
 };
 
 /**
  * Attaches UI listeners (connect/settings/device changes) and focus traps.
  */
 export function setupUiHandlers(deps: UiBindingsDeps): void {
-  window.addEventListener('pagehide', deps.persistOnUnload);
-  window.addEventListener('beforeunload', deps.persistOnUnload);
-
   deps.dom.connectButton.addEventListener('click', () => {
     void deps.connect();
   });

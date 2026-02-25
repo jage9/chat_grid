@@ -19,6 +19,8 @@ class ClientConnection:
     role: str = "user"
     session_token: str | None = None
     nickname: str = "user..."
+    saved_x: int | None = None
+    saved_y: int | None = None
     x: int = 20
     y: int = 20
     last_position_update_ms: int = 0

@@ -14,7 +14,7 @@
    - applies `welcome.worldConfig.gridSize` for authoritative grid bounds/rendering
    - applies `welcome.worldConfig.movementTickMs` as movement pacing guidance
    - applies `welcome.worldConfig.movementMaxStepsPerTick` for movement-rate parity
-   - uses `welcome.player` as authoritative starting position
+  - uses `welcome.player` as authoritative starting position (restored from server-side account state when available)
    - records `welcome.serverInfo` (`instanceId`, `version`) for restart detection
    - if `welcome.serverInfo.version` differs from running client version, auto-reloads the page
    - applies `welcome.uiDefinitions` for item menus/properties/options

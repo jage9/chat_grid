@@ -9,7 +9,6 @@ type MessageHandlerDeps = {
   setWorldGridSize: (size: number) => void;
   setMovementTickMs: (value: number) => void;
   setConnecting: (value: boolean) => void;
-  getPersistedPlayerPosition: () => { x: number; y: number } | null;
   rendererSetGridSize: (size: number) => void;
   applyServerItemUiDefinitions: (defs: unknown) => boolean;
   state: {
@@ -105,11 +104,8 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.state.player.id = message.id;
         deps.state.running = true;
         deps.setConnecting(false);
-        const persistedPosition = deps.getPersistedPlayerPosition();
-        const targetX = persistedPosition?.x ?? message.player.x;
-        const targetY = persistedPosition?.y ?? message.player.y;
-        deps.state.player.x = Math.max(0, Math.min(deps.getWorldGridSize() - 1, targetX));
-        deps.state.player.y = Math.max(0, Math.min(deps.getWorldGridSize() - 1, targetY));
+        deps.state.player.x = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.x));
+        deps.state.player.y = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.y));
         deps.dom.connectButton.classList.add('hidden');
         deps.dom.disconnectButton.classList.remove('hidden');
         deps.dom.focusGridButton.classList.remove('hidden');
