@@ -320,3 +320,12 @@ When adding a new item type:
 ### Recommendations / Cleanup (remaining)
 1. **Eliminate manual property label mapping in client (medium):** either include labels for all properties in server metadata or auto-humanize keys so new properties are readable without code changes.
 2. **Strengthen new-item completeness checks (low):** extend the plugin contract tests to optionally assert docs coverage and richer protocol examples per discovered type.
+
+### Item 1-6 Status (explicit)
+1. **visibleWhen end-to-end:** ✅ Done.
+2. **Remove hardcoded item-type literals/enums:** ✅ Done (string-based ids + runtime known-type checks).
+3. **Include capabilities in `uiDefinitions.itemTypes`:** ✅ Done.
+4. **Move list options into property metadata:** ✅ Done (`propertyMetadata[key].options` only).
+5. **Remove manual client property-label mapping:** ❌ Not fully done yet. Metadata labels are supported, but legacy hardcoded label map still exists as fallback.
+6. **New-item completeness validation check:** ✅ Baseline done (plugin contract tests added for required files/exports).  
+Potential enhancement: add docs/protocol example assertions for each discovered type.
