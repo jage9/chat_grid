@@ -196,6 +196,16 @@ export function getInspectItemPropertyKeys(item: WorldItem): string[] {
     allKeys.push(key);
   }
 
+  // Keep derived radio metadata in a stable, user-friendly order.
+  if (item.type === 'radio_station') {
+    for (const key of ['stationName', 'nowPlaying']) {
+      if (!isItemPropertyVisible(item, key)) continue;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      allKeys.push(key);
+    }
+  }
+
   const paramKeys = Object.keys(item.params).sort((a, b) => a.localeCompare(b));
   for (const key of paramKeys) {
     if (!isItemPropertyVisible(item, key)) continue;
