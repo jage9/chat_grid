@@ -113,12 +113,19 @@ export class PeerManager {
   }
 
   async replaceOutgoingTrack(stream: MediaStream): Promise<void> {
+    const newTrack = stream.getAudioTracks()[0];
+    if (!newTrack) {
+      return;
+    }
     for (const peer of this.peers.values()) {
-      const sender = peer.pc.getSenders().find((candidate) => candidate.track?.kind === 'audio');
-      const newTrack = stream.getAudioTracks()[0];
-      if (sender && newTrack) {
-        await sender.replaceTrack(newTrack);
-      }
+      const sender =
+        peer.pc.getSenders().find((candidate) => candidate.track?.kind === 'audio') ??
+        peer.pc
+          .getTransceivers()
+          .find((transceiver) => transceiver.receiver.track?.kind === 'audio' || transceiver.sender.track?.kind === 'audio')
+          ?.sender;
+      if (!sender) continue;
+      await sender.replaceTrack(newTrack);
     }
   }
 
