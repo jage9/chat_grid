@@ -160,9 +160,8 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.peerManager.setPeerPosition(message.id, message.x, message.y);
         if (peer) {
           const movementDelta = Math.hypot(message.x - prevX, message.y - prevY);
-          const soundUrl = movementDelta > 1.5 ? deps.TELEPORT_START_SOUND_URL : deps.randomFootstepUrl();
-          if (deps.getAudioLayers().world) {
-            deps.playRemoteSpatialStepOrTeleport(soundUrl, peer.x, peer.y);
+          if (movementDelta <= 1.5 && deps.getAudioLayers().world) {
+            deps.playRemoteSpatialStepOrTeleport(deps.randomFootstepUrl(), peer.x, peer.y);
           }
         }
         break;

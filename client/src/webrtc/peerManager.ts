@@ -50,6 +50,9 @@ export class PeerManager {
     const stream = this.getLocalStream();
     if (stream) {
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    } else {
+      // Ensure initial offers still negotiate audio receive even before mic setup finishes.
+      pc.addTransceiver('audio', { direction: 'sendrecv' });
     }
 
     pc.onicecandidate = (event) => {
