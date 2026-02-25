@@ -158,6 +158,13 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         break;
       }
 
+      case 'teleport_complete': {
+        if (deps.getAudioLayers().world) {
+          deps.playRemoteSpatialStepOrTeleport(deps.TELEPORT_SOUND_URL, message.x, message.y);
+        }
+        break;
+      }
+
       case 'update_nickname': {
         const peer = deps.state.peers.get(message.id);
         if (peer) {

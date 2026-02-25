@@ -103,6 +103,13 @@ export const updatePositionSchema = z.object({
   y: z.number().int(),
 });
 
+export const teleportCompleteSchema = z.object({
+  type: z.literal('teleport_complete'),
+  id: z.string(),
+  x: z.number().int(),
+  y: z.number().int(),
+});
+
 export const updateNicknameSchema = z.object({
   type: z.literal('update_nickname'),
   id: z.string(),
@@ -199,6 +206,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   welcomeMessageSchema,
   signalMessageSchema,
   updatePositionSchema,
+  teleportCompleteSchema,
   updateNicknameSchema,
   userLeftSchema,
   chatMessageSchema,
@@ -217,6 +225,7 @@ export type IncomingMessage = z.infer<typeof incomingMessageSchema>;
 export type OutgoingMessage =
   | { type: 'signal'; targetId: string; sdp?: RTCSessionDescriptionInit; ice?: RTCIceCandidateInit }
   | { type: 'update_position'; x: number; y: number }
+  | { type: 'teleport_complete' }
   | { type: 'update_nickname'; nickname: string }
   | { type: 'chat_message'; message: string }
   | { type: 'ping'; clientSentAt: number }

@@ -25,6 +25,10 @@ class UpdatePositionPacket(BasePacket):
     y: int
 
 
+class TeleportCompletePacket(BasePacket):
+    type: Literal["teleport_complete"]
+
+
 class UpdateNicknamePacket(BasePacket):
     type: Literal["update_nickname"]
     nickname: str = Field(min_length=1, max_length=32)
@@ -91,6 +95,7 @@ class ItemUpdatePacket(BasePacket):
 ClientPacket = (
     SignalPacket
     | UpdatePositionPacket
+    | TeleportCompletePacket
     | UpdateNicknamePacket
     | ChatMessagePacket
     | PingPacket
@@ -130,6 +135,13 @@ class UserLeftPacket(BasePacket):
 
 class BroadcastPositionPacket(BasePacket):
     type: Literal["update_position"]
+    id: str
+    x: int
+    y: int
+
+
+class BroadcastTeleportCompletePacket(BasePacket):
+    type: Literal["teleport_complete"]
     id: str
     x: int
     y: int

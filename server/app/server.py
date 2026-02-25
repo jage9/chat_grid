@@ -42,6 +42,7 @@ from .models import (
     BroadcastChatMessagePacket,
     BroadcastNicknamePacket,
     BroadcastPositionPacket,
+    BroadcastTeleportCompletePacket,
     ChatMessagePacket,
     ClientPacket,
     ForwardSignalPacket,
@@ -63,6 +64,7 @@ from .models import (
     PingPacket,
     PongPacket,
     RemoteUser,
+    TeleportCompletePacket,
     UpdateNicknamePacket,
     UpdatePositionPacket,
     UserLeftPacket,
@@ -877,6 +879,18 @@ class SignalingServer:
                 carried.y = client.y
                 carried.updatedAt = self.item_service.now_ms()
                 await self._broadcast_item(carried)
+            return
+
+        if isinstance(packet, TeleportCompletePacket):
+            await self._broadcast(
+                BroadcastTeleportCompletePacket(
+                    type="teleport_complete",
+                    id=client.id,
+                    x=client.x,
+                    y=client.y,
+                ),
+                exclude=client.websocket,
+            )
             return
 
         if isinstance(packet, UpdateNicknamePacket):

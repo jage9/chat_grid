@@ -135,3 +135,27 @@ async def test_update_position_enforces_cumulative_budget_per_tick(monkeypatch: 
     assert client.x == 7
     assert client.y == 5
     assert len(broadcast_payloads) == 2
+
+
+@pytest.mark.asyncio
+async def test_teleport_complete_broadcasts_spatial_event(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=12, y=13)
+    server.clients[ws] = client
+
+    broadcast_payloads: list[object] = []
+
+    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+        broadcast_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+
+    await server._handle_message(client, json.dumps({"type": "teleport_complete"}))
+
+    assert len(broadcast_payloads) == 1
+    packet = broadcast_payloads[0]
+    assert packet.type == "teleport_complete"
+    assert packet.id == "u1"
+    assert packet.x == 12
+    assert packet.y == 13

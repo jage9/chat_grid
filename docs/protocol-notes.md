@@ -11,6 +11,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 ## Client -> Server
 
 - `update_position`: client movement intent; server enforces world bounds and movement rate policy.
+- `teleport_complete`: client signals teleport landing; server rebroadcasts spatial landing cue.
 - `update_nickname`: nickname change request (server enforces uniqueness).
 - `chat_message`: player chat.
 - `ping`: latency measurement.
@@ -23,6 +24,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `welcome`: initial snapshot with users/items plus server UI/world metadata.
 - `signal`: forwarded WebRTC offer/answer/ICE.
 - `update_position`, `update_nickname`, `user_left`: presence updates.
+- `teleport_complete`: peer teleport landing event with spatial coordinates.
 - `chat_message`: system and user chat stream.
 - `pong`: ping response.
 - `nickname_result`: accepted/rejected nickname result.
@@ -41,6 +43,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_piano_status` carries machine-readable piano events (`use_mode_entered`, record/playback transitions).
 - `item_use_sound` contains absolute item world coordinates (`x`, `y`) and sound path.
   - For carried items, source coordinates resolve to the carrier's current position.
+- `teleport_complete` contains absolute player world coordinates (`x`, `y`) at teleport landing.
 - `item_piano_note` contains:
   - `itemId`, `senderId`, `keyId`, `midi`, `on`
   - resolved `instrument`, `voiceMode`, `octave`, `attack`, `decay`, `release`, `brightness`, `emitRange`

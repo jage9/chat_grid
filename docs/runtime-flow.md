@@ -39,6 +39,7 @@ Core incoming message effects:
 
 - `signal`: WebRTC negotiation and ICE exchange.
 - `update_position`: update peer position; may play movement/teleport world sound.
+- `teleport_complete`: play peer teleport landing sound at final tile.
 - `update_nickname`: update peer display name.
 - `chat_message`: append/readable status; optional system sound class.
 - `item_upsert`: replace item snapshot and resync item runtimes.
