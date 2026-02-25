@@ -968,6 +968,8 @@ class SignalingServer:
             )
             async for raw_message in websocket:
                 await self._handle_message(client, raw_message)
+        except Exception:
+            LOGGER.exception("client message loop error id=%s ip=%s", client.id, self._client_ip(client))
         finally:
             if websocket in self.clients:
                 disconnected = self.clients.pop(websocket)
@@ -1168,6 +1170,26 @@ class SignalingServer:
                     type="auth_result",
                     ok=False,
                     message=str(exc),
+                    authPolicy=self._auth_policy(),
+                ),
+            )
+            return True
+        except Exception:
+            if isinstance(packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)):
+                self._record_auth_failure(client, packet)
+                await self._sleep_auth_failure_jitter()
+            LOGGER.exception(
+                "auth unexpected error id=%s ip=%s packet=%s",
+                client.id,
+                self._client_ip(client),
+                packet.type,
+            )
+            await self._send(
+                client.websocket,
+                AuthResultPacket(
+                    type="auth_result",
+                    ok=False,
+                    message="Authentication failed due to a server error. Please try again.",
                     authPolicy=self._auth_policy(),
                 ),
             )

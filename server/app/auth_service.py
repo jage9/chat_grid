@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import hmac
+import logging
 from pathlib import Path
 import re
 import secrets
@@ -23,6 +24,7 @@ ARGON2_PARALLELISM = 1
 ARGON2_HASH_LEN = 32
 ARGON2_SALT_LEN = 16
 USERNAME_PATTERN = re.compile(r"^[a-z0-9_-]+$")
+LOGGER = logging.getLogger("chgrid.server.auth")
 
 
 def _build_dummy_password_hash(password_hasher: PasswordHasher) -> str:
@@ -127,14 +129,14 @@ class AuthService:
 
         with self._conn_lock:
             normalized_username = self._normalize_username(username)
-            self._validate_username(normalized_username)
-            self._validate_password(password)
-            normalized_email = self._normalize_email(email)
-            if role not in {"user", "admin"}:
-                raise AuthError("role must be user or admin.")
-            now_ms = self.now_ms()
-            password_hash = self._hash_password(password)
             try:
+                self._validate_username(normalized_username)
+                self._validate_password(password)
+                normalized_email = self._normalize_email(email)
+                if role not in {"user", "admin"}:
+                    raise AuthError("role must be user or admin.")
+                now_ms = self.now_ms()
+                password_hash = self._hash_password(password)
                 self._db_execute(
                     """
                     INSERT INTO users (
@@ -147,12 +149,22 @@ class AuthService:
             except sqlite3.IntegrityError as exc:
                 message = str(exc).lower()
                 if "users.username" in message:
+                    LOGGER.warning("register rejected username_taken username=%s", normalized_username)
                     raise AuthError("Username is already taken.") from exc
                 if "users.email" in message:
+                    LOGGER.warning("register rejected email_taken username=%s", normalized_username)
                     raise AuthError("Email is already in use.") from exc
+                LOGGER.exception("register sqlite integrity failure username=%s", normalized_username)
+                raise AuthError("Registration failed due to a database constraint.") from exc
+            except AuthError as exc:
+                LOGGER.warning("register rejected username=%s reason=%s", normalized_username, str(exc))
                 raise
+            except Exception as exc:
+                LOGGER.exception("register unexpected failure username=%s", normalized_username)
+                raise AuthError("Registration failed due to a server error.") from exc
             user = self._get_user_by_username(normalized_username)
             if user is None:
+                LOGGER.error("register created user missing username=%s", normalized_username)
                 raise AuthError("Failed to load newly created user.")
             self._db_execute(
                 """
