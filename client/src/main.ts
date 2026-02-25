@@ -1012,6 +1012,20 @@ function persistPlayerPosition(): void {
   }
 }
 
+/** Loads previously persisted local player coordinates, when available and valid. */
+function getPersistedPlayerPosition(): { x: number; y: number } | null {
+  const raw = localStorage.getItem('spatialChatPosition');
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { x?: unknown; y?: unknown };
+    if (typeof parsed.x !== 'number' || typeof parsed.y !== 'number') return null;
+    if (!Number.isFinite(parsed.x) || !Number.isFinite(parsed.y)) return null;
+    return { x: Math.round(parsed.x), y: Math.round(parsed.y) };
+  } catch {
+    return null;
+  }
+}
+
 /** Picks one random footstep sample URL. */
 function randomFootstepUrl(): string {
   return FOOTSTEP_SOUND_URLS[Math.floor(Math.random() * FOOTSTEP_SOUND_URLS.length)];
@@ -1355,6 +1369,7 @@ const onAppMessage = createOnMessageHandler({
     mediaSession.setConnecting(value);
     updateConnectAvailability();
   },
+  getPersistedPlayerPosition,
   rendererSetGridSize: (size) => renderer.setGridSize(size),
   applyServerItemUiDefinitions: (defs) => applyServerItemUiDefinitions(defs as Parameters<typeof applyServerItemUiDefinitions>[0]),
   state,
