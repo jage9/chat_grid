@@ -3,7 +3,6 @@
  */
 type UiDom = {
   connectButton: HTMLButtonElement;
-  preconnectNickname: HTMLInputElement;
   disconnectButton: HTMLButtonElement;
   focusGridButton: HTMLButtonElement;
   settingsButton: HTMLButtonElement;
@@ -19,8 +18,6 @@ type UiDom = {
  */
 type UiBindingsDeps = {
   dom: UiDom;
-  sanitizeName: (value: string) => string;
-  nicknameStorageKey: string;
   updateConnectAvailability: () => void;
   connect: () => Promise<void>;
   disconnect: () => void;
@@ -45,25 +42,6 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
 
   deps.dom.connectButton.addEventListener('click', () => {
     void deps.connect();
-  });
-  deps.dom.preconnectNickname.addEventListener('input', () => {
-    deps.updateConnectAvailability();
-  });
-  deps.dom.preconnectNickname.addEventListener('change', () => {
-    const clean = deps.sanitizeName(deps.dom.preconnectNickname.value);
-    deps.dom.preconnectNickname.value = clean;
-    if (clean) {
-      localStorage.setItem(deps.nicknameStorageKey, clean);
-    } else {
-      localStorage.removeItem(deps.nicknameStorageKey);
-    }
-    deps.updateConnectAvailability();
-  });
-  deps.dom.preconnectNickname.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !deps.dom.connectButton.disabled) {
-      event.preventDefault();
-      void deps.connect();
-    }
   });
 
   deps.dom.disconnectButton.addEventListener('click', () => {

@@ -56,7 +56,7 @@ import {
 import { createItemPropertyEditor } from './items/itemPropertyEditor';
 import { createItemPropertyPresentation } from './items/itemPropertyPresentation';
 import { ItemBehaviorRegistry } from './items/types/behaviorRegistry';
-import { NICKNAME_STORAGE_KEY, SettingsStore } from './settings/settingsStore';
+import { SettingsStore } from './settings/settingsStore';
 import { runConnectFlow, runDisconnectFlow, type ConnectFlowDeps } from './session/connectionFlow';
 import { MediaSession } from './session/mediaSession';
 import { type AudioLayerState } from './types/audio';
@@ -102,8 +102,6 @@ type Dom = {
   updatesSection: HTMLElement;
   updatesToggle: HTMLButtonElement;
   updatesPanel: HTMLDivElement;
-  nicknameContainer: HTMLDivElement;
-  preconnectNickname: HTMLInputElement;
   connectButton: HTMLButtonElement;
   logoutButton: HTMLButtonElement;
   disconnectButton: HTMLButtonElement;
@@ -135,8 +133,6 @@ const dom: Dom = {
   updatesSection: requiredById('updatesSection'),
   updatesToggle: requiredById('updatesToggle'),
   updatesPanel: requiredById('updatesPanel'),
-  nicknameContainer: requiredById('nicknameContainer'),
-  preconnectNickname: requiredById('preconnectNickname'),
   connectButton: requiredById('connectButton'),
   logoutButton: requiredById('logoutButton'),
   disconnectButton: requiredById('disconnectButton'),
@@ -519,6 +515,7 @@ function sanitizeAuthUsername(value: string): string {
 function updateConnectAvailability(): void {
   dom.logoutButton.disabled = !authSessionToken.trim() && !state.running;
   if (state.running) {
+    dom.connectButton.textContent = 'Connect';
     dom.connectButton.disabled = true;
     dom.loginView.classList.add('hidden');
     dom.registerView.classList.add('hidden');
@@ -532,6 +529,7 @@ function updateConnectAvailability(): void {
   const hasRegisterCredentials =
     sanitizeAuthUsername(dom.registerUsername.value).length >= 2 && dom.registerPassword.value.trim().length >= 8;
   const authReady = hasSessionToken || (authMode === 'login' ? hasLoginCredentials : hasRegisterCredentials);
+  dom.connectButton.textContent = hasSessionToken ? 'Connect' : authMode === 'login' ? 'Log In & Connect' : 'Register & Connect';
   dom.connectButton.disabled = mediaSession.isConnecting() || !authReady;
 }
 
@@ -1419,8 +1417,6 @@ async function handleAuthResult(message: Extract<IncomingMessage, { type: 'auth_
     const resolved = sanitizeName(message.nickname);
     if (resolved) {
       state.player.nickname = resolved;
-      dom.preconnectNickname.value = resolved;
-      settings.saveNickname(resolved);
     }
   }
   dom.authPassword.value = '';
@@ -1561,7 +1557,6 @@ const onAppMessage = createOnMessageHandler({
   audioUiBlip: () => audio.sfxUiBlip(),
   audioUiConfirm: () => audio.sfxUiConfirm(),
   audioUiCancel: () => audio.sfxUiCancel(),
-  NICKNAME_STORAGE_KEY,
   getCarriedItemId: () => getCarriedItem()?.id ?? null,
   recomputeActiveItemPropertyKeys,
   itemPropertyLabel,
@@ -2558,8 +2553,6 @@ function closeSettings(): void {
 function setupUiHandlers(): void {
   setupDomUiHandlers({
     dom,
-    sanitizeName,
-    nicknameStorageKey: NICKNAME_STORAGE_KEY,
     updateConnectAvailability,
     connect,
     disconnect,
@@ -2615,11 +2608,6 @@ setupInputHandlers();
 setupUiHandlers();
 dom.authUsername.value = sanitizeAuthUsername(authUsername);
 dom.registerUsername.value = sanitizeAuthUsername(authUsername);
-const storedNickname = sanitizeName(settings.loadNickname());
-dom.preconnectNickname.value = storedNickname;
-if (storedNickname) {
-  state.player.nickname = storedNickname;
-}
 setAuthMode('login');
 updateConnectAvailability();
 updateDeviceSummary();

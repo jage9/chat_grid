@@ -3,8 +3,6 @@ import type { GameState } from '../state/gameState';
 const WELCOME_TIMEOUT_MS = 8_000;
 
 type DomRefs = {
-  preconnectNickname: HTMLInputElement;
-  nicknameContainer: HTMLDivElement;
   connectButton: HTMLButtonElement;
   disconnectButton: HTMLButtonElement;
   focusGridButton: HTMLButtonElement;
@@ -40,15 +38,14 @@ export type ConnectFlowDeps = {
 };
 
 /**
- * Runs connect flow: validate nickname, preflight mic/device setup, then signaling connect.
+ * Runs connect flow: preflight media setup, then signaling connect/auth.
  */
 export async function runConnectFlow(deps: ConnectFlowDeps): Promise<void> {
   if (deps.mediaIsConnecting() || deps.state.running) {
     return;
   }
-  const nickname = deps.sanitizeName(deps.dom.preconnectNickname.value);
+  const nickname = deps.sanitizeName(deps.state.player.nickname);
   deps.state.player.nickname = nickname || deps.state.player.nickname;
-  deps.dom.preconnectNickname.value = nickname;
   if (nickname) {
     deps.settingsSaveNickname(nickname);
   }
@@ -138,7 +135,6 @@ export function runDisconnectFlow(deps: ConnectFlowDeps): void {
   deps.state.effectSelectIndex = 0;
 
   deps.mediaSetConnecting(false);
-  deps.dom.nicknameContainer.classList.remove('hidden');
   deps.dom.connectButton.classList.remove('hidden');
   deps.dom.disconnectButton.classList.add('hidden');
   deps.dom.focusGridButton.classList.add('hidden');

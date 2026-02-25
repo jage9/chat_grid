@@ -25,13 +25,11 @@ type MessageHandlerDeps = {
     carriedItemId: string | null;
   };
   dom: {
-    nicknameContainer: HTMLElement;
     connectButton: HTMLElement;
     disconnectButton: HTMLElement;
     focusGridButton: HTMLElement;
     canvas: HTMLCanvasElement;
     instructions: HTMLElement;
-    preconnectNickname: HTMLInputElement;
   };
   signalingSend: (message: unknown) => void;
   peerManager: {
@@ -63,7 +61,6 @@ type MessageHandlerDeps = {
   audioUiBlip: () => void;
   audioUiConfirm: () => void;
   audioUiCancel: () => void;
-  NICKNAME_STORAGE_KEY: string;
   getCarriedItemId: () => string | null;
   recomputeActiveItemPropertyKeys: (itemId: string) => void;
   itemPropertyLabel: (key: string) => string;
@@ -113,7 +110,6 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         const targetY = persistedPosition?.y ?? message.player.y;
         deps.state.player.x = Math.max(0, Math.min(deps.getWorldGridSize() - 1, targetX));
         deps.state.player.y = Math.max(0, Math.min(deps.getWorldGridSize() - 1, targetY));
-        deps.dom.nicknameContainer.classList.add('hidden');
         deps.dom.connectButton.classList.add('hidden');
         deps.dom.disconnectButton.classList.remove('hidden');
         deps.dom.focusGridButton.classList.remove('hidden');
@@ -228,8 +224,8 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
       case 'nickname_result': {
         deps.state.player.nickname = deps.sanitizeName(message.effectiveNickname) || 'user...';
         if (message.accepted) {
-          deps.dom.preconnectNickname.value = deps.state.player.nickname;
-          localStorage.setItem(deps.NICKNAME_STORAGE_KEY, deps.state.player.nickname);
+          deps.updateStatus(`Nickname set to ${deps.state.player.nickname}`);
+          deps.audioUiConfirm();
         } else {
           deps.pushChatMessage(message.reason || 'Nickname unavailable.');
           deps.audioUiCancel();
