@@ -19,3 +19,6 @@ client/dist/
 
 # Local planning scratch
 plans/
+
+# Host-local notes
+local/

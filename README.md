@@ -40,8 +40,8 @@ Common server overrides:
 Use `deploy/README.md`.
 
 Summary:
-1. Copy repo to `/home/<user>/chgrid`.
-2. Build client and publish `client/dist/` to `/home/<user>/public_html/chgrid/`.
+1. Copy repo to your server.
+2. Build client and publish `client/dist/` to your web root/subdirectory.
 3. Configure server `config.toml` and run it via `systemd`.
 4. Add Apache `/ws` websocket proxy from `deploy/apache/chgrid-vhost-snippet.conf`.
 

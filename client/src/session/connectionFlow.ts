@@ -19,11 +19,6 @@ export type ConnectFlowDeps = {
   updateConnectAvailability: () => void;
   mediaIsConnecting: () => boolean;
   mediaSetConnecting: (value: boolean) => void;
-  mediaCheckMicPermission: () => Promise<boolean>;
-  mediaPopulateAudioDevices: () => Promise<void>;
-  mediaGetPreferredInputDeviceId: () => string;
-  mediaSetupLocalMedia: (audioDeviceId: string) => Promise<void>;
-  mediaDescribeError: (error: unknown) => string;
   mediaStopLocalMedia: () => void;
   signalingConnect: (onMessage: (message: unknown) => Promise<void>) => Promise<void>;
   signalingSendAuth: () => void;
@@ -36,7 +31,7 @@ export type ConnectFlowDeps = {
 };
 
 /**
- * Runs connect flow: preflight media setup, then signaling connect/auth.
+ * Runs connect flow: signaling connect/auth first, media setup after auth/welcome.
  */
 export async function runConnectFlow(deps: ConnectFlowDeps): Promise<void> {
   if (deps.mediaIsConnecting() || deps.state.running) {
@@ -46,32 +41,6 @@ export async function runConnectFlow(deps: ConnectFlowDeps): Promise<void> {
   deps.state.player.nickname = nickname || deps.state.player.nickname;
   deps.mediaSetConnecting(true);
   deps.updateConnectAvailability();
-
-  const canProceed = await deps.mediaCheckMicPermission();
-  if (!canProceed) {
-    deps.updateStatus('Microphone access is required.');
-    deps.mediaSetConnecting(false);
-    deps.updateConnectAvailability();
-    return;
-  }
-
-  try {
-    await deps.mediaPopulateAudioDevices();
-    if (deps.dom.audioInputSelect.options.length === 0) {
-      deps.updateStatus('No audio input device found. Open Settings or connect a microphone.');
-      deps.mediaSetConnecting(false);
-      deps.updateConnectAvailability();
-      return;
-    }
-    const inputDeviceId = deps.dom.audioInputSelect.value || deps.mediaGetPreferredInputDeviceId();
-    await deps.mediaSetupLocalMedia(inputDeviceId);
-  } catch (error) {
-    console.error(error);
-    deps.updateStatus(deps.mediaDescribeError(error));
-    deps.mediaSetConnecting(false);
-    deps.updateConnectAvailability();
-    return;
-  }
 
   try {
     await deps.signalingConnect(deps.onMessage);

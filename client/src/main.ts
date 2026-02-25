@@ -102,6 +102,7 @@ type Dom = {
   authPolicyHintRegister: HTMLParagraphElement;
   authSessionView: HTMLElement;
   authSessionText: HTMLParagraphElement;
+  authModeSeparator: HTMLElement;
   showRegisterButton: HTMLButtonElement;
   updatesSection: HTMLElement;
   updatesToggle: HTMLButtonElement;
@@ -136,6 +137,7 @@ const dom: Dom = {
   authPolicyHintRegister: requiredById('authPolicyHintRegister'),
   authSessionView: requiredById('authSessionView'),
   authSessionText: requiredById('authSessionText'),
+  authModeSeparator: requiredById('authModeSeparator'),
   showRegisterButton: requiredById('showRegisterButton'),
   updatesSection: requiredById('updatesSection'),
   updatesToggle: requiredById('updatesToggle'),
@@ -599,11 +601,13 @@ function updateConnectAvailability(): void {
     const label = sanitizeAuthUsername(authUsername) || 'current account';
     dom.authSessionText.textContent = `Logged in as ${label}.`;
     dom.showRegisterButton.classList.add('hidden');
+    dom.authModeSeparator.classList.add('hidden');
     dom.loginView.classList.add('hidden');
     dom.registerView.classList.add('hidden');
     dom.authSessionView.classList.remove('hidden');
   } else {
     dom.showRegisterButton.classList.remove('hidden');
+    dom.authModeSeparator.classList.remove('hidden');
     dom.showRegisterButton.textContent = authMode === 'login' ? 'Register' : 'Login';
     dom.loginView.classList.toggle('hidden', authMode !== 'login');
     dom.registerView.classList.toggle('hidden', authMode !== 'register');
@@ -1525,11 +1529,6 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
     updateConnectAvailability,
     mediaIsConnecting: () => mediaSession.isConnecting(),
     mediaSetConnecting: (value) => mediaSession.setConnecting(value),
-    mediaCheckMicPermission: () => checkMicPermission(),
-    mediaPopulateAudioDevices: () => populateAudioDevices(),
-    mediaGetPreferredInputDeviceId: () => mediaSession.getPreferredInputDeviceId(),
-    mediaSetupLocalMedia: (audioDeviceId) => setupLocalMedia(audioDeviceId),
-    mediaDescribeError: (error) => describeMediaError(error),
     mediaStopLocalMedia: () => stopLocalMedia(),
     signalingConnect: (handler) => signaling.connect(handler as (message: IncomingMessage) => Promise<void>),
     signalingSendAuth: () => sendAuthRequest(),
@@ -1671,6 +1670,9 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
     startHeartbeat();
   }
   await onAppMessage(message);
+  if (message.type === 'welcome') {
+    void setupMediaAfterAuth();
+  }
   itemBehaviorRegistry.onUseResultMessage(message);
   itemBehaviorRegistry.onWorldUpdate();
   applyConfiguredPeerListenGains();
@@ -1682,6 +1684,28 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   if (connectedAnnouncement) {
     setConnectionStatus(connectedAnnouncement);
     pushChatMessage(connectedAnnouncement);
+  }
+}
+
+/** Requests microphone access and initializes local media after successful auth/welcome. */
+async function setupMediaAfterAuth(): Promise<void> {
+  if (!state.running) return;
+  const canProceed = await checkMicPermission();
+  if (!canProceed) {
+    setConnectionStatus('Microphone access is required.');
+    return;
+  }
+  try {
+    await populateAudioDevices();
+    if (dom.audioInputSelect.options.length === 0) {
+      setConnectionStatus('No audio input device found. Open Audio setup or connect a microphone.');
+      return;
+    }
+    const inputDeviceId = dom.audioInputSelect.value || mediaSession.getPreferredInputDeviceId();
+    await setupLocalMedia(inputDeviceId);
+  } catch (error) {
+    console.error(error);
+    setConnectionStatus(describeMediaError(error));
   }
 }
 
