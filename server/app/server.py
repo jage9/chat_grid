@@ -1656,11 +1656,43 @@ def run() -> None:
             username_max_length=config.auth.username_max_length,
         )
         try:
-            username = input("Admin username: ").strip()
-            password = getpass("Admin password: ")
-            email = input("Admin email (optional): ").strip() or None
-            created = auth_service.bootstrap_admin(username, password, email=email)
-            print(f"Admin created: {created.username}")
+            print(
+                "Username rules: "
+                f"{auth_service.username_min_length}-{auth_service.username_max_length} chars, "
+                "lowercase letters, numbers, underscore, dash."
+            )
+            print(
+                "Password rules: "
+                f"{auth_service.password_min_length}-{auth_service.password_max_length} chars."
+            )
+            while True:
+                username = input("Admin username: ").strip()
+                normalized_username = auth_service._normalize_username(username)
+                try:
+                    auth_service._validate_username(normalized_username)
+                except AuthError as exc:
+                    print(f"Invalid username: {exc}")
+                    continue
+
+                password = getpass("Admin password: ")
+                try:
+                    auth_service._validate_password(password)
+                except AuthError as exc:
+                    print(f"Invalid password: {exc}")
+                    continue
+
+                password_confirm = getpass("Re-enter admin password: ")
+                if password != password_confirm:
+                    print("Passwords do not match.")
+                    continue
+
+                email = input("Admin email (optional): ").strip() or None
+                try:
+                    created = auth_service.bootstrap_admin(normalized_username, password, email=email)
+                    print(f"Admin created: {created.username}")
+                    break
+                except AuthError as exc:
+                    print(f"Could not create admin: {exc}")
         finally:
             auth_service.close()
         return
