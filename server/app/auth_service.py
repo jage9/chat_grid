@@ -12,7 +12,6 @@ import re
 import secrets
 import sqlite3
 import time
-import uuid
 
 
 SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000
@@ -111,16 +110,15 @@ class AuthService:
         if role not in {"user", "admin"}:
             raise AuthError("role must be user or admin.")
         now_ms = self.now_ms()
-        user_id = str(uuid.uuid4())
         password_hash = self._hash_password(password)
         try:
             self._conn.execute(
                 """
                 INSERT INTO users (
-                    id, username, password_hash, email, role, status, last_nickname, created_at_ms, updated_at_ms, last_login_at_ms
-                ) VALUES (?, ?, ?, ?, ?, 'active', NULL, ?, ?, ?)
+                    username, password_hash, email, role, status, last_nickname, created_at_ms, updated_at_ms, last_login_at_ms
+                ) VALUES (?, ?, ?, ?, 'active', NULL, ?, ?, ?)
                 """,
-                (user_id, normalized_username, password_hash, normalized_email, role, now_ms, now_ms, now_ms),
+                (normalized_username, password_hash, normalized_email, role, now_ms, now_ms, now_ms),
             )
             self._conn.commit()
         except sqlite3.IntegrityError as exc:
@@ -154,6 +152,16 @@ class AuthService:
         if not self._verify_password(password, user_row["password_hash"]):
             raise AuthError("Invalid username or password.")
         user = self._row_to_user(user_row)
+        if not user.last_nickname:
+            self.set_last_nickname(user.id, user.username)
+            user = AuthUser(
+                id=user.id,
+                username=user.username,
+                role=user.role,
+                status=user.status,
+                email=user.email,
+                last_nickname=user.username,
+            )
         self._conn.execute(
             "UPDATE users SET last_login_at_ms = ?, updated_at_ms = ? WHERE id = ?",
             (self.now_ms(), self.now_ms(), user.id),
@@ -196,13 +204,23 @@ class AuthService:
         )
         self._conn.commit()
         user = AuthUser(
-            id=row["user_id"],
+            id=str(row["user_id"]),
             username=row["username"],
             role=row["role"],
             status=row["status"],
             email=row["email"],
             last_nickname=row["last_nickname"],
         )
+        if not user.last_nickname:
+            self.set_last_nickname(user.id, user.username)
+            user = AuthUser(
+                id=user.id,
+                username=user.username,
+                role=user.role,
+                status=user.status,
+                email=user.email,
+                last_nickname=user.username,
+            )
         return AuthSession(session_id=row["session_id"], token=cleaned, user=user)
 
     def revoke(self, token: str) -> None:
@@ -243,7 +261,7 @@ class AuthService:
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS users (
-                id TEXT PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
                 email TEXT UNIQUE,
@@ -259,8 +277,8 @@ class AuthService:
         self._conn.execute(
             """
             CREATE TABLE IF NOT EXISTS sessions (
-                id TEXT PRIMARY KEY,
-                user_id TEXT NOT NULL,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
                 token_hash TEXT NOT NULL UNIQUE,
                 created_at_ms INTEGER NOT NULL,
                 last_seen_at_ms INTEGER NOT NULL,
@@ -288,14 +306,14 @@ class AuthService:
         token_hash = self._hash_token(token)
         now_ms = self.now_ms()
         expires_at_ms = now_ms + SESSION_TTL_MS
-        session_id = str(uuid.uuid4())
         self._conn.execute(
             """
-            INSERT INTO sessions (id, user_id, token_hash, created_at_ms, last_seen_at_ms, expires_at_ms, revoked_at_ms, ip, user_agent)
-            VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL)
+            INSERT INTO sessions (user_id, token_hash, created_at_ms, last_seen_at_ms, expires_at_ms, revoked_at_ms, ip, user_agent)
+            VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL)
             """,
-            (session_id, user.id, token_hash, now_ms, now_ms, expires_at_ms),
+            (user.id, token_hash, now_ms, now_ms, expires_at_ms),
         )
+        session_id = str(self._conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"])
         self._conn.commit()
         return AuthSession(session_id=session_id, token=token, user=user)
 
@@ -315,7 +333,7 @@ class AuthService:
         """Convert a DB row into AuthUser."""
 
         return AuthUser(
-            id=row["id"],
+            id=str(row["id"]),
             username=row["username"],
             role=row["role"],
             status=row["status"],

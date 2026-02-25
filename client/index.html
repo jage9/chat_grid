@@ -19,8 +19,7 @@
           <label for="authPassword">Password</label>
           <input id="authPassword" type="password" maxlength="64" autocomplete="current-password" />
         </div>
-        <p id="authPolicyHintLogin" class="auth-hint"></p>
-        <button id="showRegisterButton" type="button">Need an account? Register</button>
+        <button id="showRegisterButton" type="button">Register</button>
       </section>
       <section id="registerView" class="auth-panel hidden">
         <h2>Register</h2>
@@ -33,11 +32,15 @@
           <input id="registerPassword" type="password" maxlength="64" autocomplete="new-password" />
         </div>
         <div class="auth-row">
+          <label for="registerPasswordConfirm">Confirm Password</label>
+          <input id="registerPasswordConfirm" type="password" maxlength="64" autocomplete="new-password" />
+        </div>
+        <div class="auth-row">
           <label for="registerEmail">Email (optional)</label>
           <input id="registerEmail" type="email" maxlength="320" autocomplete="email" />
         </div>
         <p id="authPolicyHintRegister" class="auth-hint"></p>
-        <button id="showLoginButton" type="button">Have an account? Log in</button>
+        <button id="showLoginButton" type="button">Login</button>
       </section>
       <div class="controls" id="button-container">
         <button id="connectButton">Connect</button>

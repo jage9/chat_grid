@@ -95,9 +95,9 @@ type Dom = {
   registerView: HTMLElement;
   authUsername: HTMLInputElement;
   authPassword: HTMLInputElement;
-  authPolicyHintLogin: HTMLParagraphElement;
   registerUsername: HTMLInputElement;
   registerPassword: HTMLInputElement;
+  registerPasswordConfirm: HTMLInputElement;
   registerEmail: HTMLInputElement;
   authPolicyHintRegister: HTMLParagraphElement;
   showRegisterButton: HTMLButtonElement;
@@ -128,9 +128,9 @@ const dom: Dom = {
   registerView: requiredById('registerView'),
   authUsername: requiredById('authUsername'),
   authPassword: requiredById('authPassword'),
-  authPolicyHintLogin: requiredById('authPolicyHintLogin'),
   registerUsername: requiredById('registerUsername'),
   registerPassword: requiredById('registerPassword'),
+  registerPasswordConfirm: requiredById('registerPasswordConfirm'),
   registerEmail: requiredById('registerEmail'),
   authPolicyHintRegister: requiredById('authPolicyHintRegister'),
   showRegisterButton: requiredById('showRegisterButton'),
@@ -551,9 +551,7 @@ function applyAuthPolicy(policy: unknown): void {
     passwordMaxLength: passwordMax,
   };
   localStorage.setItem(AUTH_POLICY_STORAGE_KEY, JSON.stringify(authPolicy));
-  const hint = `Username: ${usernameMin}-${usernameMax} chars (a-z, 0-9, _, -). Password: ${passwordMin}-${passwordMax} chars.`;
-  dom.authPolicyHintLogin.textContent = hint;
-  dom.authPolicyHintRegister.textContent = hint;
+  dom.authPolicyHintRegister.textContent = `Username, ${usernameMin}-${usernameMax} characters. Password, ${passwordMin}-${passwordMax} characters.`;
   dom.authUsername.minLength = usernameMin;
   dom.authUsername.maxLength = usernameMax;
   dom.registerUsername.minLength = usernameMin;
@@ -562,6 +560,8 @@ function applyAuthPolicy(policy: unknown): void {
   dom.authPassword.maxLength = passwordMax;
   dom.registerPassword.minLength = passwordMin;
   dom.registerPassword.maxLength = passwordMax;
+  dom.registerPasswordConfirm.minLength = passwordMin;
+  dom.registerPasswordConfirm.maxLength = passwordMax;
   updateConnectAvailability();
 }
 
@@ -597,7 +597,8 @@ function updateConnectAvailability(): void {
     sanitizeAuthUsername(dom.authUsername.value).length >= usernameMin && dom.authPassword.value.trim().length >= passwordMin;
   const hasRegisterCredentials =
     sanitizeAuthUsername(dom.registerUsername.value).length >= usernameMin &&
-    dom.registerPassword.value.trim().length >= passwordMin;
+    dom.registerPassword.value.trim().length >= passwordMin &&
+    dom.registerPassword.value === dom.registerPasswordConfirm.value;
   const authReady = hasSessionToken || (authMode === 'login' ? hasLoginCredentials : hasRegisterCredentials);
   dom.connectButton.textContent = hasSessionToken ? 'Connect' : authMode === 'login' ? 'Log In & Connect' : 'Register & Connect';
   dom.connectButton.disabled = mediaSession.isConnecting() || !authReady;
@@ -1423,7 +1424,7 @@ function buildAuthRequestPacket(): OutgoingMessage | null {
     const username = sanitizeAuthUsername(dom.registerUsername.value);
     const password = dom.registerPassword.value;
     const email = dom.registerEmail.value.trim();
-    if (!username || !password) return null;
+    if (!username || !password || password !== dom.registerPasswordConfirm.value) return null;
     return { type: 'auth_register', username, password, ...(email ? { email } : {}) };
   }
   const username = sanitizeAuthUsername(dom.authUsername.value);
@@ -1462,6 +1463,7 @@ async function handleAuthResult(message: Extract<IncomingMessage, { type: 'auth_
   if (!message.ok) {
     dom.authPassword.value = '';
     dom.registerPassword.value = '';
+    dom.registerPasswordConfirm.value = '';
     if (message.message.toLowerCase().includes('session')) {
       authSessionToken = '';
       settings.saveAuthSessionToken('');
@@ -1493,6 +1495,7 @@ async function handleAuthResult(message: Extract<IncomingMessage, { type: 'auth_
   }
   dom.authPassword.value = '';
   dom.registerPassword.value = '';
+  dom.registerPasswordConfirm.value = '';
   setConnectionStatus('Authenticated. Joining world...');
 }
 
@@ -2670,6 +2673,9 @@ function setupUiHandlers(): void {
     updateConnectAvailability();
   });
   dom.registerPassword.addEventListener('input', () => {
+    updateConnectAvailability();
+  });
+  dom.registerPasswordConfirm.addEventListener('input', () => {
     updateConnectAvailability();
   });
   dom.registerEmail.addEventListener('input', () => {
