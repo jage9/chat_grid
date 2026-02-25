@@ -1,14 +1,14 @@
 # Deployment Guide
 
-Target example: AlmaLinux/cPanel host with files under `/home/<user>`.
+Target example: AlmaLinux/cPanel host with files under `/home/bestmidi`.
 
 ## 1) Place project files
-- Repo root: `/home/<user>/chgrid`
+- Repo root: `/home/bestmidi/chgrid`
 
 ## 2) Make deploy scripts executable (once)
 
 ```bash
-cd /home/<user>/chgrid
+cd /home/bestmidi/chgrid
 chmod +x deploy/scripts/*.sh
 ```
 
@@ -17,31 +17,31 @@ chmod +x deploy/scripts/*.sh
 Verify server files first:
 
 ```bash
-ls -l /home/<user>/chgrid/server/pyproject.toml
+ls -l /home/bestmidi/chgrid/server/pyproject.toml
 ```
 
-Run install scripts from repo root (`/home/<user>/chgrid`), not from `server/`.
+Run install scripts from repo root (`/home/bestmidi/chgrid`), not from `server/`.
 
 ```bash
-cd /home/<user>/chgrid
-./deploy/scripts/install_server.sh /home/<user>/chgrid
+cd /home/bestmidi/chgrid
+./deploy/scripts/install_server.sh /home/bestmidi/chgrid
 ```
 
 Notes:
 - Script defaults to Python `3.13` (`PYTHON_SPEC=3.13`).
 - It reuses existing `.venv` instead of replacing it interactively.
 - If you need to force a fresh 3.13 env:
-  - `rm -rf /home/<user>/chgrid/server/.venv`
-  - rerun `./deploy/scripts/install_server.sh /home/<user>/chgrid`
+  - `rm -rf /home/bestmidi/chgrid/server/.venv`
+  - rerun `./deploy/scripts/install_server.sh /home/bestmidi/chgrid`
 
 This creates:
-- `/home/<user>/chgrid/server/.venv`
-- `/home/<user>/chgrid/server/config.toml` (if missing)
-- `/home/<user>/chgrid/server/.env` with `CHGRID_AUTH_SECRET` (if missing)
-- `/home/<user>/chgrid/server/run_server.sh` (loads `.env` then starts server)
+- `/home/bestmidi/chgrid/server/.venv`
+- `/home/bestmidi/chgrid/server/config.toml` (if missing)
+- `/home/bestmidi/chgrid/server/.env` with `CHGRID_AUTH_SECRET` (if missing)
+- `/home/bestmidi/chgrid/server/run_server.sh` (loads `.env` then starts server)
 - On first run only, if no admin exists, it prompts to create one immediately.
 
-Edit `/home/<user>/chgrid/server/config.toml`:
+Edit `/home/bestmidi/chgrid/server/config.toml`:
 - `server.bind_ip = "127.0.0.1"`
 - `server.port = 8765`
 - `network.allow_insecure_ws = true`
@@ -53,7 +53,7 @@ Edit `/home/<user>/chgrid/server/config.toml`:
 If you skip first-run admin creation, run later:
 
 ```bash
-cd /home/<user>/chgrid/server
+cd /home/bestmidi/chgrid/server
 source .env
 .venv/bin/python main.py --config config.toml --bootstrap-admin
 ```
@@ -61,14 +61,14 @@ source .env
 ## 4) Build and publish client
 
 ```bash
-cd /home/<user>/chgrid
-./deploy/scripts/deploy_client.sh /home/<user>/chgrid /home/<user>/public_html/chgrid /chgrid/
+cd /home/bestmidi/chgrid
+./deploy/scripts/deploy_client.sh /home/bestmidi/chgrid /home/bestmidi/public_html/chgrid /chgrid/
 ```
 
 Notes:
 - Third arg is Vite base path for production assets.
-- For `https://example.com/chgrid/`, use `/chgrid/`.
-- For site root deploy (`https://example.com/`), use `/`.
+- For `https://bestmidi.com/chgrid/`, use `/chgrid/`.
+- For site root deploy (`https://bestmidi.com/`), use `/`.
 - Deploy script normalizes publish permissions to avoid shared-host PHP soft exceptions:
   - directories `755`
   - files `644`
@@ -76,26 +76,26 @@ Notes:
 Shortcut (client deploy + service restart):
 
 ```bash
-cd /home/<user>/chgrid
-./deploy/scripts/up.sh /home/<user>/chgrid /home/<user>/public_html/chgrid /chgrid/
+cd /home/bestmidi/chgrid
+./deploy/scripts/up.sh /home/bestmidi/chgrid /home/bestmidi/public_html/chgrid /chgrid/
 ```
 
 ## 5) Install/restart signaling service (systemd)
 
 ```bash
-cd /home/<user>/chgrid
-./deploy/scripts/install_service.sh /home/<user>/chgrid
+cd /home/bestmidi/chgrid
+./deploy/scripts/install_service.sh /home/bestmidi/chgrid
 ```
 
 Notes:
-- Service startup uses `/home/<user>/chgrid/server/run_server.sh`, which sources local
-  `/home/<user>/chgrid/server/.env` before launching Python.
+- Service startup uses `/home/bestmidi/chgrid/server/run_server.sh`, which sources local
+  `/home/bestmidi/chgrid/server/.env` before launching Python.
 
 Logs:
 
 ```bash
 journalctl -u chat-grid.service -f
-tail -f /home/<user>/chgrid/server/runtime/server.log
+tail -f /home/bestmidi/chgrid/server/runtime/server.log
 ```
 
 If you previously used `chgrid-signaling.service`, migrate once:
@@ -110,10 +110,10 @@ sudo systemctl daemon-reload
 Install using script:
 
 ```bash
-cd /home/<user>/chgrid
+cd /home/bestmidi/chgrid
 ./deploy/scripts/install_apache.sh \
-  /home/<user>/chgrid \
-  /etc/apache2/conf.d/userdata/ssl/2_4/<cpanel-user>/yourdomain.com/chgrid.conf
+  /home/bestmidi/chgrid \
+  /etc/apache2/conf.d/userdata/ssl/2_4/bestmidi/yourdomain.com/chgrid.conf
 ```
 
 Notes:
@@ -127,7 +127,7 @@ Notes:
 
 If stream sources are plain HTTP (for example ports `8000`, `8010`, `8020`, `8030`), add relays in:
 
-`/etc/apache2/conf.d/userdata/ssl/2_4/<cpanel-user>/example.com/chgrid.conf`
+`/etc/apache2/conf.d/userdata/ssl/2_4/bestmidi/bestmidi.com/chgrid.conf`
 
 Example:
 
@@ -150,7 +150,7 @@ sudo /usr/local/cpanel/scripts/restartsrv_httpd
 ```
 
 Usage example in Chat Grid:
-- `https://example.com/listen/8000/stream`
+- `https://bestmidi.com/listen/8000/stream`
 
 ## 8) PHP media proxy (Dropbox + HTTP stream passthrough)
 
@@ -158,26 +158,26 @@ Usage example in Chat Grid:
 
 It is auto-copied to your publish dir by `deploy_client.sh` (and `up.sh`), so after deploy it should be available at:
 
-- `https://example.com/chgrid/media_proxy.php`
+- `https://bestmidi.com/chgrid/media_proxy.php`
 
 Use in Chat Grid `streamUrl`:
 
 ```text
-https://example.com/chgrid/media_proxy.php?url=<urlencoded-upstream-url>
+https://bestmidi.com/chgrid/media_proxy.php?url=<urlencoded-upstream-url>
 ```
 
 Examples:
 
 - Dropbox:
-  `https://example.com/chgrid/media_proxy.php?url=https%3A%2F%2Fwww.dropbox.com%2Fscl%2Ffi%2Fa7s3n15bgj043rr54k3n9%2FMario-Hold-Music.mp3%3Frlkey%3Ddfr3dybr7s7nndudag0k8xflc%26dl%3D1`
+  `https://bestmidi.com/chgrid/media_proxy.php?url=https%3A%2F%2Fwww.dropbox.com%2Fscl%2Ffi%2Fa7s3n15bgj043rr54k3n9%2FMario-Hold-Music.mp3%3Frlkey%3Ddfr3dybr7s7nndudag0k8xflc%26dl%3D1`
 - HTTP stream:
-  `https://example.com/chgrid/media_proxy.php?url=http%3A%2F%2Fstream.rpgamers.net%3A8000%2Frpgn`
+  `https://bestmidi.com/chgrid/media_proxy.php?url=http%3A%2F%2Fstream.rpgamers.net%3A8000%2Frpgn`
 
 Troubleshooting checks:
 
 ```bash
-curl -I "https://example.com/chgrid/media_proxy.php?url=https%3A%2F%2Fwww.dropbox.com%2Fscl%2Ffi%2Fa7s3n15bgj043rr54k3n9%2FMario-Hold-Music.mp3%3Frlkey%3Ddfr3dybr7s7nndudag0k8xflc%26dl%3D1"
-curl -I "https://example.com/chgrid/media_proxy.php?url=http%3A%2F%2Fstream.rpgamers.net%3A8000%2Frpgn"
+curl -I "https://bestmidi.com/chgrid/media_proxy.php?url=https%3A%2F%2Fwww.dropbox.com%2Fscl%2Ffi%2Fa7s3n15bgj043rr54k3n9%2FMario-Hold-Music.mp3%3Frlkey%3Ddfr3dybr7s7nndudag0k8xflc%26dl%3D1"
+curl -I "https://bestmidi.com/chgrid/media_proxy.php?url=http%3A%2F%2Fstream.rpgamers.net%3A8000%2Frpgn"
 ```
 
 Optional hardening:
@@ -185,28 +185,28 @@ Optional hardening:
 - Set env var `CHGRID_MEDIA_PROXY_ALLOWLIST` (comma-separated hosts/suffixes) in Apache/PHP-FPM.
   - Example: `dropbox.com,dropboxusercontent.com,stream.rpgamers.net`
 
-## 9) GitHub-based update flow
+## 9) GitHub-based update flow (`bestmidi`)
 
 Initial clone (one time):
 
 ```bash
-cd /home/<user>
+cd /home/bestmidi
 git clone https://github.com/jage9/chat_grid.git chgrid
 ```
 
 Update and redeploy:
 
 ```bash
-cd /home/<user>/chgrid
+cd /home/bestmidi/chgrid
 git fetch origin
 git switch main
 git pull --ff-only origin main
 
 # Rebuild/publish web client
-./deploy/scripts/deploy_client.sh /home/<user>/chgrid /home/<user>/public_html/chgrid /chgrid/
+./deploy/scripts/deploy_client.sh /home/bestmidi/chgrid /home/bestmidi/public_html/chgrid /chgrid/
 
 # Reconcile server env/deps (safe to rerun on updates)
-./deploy/scripts/install_server.sh /home/<user>/chgrid
+./deploy/scripts/install_server.sh /home/bestmidi/chgrid
 
 # Restart signaling service
 sudo systemctl restart chat-grid.service
@@ -216,8 +216,8 @@ journalctl -u chat-grid.service -n 50 --no-pager
 Typical quick update:
 
 ```bash
-cd /home/<user>/chgrid
-./deploy/scripts/up.sh /home/<user>/chgrid /home/<user>/public_html/chgrid /chgrid/
+cd /home/bestmidi/chgrid
+./deploy/scripts/up.sh /home/bestmidi/chgrid /home/bestmidi/public_html/chgrid /chgrid/
 ```
 
 Notes:
@@ -245,7 +245,7 @@ Then run one authenticated command and enter:
 - Password: your GitHub PAT
 
 ```bash
-cd /home/<user>/chgrid
+cd /home/bestmidi/chgrid
 git pull --ff-only origin main
 ```
 
