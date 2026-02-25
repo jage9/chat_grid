@@ -78,7 +78,6 @@ const RECONNECT_DELAY_MS = 5_000;
 const RECONNECT_MAX_ATTEMPTS = 3;
 const AUDIO_SUBSCRIPTION_REFRESH_MS = 500;
 const TELEPORT_SQUARES_PER_SECOND = 20;
-const TELEPORT_SYNC_INTERVAL_MS = 100;
 const AUTH_POLICY_STORAGE_KEY = 'chgridAuthPolicy';
 
 declare global {
@@ -1204,10 +1203,14 @@ function updateTeleport(): void {
   state.player.x = activeTeleport.startX + (activeTeleport.targetX - activeTeleport.startX) * progress;
   state.player.y = activeTeleport.startY + (activeTeleport.targetY - activeTeleport.startY) * progress;
 
-  if (nowMs - activeTeleport.lastSyncAtMs >= TELEPORT_SYNC_INTERVAL_MS) {
+  if (nowMs - activeTeleport.lastSyncAtMs >= movementTickMs) {
     activeTeleport.lastSyncAtMs = nowMs;
-    const syncX = Math.round(state.player.x);
-    const syncY = Math.round(state.player.y);
+    const desiredX = Math.round(state.player.x);
+    const desiredY = Math.round(state.player.y);
+    const stepX = Math.sign(desiredX - activeTeleport.lastSentX);
+    const stepY = Math.sign(desiredY - activeTeleport.lastSentY);
+    const syncX = activeTeleport.lastSentX + stepX;
+    const syncY = activeTeleport.lastSentY + stepY;
     if (syncX !== activeTeleport.lastSentX || syncY !== activeTeleport.lastSentY) {
       activeTeleport.lastSentX = syncX;
       activeTeleport.lastSentY = syncY;
