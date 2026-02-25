@@ -169,7 +169,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
 
       case 'teleport_complete': {
         if (deps.getAudioLayers().world) {
-          deps.playRemoteSpatialStepOrTeleport(deps.TELEPORT_SOUND_URL, message.x, message.y);
+          deps.playIncomingItemUseSound(deps.TELEPORT_SOUND_URL, message.x, message.y);
         }
         break;
       }
