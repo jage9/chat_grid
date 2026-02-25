@@ -4,6 +4,7 @@ import asyncio
 import json
 from time import monotonic
 from typing import cast
+import uuid
 
 import pytest
 from websockets.asyncio.server import ServerConnection
@@ -42,9 +43,70 @@ async def test_update_position_rejects_out_of_bounds(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
+async def test_radio_metadata_refresh_updates_station_and_title(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=10, y=10)
+    server.clients[ws] = client
+
+    radio = server.item_service.default_item(client, "radio_station")
+    radio.params["streamUrl"] = "http://example.com/stream"
+    radio.params["enabled"] = True
+    radio.params["emitRange"] = 10
+    radio.params["stationName"] = ""
+    radio.params["nowPlaying"] = ""
+    server.item_service.add_item(radio)
+
+    async def fake_broadcast_item(item: object) -> None:
+        return None
+
+    def fake_fetch(url: str) -> tuple[str, str]:
+        assert url == "http://example.com/stream"
+        return ("Test Station", "Test Song")
+
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server, "_fetch_stream_metadata", fake_fetch)
+
+    await server._refresh_radio_metadata_once()
+
+    assert radio.params["stationName"] == "Test Station"
+    assert radio.params["nowPlaying"] == "Test Song"
+
+
+@pytest.mark.asyncio
+async def test_radio_metadata_refresh_skips_when_no_listener_in_range(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=0, y=0)
+    server.clients[ws] = client
+
+    radio = server.item_service.default_item(client, "radio_station")
+    radio.x = 30
+    radio.y = 30
+    radio.params["streamUrl"] = "http://example.com/stream"
+    radio.params["enabled"] = True
+    radio.params["emitRange"] = 5
+    server.item_service.add_item(radio)
+
+    called = False
+
+    def fake_fetch(url: str) -> tuple[str, str]:
+        nonlocal called
+        called = True
+        return ("X", "Y")
+
+    monkeypatch.setattr(server, "_fetch_stream_metadata", fake_fetch)
+
+    await server._refresh_radio_metadata_once()
+
+    assert called is False
+
+
+@pytest.mark.asyncio
 async def test_auth_login_uses_hash_offload(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
-    server.auth_service.register("alpha", "password99")
+    username = f"alpha_{uuid.uuid4().hex[:8]}"
+    server.auth_service.register(username, "password99")
     ws = _fake_ws()
     client = ClientConnection(websocket=ws, id="u1", nickname="tester")
 
@@ -65,7 +127,10 @@ async def test_auth_login_uses_hash_offload(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
     monkeypatch.setattr(server, "_run_auth_hash_task", fake_run_auth_hash_task)
 
-    await server._handle_message(client, json.dumps({"type": "auth_login", "username": "alpha", "password": "password99"}))
+    await server._handle_message(
+        client,
+        json.dumps({"type": "auth_login", "username": username, "password": "password99"}),
+    )
 
     assert "login" in offload_calls
     auth_results = [packet for packet in send_payloads if getattr(packet, "type", "") == "auth_result"]

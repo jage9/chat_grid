@@ -25,6 +25,8 @@ This is behavior-focused documentation for item types and their defaults.
   - `mediaVolume=50`
   - `mediaEffect="off"`
   - `mediaEffectValue=50`
+  - `stationName=""` (server-managed, read-only)
+  - `nowPlaying=""` (server-managed, read-only)
   - `facing=0`
   - `emitRange=10`
 - Global:
@@ -42,8 +44,10 @@ This is behavior-focused documentation for item types and their defaults.
 - `mediaVolume`: integer `0..100`
 - `mediaEffect`: `reverb | echo | flanger | high_pass | low_pass | off`
 - `mediaEffectValue`: number `0..100` with `0.1` precision
+  - Visible only when `mediaEffect != off` (`visibleWhen: {"mediaEffect": "!off"}`)
 - `facing`: number `0..360` with step `1`
 - `emitRange`: integer `5..20`
+- `stationName` / `nowPlaying`: server-fetched metadata fields; not editable by clients.
 
 ## `dice`
 

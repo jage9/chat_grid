@@ -50,6 +50,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_use_sound` contains absolute item world coordinates (`x`, `y`) and sound path.
   - For carried items, source coordinates resolve to the carrier's current position.
 - `teleport_complete` contains absolute player world coordinates (`x`, `y`) at teleport landing.
+- Radio metadata (`params.stationName`, `params.nowPlaying`) is server-managed and delivered through normal `item_upsert` updates.
 - `item_piano_note` contains:
   - `itemId`, `senderId`, `keyId`, `midi`, `on`
   - resolved `instrument`, `voiceMode`, `octave`, `attack`, `decay`, `release`, `brightness`, `emitRange`
@@ -81,6 +82,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - `itemTypes[].globalProperties`: non-editable global values (`useSound`, `emitSound`, `useCooldownMs`, `emitRange`, `directional`, `emitSoundSpeed`, `emitSoundTempo`)
 - Client item UI requires this metadata from the server; there is no fallback item definition map.
 - Client property help/type rendering is metadata-driven; it does not infer fallback types/tooltips from hardcoded key heuristics.
+- `visibleWhen` supports equality checks and string negation via `!` prefix (example: `{"mediaEffect": "!off"}`).
 
 ## Validation Boundaries
 

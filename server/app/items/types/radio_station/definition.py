@@ -29,6 +29,8 @@ DEFAULT_PARAMS: dict = {
     "mediaChannel": "stereo",
     "mediaEffect": "off",
     "mediaEffectValue": 50,
+    "stationName": "",
+    "nowPlaying": "",
     "facing": 0,
     "emitRange": 10,
 }
@@ -39,6 +41,8 @@ PARAM_KEYS: tuple[str, ...] = (
     "mediaChannel",
     "mediaEffect",
     "mediaEffectValue",
+    "stationName",
+    "nowPlaying",
     "facing",
     "emitRange",
 )
@@ -61,7 +65,10 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "number",
         "tooltip": "Amount for the selected effect.",
         "range": {"min": 0, "max": 100, "step": 0.1},
+        "visibleWhen": {"mediaEffect": "!off"},
     },
+    "stationName": {"valueType": "text", "tooltip": "Detected station name from stream metadata."},
+    "nowPlaying": {"valueType": "text", "tooltip": "Detected current track/title from stream metadata."},
     "facing": {
         "valueType": "number",
         "tooltip": "Facing direction in degrees used for directional emit.",

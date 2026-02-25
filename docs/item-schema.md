@@ -65,6 +65,8 @@
   "mediaVolume": 50,
   "mediaEffect": "off",
   "mediaEffectValue": 50,
+  "stationName": "",
+  "nowPlaying": "",
   "facing": 0,
   "emitRange": 10
 }
@@ -77,6 +79,9 @@
 - `mediaChannel`: one of `stereo | mono | left | right`, default `stereo`.
 - `mediaEffect`: one of `reverb | echo | flanger | high_pass | low_pass | off`, default `off`.
 - `mediaEffectValue`: number, range `0-100`, precision `0.1`.
+- UI visibility: `mediaEffectValue` is shown only when `mediaEffect != off` (`visibleWhen: {"mediaEffect": "!off"}`).
+- `stationName`: server-managed station label derived from ICY metadata when available.
+- `nowPlaying`: server-managed stream title derived from ICY metadata when available.
 - `facing`: number, range `0-360`, step `1` (used when `directional=true`).
 - UI visibility: `facing` is shown only when `directional=true` (`visibleWhen` metadata).
 - `emitRange`: integer, range `5-20`, default `10`.

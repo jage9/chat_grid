@@ -308,6 +308,12 @@ export function isItemPropertyVisible(item: WorldItem, key: string): boolean {
     const actual =
       item.params[conditionKey] ??
       getItemTypeGlobalProperties(item.type)[conditionKey];
+    if (typeof expected === 'string' && expected.startsWith('!')) {
+      if (String(actual) === expected.slice(1)) {
+        return false;
+      }
+      continue;
+    }
     if (actual !== expected) {
       return false;
     }

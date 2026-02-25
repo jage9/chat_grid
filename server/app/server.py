@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from collections import deque
+from contextlib import suppress
 from datetime import datetime
 from getpass import getpass
 from importlib.metadata import PackageNotFoundError, version as package_version
@@ -18,6 +19,8 @@ import time
 import uuid
 from pathlib import Path
 from typing import Literal
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError, TypeAdapter
@@ -96,6 +99,8 @@ AUTH_RATE_LIMIT_PER_IP = 20
 AUTH_RATE_LIMIT_PER_IDENTITY = 8
 AUTH_FAILURE_JITTER_MIN_MS = 0.02
 AUTH_FAILURE_JITTER_MAX_MS = 0.08
+RADIO_METADATA_POLL_INTERVAL_S = 10.0
+RADIO_METADATA_TIMEOUT_S = 6.0
 
 
 class SignalingServer:
@@ -153,6 +158,7 @@ class SignalingServer:
         self._auth_hash_semaphore = asyncio.Semaphore(AUTH_HASH_MAX_CONCURRENCY)
         self._auth_failures_by_ip: dict[str, deque[float]] = {}
         self._auth_failures_by_identity: dict[str, deque[float]] = {}
+        self._radio_metadata_task: asyncio.Task[None] | None = None
 
     @staticmethod
     def _resolve_server_version() -> str:
@@ -343,6 +349,95 @@ class SignalingServer:
         if isinstance(item.useSound, str) and item.useSound.strip():
             return item.useSound.strip()
         return None
+
+    def _get_item_emit_range(self, item: WorldItem) -> int:
+        """Return effective emit range for one item with sane bounds."""
+
+        value = item.params.get("emitRange")
+        if isinstance(value, (int, float)):
+            emit_range = int(value)
+            if emit_range > 0:
+                return emit_range
+        definition = get_item_definition(item.type)
+        if isinstance(definition.emit_range, int) and definition.emit_range > 0:
+            return definition.emit_range
+        return 15
+
+    def _has_listener_in_range(self, item: WorldItem) -> bool:
+        """Return whether any connected user is currently inside item hear range."""
+
+        emit_range = self._get_item_emit_range(item)
+        for client in self.clients.values():
+            if max(abs(client.x - item.x), abs(client.y - item.y)) <= emit_range:
+                return True
+        return False
+
+    @staticmethod
+    def _fetch_stream_metadata(stream_url: str) -> tuple[str, str]:
+        """Read ICY headers/metadata from a stream URL and return station/title."""
+
+        if not stream_url:
+            return "", ""
+        try:
+            request = Request(
+                stream_url,
+                headers={"Icy-MetaData": "1", "User-Agent": "ChatGrid"},
+            )
+            with urlopen(request, timeout=RADIO_METADATA_TIMEOUT_S) as response:
+                station = str(response.headers.get("icy-name") or response.headers.get("ice-name") or "").strip()
+                title = ""
+                metaint_raw = response.headers.get("icy-metaint")
+                if metaint_raw:
+                    metaint = int(metaint_raw)
+                    if metaint > 0:
+                        response.read(metaint)
+                        meta_len_byte = response.read(1)
+                        if meta_len_byte:
+                            meta_length = meta_len_byte[0] * 16
+                            if meta_length > 0:
+                                meta = response.read(meta_length).decode(errors="ignore")
+                                match = re.search(r"StreamTitle='(.*?)';", meta)
+                                if match:
+                                    title = match.group(1).strip()
+                return station[:160], title[:200]
+        except (OSError, URLError, ValueError):
+            return "", ""
+
+    async def _refresh_radio_metadata_once(self) -> None:
+        """Refresh station/title metadata for active radios near at least one listener."""
+
+        radios = [
+            item
+            for item in self.items.values()
+            if item.type == "radio_station"
+            and bool(item.params.get("enabled", True))
+            and isinstance(item.params.get("streamUrl"), str)
+            and str(item.params.get("streamUrl", "")).strip()
+            and self._has_listener_in_range(item)
+        ]
+        for item in radios:
+            stream_url = str(item.params.get("streamUrl", "")).strip()
+            station_name, now_playing = await asyncio.to_thread(self._fetch_stream_metadata, stream_url)
+            current_station = str(item.params.get("stationName", "")).strip()
+            current_playing = str(item.params.get("nowPlaying", "")).strip()
+            if station_name == current_station and now_playing == current_playing:
+                continue
+            item.params["stationName"] = station_name
+            item.params["nowPlaying"] = now_playing
+            item.updatedAt = self.item_service.now_ms()
+            item.version += 1
+            self._request_state_save()
+            await self._broadcast_item(item)
+
+    async def _run_radio_metadata_loop(self) -> None:
+        """Background polling loop that refreshes radio now-playing metadata."""
+
+        try:
+            while True:
+                await self._refresh_radio_metadata_once()
+                await asyncio.sleep(RADIO_METADATA_POLL_INTERVAL_S)
+        except asyncio.CancelledError:
+            return
 
     def _get_item_sound_source_position(self, item: WorldItem) -> tuple[int, int]:
         """Resolve source position for item-emitted one-shot sounds."""
@@ -836,6 +931,7 @@ class SignalingServer:
 
         protocol = "wss" if self._ssl_context else "ws"
         LOGGER.info("starting signaling server on %s://%s:%d", protocol, self.host, self.port)
+        self._radio_metadata_task = asyncio.create_task(self._run_radio_metadata_loop())
         try:
             async with serve(
                 self._handle_client,
@@ -846,6 +942,11 @@ class SignalingServer:
             ):
                 await asyncio.Future()
         finally:
+            if self._radio_metadata_task is not None:
+                self._radio_metadata_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._radio_metadata_task
+                self._radio_metadata_task = None
             self._flush_state_save()
             self.auth_service.close()
 

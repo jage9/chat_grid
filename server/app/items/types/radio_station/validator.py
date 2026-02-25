@@ -59,6 +59,9 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     if not (0 <= effect_value <= 100):
         raise ValueError("mediaEffectValue must be between 0 and 100.")
     next_params["mediaEffectValue"] = round(effect_value, 1)
+    # Read-only metadata fields are server-managed and cannot be client-edited.
+    next_params["stationName"] = str(item.params.get("stationName", "")).strip()[:160]
+    next_params["nowPlaying"] = str(item.params.get("nowPlaying", "")).strip()[:200]
 
     try:
         facing = float(next_params.get("facing", item.params.get("facing", 0)))
