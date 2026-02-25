@@ -62,6 +62,9 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - `userId`
   - `username`
   - `role`
+  - `policy` (`usernameMinLength`, `usernameMaxLength`, `passwordMinLength`, `passwordMaxLength`)
+- `auth_required.authPolicy`: server auth limits advertised before login/register submit.
+- `auth_result.authPolicy`: server auth limits echoed on auth success/failure responses.
 - `welcome.worldConfig.gridSize`: server-authoritative grid size used by clients for bounds/drawing.
 - `welcome.worldConfig.movementTickMs`: server movement-rate window used for client movement pacing.
 - `welcome.worldConfig.movementMaxStepsPerTick`: max allowed grid steps per movement window.

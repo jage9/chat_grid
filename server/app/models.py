@@ -160,6 +160,7 @@ class WelcomePacket(BasePacket):
 class AuthRequiredPacket(BasePacket):
     type: Literal["auth_required"]
     message: str
+    authPolicy: dict | None = None
 
 
 class AuthResultPacket(BasePacket):
@@ -170,6 +171,7 @@ class AuthResultPacket(BasePacket):
     username: str | None = None
     role: str | None = None
     nickname: str | None = None
+    authPolicy: dict | None = None
 
 
 class UserLeftPacket(BasePacket):

@@ -6,6 +6,7 @@
 2. Client validates auth form/session token and sets up local media.
 3. Client connects signaling websocket.
 4. Server sends `auth_required`.
+   - includes `authPolicy` limits for username/password.
 5. Client sends `auth_login`, `auth_register`, or `auth_resume`.
 6. Server sends `auth_result`.
 7. Server sends `welcome` with users/items snapshot.
@@ -42,7 +43,7 @@ Core incoming message effects:
 
 - `signal`: WebRTC negotiation and ICE exchange.
 - `auth_required`: prompt client to authenticate before gameplay messages.
-- `auth_result`: auth success/failure with optional session token + account metadata.
+- `auth_result`: auth success/failure with optional session token + account metadata + `authPolicy`.
 - `update_position`: update peer position; may play movement/teleport world sound.
 - `teleport_complete`: play peer teleport landing sound at final tile.
 - `update_nickname`: update peer display name.

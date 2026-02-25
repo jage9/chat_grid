@@ -79,6 +79,7 @@ const RECONNECT_MAX_ATTEMPTS = 3;
 const AUDIO_SUBSCRIPTION_REFRESH_MS = 500;
 const TELEPORT_SQUARES_PER_SECOND = 20;
 const TELEPORT_SYNC_INTERVAL_MS = 100;
+const AUTH_POLICY_STORAGE_KEY = 'chgridAuthPolicy';
 
 declare global {
   interface Window {
@@ -94,9 +95,11 @@ type Dom = {
   registerView: HTMLElement;
   authUsername: HTMLInputElement;
   authPassword: HTMLInputElement;
+  authPolicyHintLogin: HTMLParagraphElement;
   registerUsername: HTMLInputElement;
   registerPassword: HTMLInputElement;
   registerEmail: HTMLInputElement;
+  authPolicyHintRegister: HTMLParagraphElement;
   showRegisterButton: HTMLButtonElement;
   showLoginButton: HTMLButtonElement;
   updatesSection: HTMLElement;
@@ -125,9 +128,11 @@ const dom: Dom = {
   registerView: requiredById('registerView'),
   authUsername: requiredById('authUsername'),
   authPassword: requiredById('authPassword'),
+  authPolicyHintLogin: requiredById('authPolicyHintLogin'),
   registerUsername: requiredById('registerUsername'),
   registerPassword: requiredById('registerPassword'),
   registerEmail: requiredById('registerEmail'),
+  authPolicyHintRegister: requiredById('authPolicyHintRegister'),
   showRegisterButton: requiredById('showRegisterButton'),
   showLoginButton: requiredById('showLoginButton'),
   updatesSection: requiredById('updatesSection'),
@@ -170,6 +175,13 @@ type HelpSection = {
 
 type HelpData = {
   sections: HelpSection[];
+};
+
+type AuthPolicy = {
+  usernameMinLength: number;
+  usernameMaxLength: number;
+  passwordMinLength: number;
+  passwordMaxLength: number;
 };
 
 /** Builds linearized help-view lines from sectioned help content. */
@@ -222,6 +234,7 @@ let outputMode = settings.loadOutputMode();
 let authMode: 'login' | 'register' = 'login';
 let authSessionToken = settings.loadAuthSessionToken();
 let authUsername = settings.loadAuthUsername();
+let authPolicy: AuthPolicy | null = null;
 let pendingAuthRequest = false;
 const messageBuffer: string[] = [];
 let messageCursor = -1;
@@ -504,11 +517,63 @@ function sanitizeName(value: string): string {
 
 /** Normalizes auth username according to server policy. */
 function sanitizeAuthUsername(value: string): string {
+  const maxLength = authPolicy?.usernameMaxLength ?? 128;
   return value
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]/g, '')
-    .slice(0, 32);
+    .slice(0, Math.max(1, maxLength));
+}
+
+/** Normalizes and stores server-advertised auth policy limits, then refreshes auth UI hints. */
+function applyAuthPolicy(policy: unknown): void {
+  if (!policy || typeof policy !== 'object') return;
+  const raw = policy as Partial<AuthPolicy>;
+  const usernameMin = Number(raw.usernameMinLength);
+  const usernameMax = Number(raw.usernameMaxLength);
+  const passwordMin = Number(raw.passwordMinLength);
+  const passwordMax = Number(raw.passwordMaxLength);
+  if (
+    !Number.isInteger(usernameMin) ||
+    !Number.isInteger(usernameMax) ||
+    !Number.isInteger(passwordMin) ||
+    !Number.isInteger(passwordMax)
+  ) {
+    return;
+  }
+  if (usernameMin < 1 || usernameMax < usernameMin || passwordMin < 1 || passwordMax < passwordMin) {
+    return;
+  }
+  authPolicy = {
+    usernameMinLength: usernameMin,
+    usernameMaxLength: usernameMax,
+    passwordMinLength: passwordMin,
+    passwordMaxLength: passwordMax,
+  };
+  localStorage.setItem(AUTH_POLICY_STORAGE_KEY, JSON.stringify(authPolicy));
+  const hint = `Username: ${usernameMin}-${usernameMax} chars (a-z, 0-9, _, -). Password: ${passwordMin}-${passwordMax} chars.`;
+  dom.authPolicyHintLogin.textContent = hint;
+  dom.authPolicyHintRegister.textContent = hint;
+  dom.authUsername.minLength = usernameMin;
+  dom.authUsername.maxLength = usernameMax;
+  dom.registerUsername.minLength = usernameMin;
+  dom.registerUsername.maxLength = usernameMax;
+  dom.authPassword.minLength = passwordMin;
+  dom.authPassword.maxLength = passwordMax;
+  dom.registerPassword.minLength = passwordMin;
+  dom.registerPassword.maxLength = passwordMax;
+  updateConnectAvailability();
+}
+
+/** Loads most recently-seen auth policy limits from local storage for pre-connect UI hints. */
+function loadPersistedAuthPolicy(): void {
+  const raw = localStorage.getItem(AUTH_POLICY_STORAGE_KEY);
+  if (!raw) return;
+  try {
+    applyAuthPolicy(JSON.parse(raw));
+  } catch {
+    // Ignore malformed persisted policy and keep live server policy source of truth.
+  }
 }
 
 /** Enables/disables the connect button based on state and nickname validity. */
@@ -524,10 +589,13 @@ function updateConnectAvailability(): void {
   dom.loginView.classList.toggle('hidden', authMode !== 'login');
   dom.registerView.classList.toggle('hidden', authMode !== 'register');
   const hasSessionToken = authSessionToken.trim().length > 0;
+  const usernameMin = authPolicy?.usernameMinLength ?? 1;
+  const passwordMin = authPolicy?.passwordMinLength ?? 1;
   const hasLoginCredentials =
-    sanitizeAuthUsername(dom.authUsername.value).length >= 2 && dom.authPassword.value.trim().length >= 8;
+    sanitizeAuthUsername(dom.authUsername.value).length >= usernameMin && dom.authPassword.value.trim().length >= passwordMin;
   const hasRegisterCredentials =
-    sanitizeAuthUsername(dom.registerUsername.value).length >= 2 && dom.registerPassword.value.trim().length >= 8;
+    sanitizeAuthUsername(dom.registerUsername.value).length >= usernameMin &&
+    dom.registerPassword.value.trim().length >= passwordMin;
   const authReady = hasSessionToken || (authMode === 'login' ? hasLoginCredentials : hasRegisterCredentials);
   dom.connectButton.textContent = hasSessionToken ? 'Connect' : authMode === 'login' ? 'Log In & Connect' : 'Register & Connect';
   dom.connectButton.disabled = mediaSession.isConnecting() || !authReady;
@@ -1379,14 +1447,16 @@ function sendAuthRequest(): void {
 }
 
 /** Handles server auth-required prompts prior to world welcome. */
-function handleAuthRequired(message: string): void {
+function handleAuthRequired(message: Extract<IncomingMessage, { type: 'auth_required' }>): void {
+  applyAuthPolicy(message.authPolicy);
   setConnectionStatus('Authentication required.');
-  updateStatus(message);
+  updateStatus(message.message);
 }
 
 /** Applies auth result state and terminates failed auth attempts quickly. */
 async function handleAuthResult(message: Extract<IncomingMessage, { type: 'auth_result' }>): Promise<void> {
   pendingAuthRequest = false;
+  applyAuthPolicy(message.authPolicy);
   if (!message.ok) {
     dom.authPassword.value = '';
     dom.registerPassword.value = '';
@@ -1581,6 +1651,7 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   let restartAnnouncement: string | null = null;
   let connectedAnnouncement: string | null = null;
   if (message.type === 'welcome') {
+    applyAuthPolicy(message.auth?.policy);
     const incomingInstanceId = String(message.serverInfo?.instanceId ?? '').trim() || null;
     const incomingVersion = String(message.serverInfo?.version ?? '').trim() || 'unknown';
     connectedAnnouncement = reconnectInFlight
@@ -2608,6 +2679,7 @@ setupInputHandlers();
 setupUiHandlers();
 dom.authUsername.value = sanitizeAuthUsername(authUsername);
 dom.registerUsername.value = sanitizeAuthUsername(authUsername);
+loadPersistedAuthPolicy();
 setAuthMode('login');
 updateConnectAvailability();
 updateDeviceSummary();

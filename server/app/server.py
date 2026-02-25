@@ -177,6 +177,16 @@ class SignalingServer:
 
         return nickname.casefold()
 
+    def _auth_policy(self) -> dict[str, int]:
+        """Return server-auth policy limits advertised to clients."""
+
+        return {
+            "usernameMinLength": self.auth_service.username_min_length,
+            "usernameMaxLength": self.auth_service.username_max_length,
+            "passwordMinLength": self.auth_service.password_min_length,
+            "passwordMaxLength": self.auth_service.password_max_length,
+        }
+
     def _flush_state_save(self) -> None:
         """Immediately flush pending state persistence and clear debounce state."""
 
@@ -748,7 +758,11 @@ class SignalingServer:
         try:
             await self._send(
                 websocket,
-                AuthRequiredPacket(type="auth_required", message="Authentication required."),
+                AuthRequiredPacket(
+                    type="auth_required",
+                    message="Authentication required.",
+                    authPolicy=self._auth_policy(),
+                ),
             )
             async for raw_message in websocket:
                 await self._handle_message(client, raw_message)
@@ -805,6 +819,7 @@ class SignalingServer:
                 "userId": client.user_id,
                 "username": client.username,
                 "role": client.role if client.authenticated else None,
+                "policy": self._auth_policy(),
             },
         )
         await self._send(client.websocket, packet)
@@ -844,7 +859,12 @@ class SignalingServer:
         if client.authenticated and isinstance(packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)):
             await self._send(
                 client.websocket,
-                AuthResultPacket(type="auth_result", ok=False, message="Already authenticated."),
+                AuthResultPacket(
+                    type="auth_result",
+                    ok=False,
+                    message="Already authenticated.",
+                    authPolicy=self._auth_policy(),
+                ),
             )
             return True
 
@@ -861,7 +881,12 @@ class SignalingServer:
                     client.session_token = None
                 await self._send(
                     client.websocket,
-                    AuthResultPacket(type="auth_result", ok=True, message="Logged out."),
+                    AuthResultPacket(
+                        type="auth_result",
+                        ok=True,
+                        message="Logged out.",
+                        authPolicy=self._auth_policy(),
+                    ),
                 )
                 await client.websocket.close()
                 return True
@@ -870,7 +895,12 @@ class SignalingServer:
         except AuthError as exc:
             await self._send(
                 client.websocket,
-                AuthResultPacket(type="auth_result", ok=False, message=str(exc)),
+                AuthResultPacket(
+                    type="auth_result",
+                    ok=False,
+                    message=str(exc),
+                    authPolicy=self._auth_policy(),
+                ),
             )
             return True
 
@@ -890,6 +920,7 @@ class SignalingServer:
                 username=session.user.username,
                 role=session.user.role,
                 nickname=client.nickname,
+                authPolicy=self._auth_policy(),
             ),
         )
         await self._activate_authenticated_client(client)

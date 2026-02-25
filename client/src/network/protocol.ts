@@ -54,6 +54,14 @@ export const welcomeMessageSchema = z.object({
       userId: z.string().nullable().optional(),
       username: z.string().nullable().optional(),
       role: z.string().nullable().optional(),
+      policy: z
+        .object({
+          usernameMinLength: z.number().int().positive(),
+          usernameMaxLength: z.number().int().positive(),
+          passwordMinLength: z.number().int().positive(),
+          passwordMaxLength: z.number().int().positive(),
+        })
+        .optional(),
     })
     .optional(),
   uiDefinitions: z
@@ -96,6 +104,14 @@ export const welcomeMessageSchema = z.object({
 export const authRequiredSchema = z.object({
   type: z.literal('auth_required'),
   message: z.string(),
+  authPolicy: z
+    .object({
+      usernameMinLength: z.number().int().positive(),
+      usernameMaxLength: z.number().int().positive(),
+      passwordMinLength: z.number().int().positive(),
+      passwordMaxLength: z.number().int().positive(),
+    })
+    .optional(),
 });
 
 export const authResultSchema = z.object({
@@ -106,6 +122,14 @@ export const authResultSchema = z.object({
   username: z.string().optional(),
   role: z.string().optional(),
   nickname: z.string().optional(),
+  authPolicy: z
+    .object({
+      usernameMinLength: z.number().int().positive(),
+      usernameMaxLength: z.number().int().positive(),
+      passwordMinLength: z.number().int().positive(),
+      passwordMaxLength: z.number().int().positive(),
+    })
+    .optional(),
 });
 
 export const signalMessageSchema = z.object({

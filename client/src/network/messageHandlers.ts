@@ -70,7 +70,7 @@ type MessageHandlerDeps = {
   playLocateToneAt: (x: number, y: number) => void;
   resolveIncomingSoundUrl: (url: string) => string;
   playIncomingItemUseSound: (url: string, x: number, y: number) => void;
-  handleAuthRequired: (message: string) => void;
+  handleAuthRequired: (message: Extract<IncomingMessage, { type: 'auth_required' }>) => void;
   handleAuthResult: (message: Extract<IncomingMessage, { type: 'auth_result' }>) => Promise<void>;
 };
 
@@ -81,7 +81,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
   return async function onMessage(message: IncomingMessage): Promise<void> {
     switch (message.type) {
       case 'auth_required':
-        deps.handleAuthRequired(message.message);
+        deps.handleAuthRequired(message);
         break;
 
       case 'auth_result':
