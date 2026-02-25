@@ -4,6 +4,7 @@ import type { RemoteUser } from '../network/protocol';
 export type PeerRuntime = SpatialPeerRuntime & {
   id: string;
   pc: RTCPeerConnection;
+  initiator: boolean;
   remoteStream?: MediaStream;
 };
 
@@ -38,6 +39,7 @@ export class PeerManager {
 
     const peer: PeerRuntime = {
       id: targetId,
+      initiator: isInitiator,
       nickname: userData.nickname ?? 'user...',
       x: userData.x ?? 20,
       y: userData.y ?? 20,
@@ -117,15 +119,46 @@ export class PeerManager {
     if (!newTrack) {
       return;
     }
+    const peersToRenegotiate: PeerRuntime[] = [];
     for (const peer of this.peers.values()) {
+      let shouldRenegotiate = false;
       const sender =
         peer.pc.getSenders().find((candidate) => candidate.track?.kind === 'audio') ??
         peer.pc
           .getTransceivers()
           .find((transceiver) => transceiver.receiver.track?.kind === 'audio' || transceiver.sender.track?.kind === 'audio')
           ?.sender;
-      if (!sender) continue;
-      await sender.replaceTrack(newTrack);
+      if (!sender) {
+        peer.pc.addTrack(newTrack, stream);
+        shouldRenegotiate = true;
+      } else {
+        if (!sender.track) {
+          shouldRenegotiate = true;
+        }
+        await sender.replaceTrack(newTrack);
+      }
+      const audioTransceiver = peer.pc
+        .getTransceivers()
+        .find((transceiver) => transceiver.receiver.track?.kind === 'audio' || transceiver.sender.track?.kind === 'audio');
+      if (audioTransceiver && (audioTransceiver.direction === 'recvonly' || audioTransceiver.direction === 'inactive')) {
+        audioTransceiver.direction = 'sendrecv';
+        shouldRenegotiate = true;
+      }
+      if (shouldRenegotiate && peer.initiator) {
+        peersToRenegotiate.push(peer);
+      }
+    }
+    for (const peer of peersToRenegotiate) {
+      if (peer.pc.connectionState === 'closed') continue;
+      if (peer.pc.signalingState !== 'stable') continue;
+      try {
+        let offer = await peer.pc.createOffer();
+        offer = this.tuneOpus(offer);
+        await peer.pc.setLocalDescription(offer);
+        this.sendSignal(peer.id, { sdp: peer.pc.localDescription ?? undefined });
+      } catch {
+        // Best-effort renegotiation; transport-level failures recover on subsequent signaling.
+      }
     }
   }
 
