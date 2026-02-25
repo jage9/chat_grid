@@ -4,7 +4,6 @@ set -euo pipefail
 REPO_ROOT="${1:-/home/bestmidi/chgrid}"
 SERVER_DIR="$REPO_ROOT/server"
 PYTHON_SPEC="${PYTHON_SPEC:-3.13}"
-SYS_ENV_FILE="${CHGRID_SYSTEM_ENV_FILE:-/etc/sysconfig/chat-grid}"
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "error: uv is required but not found in PATH" >&2
@@ -60,21 +59,6 @@ PY
   printf "CHGRID_AUTH_SECRET=%s\n" "$AUTH_SECRET" > .env
   chmod 600 .env
   echo "created $SERVER_DIR/.env with CHGRID_AUTH_SECRET"
-fi
-
-# Ensure a systemd-friendly env file exists for service startup.
-if [[ -z "${CHGRID_AUTH_SECRET:-}" && -f .env ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source .env
-  set +a
-fi
-if [[ -n "${CHGRID_AUTH_SECRET:-}" ]]; then
-  sudo install -d -m 755 /etc/sysconfig
-  sudo sh -c "printf 'CHGRID_AUTH_SECRET=%s\n' \"\$1\" > \"\$2\"" _ "$CHGRID_AUTH_SECRET" "$SYS_ENV_FILE"
-  sudo chmod 600 "$SYS_ENV_FILE"
-  sudo chown root:root "$SYS_ENV_FILE"
-  echo "ensured system env file for service: $SYS_ENV_FILE"
 fi
 
 # Load generated/shared auth secret for bootstrap checks.
@@ -134,6 +118,8 @@ PY
     fi
   fi
 fi
+
+chmod +x "$SERVER_DIR/run_server.sh"
 
 echo "server install complete"
 echo "next: edit $SERVER_DIR/config.toml (TLS, bind_ip, port)"

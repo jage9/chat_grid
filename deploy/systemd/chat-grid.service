@@ -8,10 +8,8 @@ User=bestmidi
 Group=bestmidi
 WorkingDirectory=/home/bestmidi/chgrid/server
 Environment=PATH=/home/bestmidi/chgrid/server/.venv/bin:/usr/bin:/bin
-EnvironmentFile=-/etc/sysconfig/chat-grid
-EnvironmentFile=-/home/bestmidi/chgrid/server/.env
 ExecStartPre=/usr/bin/mkdir -p /home/bestmidi/chgrid/server/runtime
-ExecStart=/home/bestmidi/chgrid/server/.venv/bin/python main.py --config /home/bestmidi/chgrid/server/config.toml
+ExecStart=/home/bestmidi/chgrid/server/run_server.sh
 StandardOutput=append:/home/bestmidi/chgrid/server/runtime/server.log
 StandardError=append:/home/bestmidi/chgrid/server/runtime/server.log
 Restart=always
