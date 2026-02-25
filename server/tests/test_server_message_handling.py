@@ -118,12 +118,13 @@ async def test_item_secondary_use_radio_reports_now_playing(monkeypatch: pytest.
     server.item_service.add_item(radio)
 
     send_payloads: list[object] = []
+    broadcast_payloads: list[object] = []
 
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
         send_payloads.append(packet)
 
     async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
-        return None
+        broadcast_payloads.append(packet)
 
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
@@ -135,6 +136,7 @@ async def test_item_secondary_use_radio_reports_now_playing(monkeypatch: pytest.
     assert results[-1].ok is True
     assert results[-1].action == "secondary_use"
     assert "Playing Song Y from Station X." in results[-1].message
+    assert broadcast_payloads == []
 
 
 @pytest.mark.asyncio

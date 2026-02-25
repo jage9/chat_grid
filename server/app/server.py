@@ -1708,10 +1708,11 @@ class SignalingServer:
                 item.version += 1
                 self._request_state_save()
                 await self._broadcast_item(item)
-            await self._broadcast(
-                BroadcastChatMessagePacket(type="chat_message", message=secondary_result.others_message, system=True),
-                exclude=client.websocket,
-            )
+            if secondary_result.others_message.strip():
+                await self._broadcast(
+                    BroadcastChatMessagePacket(type="chat_message", message=secondary_result.others_message, system=True),
+                    exclude=client.websocket,
+                )
             await self._send_item_result(client, True, "secondary_use", secondary_result.self_message, item.id)
             return
 

@@ -27,7 +27,7 @@ def secondary_use_item(item: WorldItem, _nickname: str, _clock_formatter: Callab
     if item.params.get("enabled") is False:
         return ItemUseResult(
             self_message=f"{item.title} is off.",
-            others_message=f"{item.title} is off.",
+            others_message="",
         )
 
     station_name = str(item.params.get("stationName", "")).strip()
@@ -40,4 +40,4 @@ def secondary_use_item(item: WorldItem, _nickname: str, _clock_formatter: Callab
         message = f"Playing from {station_name}."
     else:
         message = "No now playing data."
-    return ItemUseResult(self_message=message, others_message=message)
+    return ItemUseResult(self_message=message, others_message="")
