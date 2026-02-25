@@ -1459,7 +1459,9 @@ async function handleAuthResult(message: Extract<IncomingMessage, { type: 'auth_
       settings.saveAuthSessionToken('');
     }
     setConnectionStatus(message.message);
-    audio.sfxUiCancel();
+    if (message.message.trim().toLowerCase() !== 'invalid username or password.') {
+      audio.sfxUiCancel();
+    }
     mediaSession.setConnecting(false);
     updateConnectAvailability();
     signaling.disconnect();
@@ -2681,5 +2683,5 @@ updateDeviceSummary();
 setConnectionStatus(
   isVersionReloadedSession()
     ? 'Client updated, please reconnect.'
-    : 'Welcome to the Chat Grid. Log in or register, configure audio if needed, then Connect to join the grid.',
+    : 'Welcome to the Chat Grid, your immersive audio playground. Configure your audio, then Log in or register to join the grid.',
 );
