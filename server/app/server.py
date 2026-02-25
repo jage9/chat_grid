@@ -209,6 +209,15 @@ class SignalingServer:
             return item.useSound.strip()
         return None
 
+    def _get_item_sound_source_position(self, item: WorldItem) -> tuple[int, int]:
+        """Resolve source position for item-emitted one-shot sounds."""
+
+        if item.carrierId:
+            carrier = self._get_client_by_id(item.carrierId)
+            if carrier is not None:
+                return carrier.x, carrier.y
+        return item.x, item.y
+
     def _get_client_by_id(self, client_id: str) -> ClientConnection | None:
         """Resolve one connected client by id."""
 
@@ -1141,13 +1150,14 @@ class SignalingServer:
             )
             use_sound = self._resolve_item_use_sound(item)
             if use_sound:
+                sound_x, sound_y = self._get_item_sound_source_position(item)
                 await self._broadcast(
                     ItemUseSoundPacket(
                         type="item_use_sound",
                         itemId=item.id,
                         sound=use_sound,
-                        x=item.x,
-                        y=item.y,
+                        x=sound_x,
+                        y=sound_y,
                     )
                 )
             if item.type == "piano":

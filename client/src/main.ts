@@ -718,6 +718,8 @@ function classifySystemMessageSound(message: string): keyof typeof SYSTEM_SOUND_
 function resolveIncomingSoundUrl(url: string): string {
   const raw = String(url || '').trim();
   if (!raw) return '';
+  const lowered = raw.toLowerCase();
+  if (lowered === 'none' || lowered === 'off') return '';
   if (/^https?:/i.test(raw)) {
     return shouldProxyStreamUrl(raw) ? getProxyUrlForStream(raw) : raw;
   }

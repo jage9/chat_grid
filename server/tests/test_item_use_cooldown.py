@@ -400,6 +400,44 @@ async def test_widget_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_carried_item_use_sound_uses_carrier_position(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    server.clients[ws] = client
+    item = server.item_service.default_item(client, "widget")
+    item.params["useSound"] = "sounds/test.ogg"
+    item.carrierId = client.id
+    # Keep stale coordinates to verify carrier position is used for use-sound broadcasts.
+    item.x = 1
+    item.y = 1
+    server.item_service.add_item(item)
+    client.x = 9
+    client.y = 10
+
+    send_payloads: list[object] = []
+    broadcast_payloads: list[object] = []
+    now_ms = 60_000
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+        broadcast_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+    monkeypatch.setattr(server.item_service, "now_ms", lambda: now_ms)
+
+    await server._handle_message(client, json.dumps({"type": "item_use", "itemId": item.id}))
+    assert send_payloads[-1].ok is True
+    sound_packets = [packet for packet in broadcast_payloads if getattr(packet, "type", "") == "item_use_sound"]
+    assert sound_packets
+    assert sound_packets[-1].x == 9
+    assert sound_packets[-1].y == 10
+
+
+@pytest.mark.asyncio
 async def test_piano_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()

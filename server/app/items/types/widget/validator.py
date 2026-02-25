@@ -3,28 +3,9 @@
 from __future__ import annotations
 
 from ....models import WorldItem
+from ...sound_policy import enforce_max_length, normalize_sound_reference
 from ...helpers import keep_only_known_params, parse_bool_like
 from .definition import EFFECT_OPTIONS, PARAM_KEYS
-
-
-def _normalize_sound_value(raw: object) -> str:
-    """Normalize sound value to empty/URL/or sounds-relative path."""
-
-    token = str(raw or "").strip()
-    if not token:
-        return ""
-    lowered = token.lower()
-    if lowered in {"none", "off"}:
-        return ""
-    if lowered.startswith(("http://", "https://", "data:", "blob:")):
-        return token
-    if token.startswith("/sounds/"):
-        return token[1:]
-    if token.startswith("sounds/"):
-        return token
-    if "/" not in token:
-        return f"sounds/{token}"
-    return token
 
 
 def validate_update(item: WorldItem, next_params: dict) -> dict:
@@ -88,10 +69,14 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
         raise ValueError("emitEffectValue must be between 0 and 100.")
     next_params["emitEffectValue"] = round(emit_effect_value, 1)
 
-    next_params["useSound"] = _normalize_sound_value(next_params.get("useSound", item.params.get("useSound", "")))
-    next_params["emitSound"] = _normalize_sound_value(next_params.get("emitSound", item.params.get("emitSound", "")))
-    if len(next_params["useSound"]) > 2048:
-        raise ValueError("useSound must be 2048 characters or less.")
-    if len(next_params["emitSound"]) > 2048:
-        raise ValueError("emitSound must be 2048 characters or less.")
+    next_params["useSound"] = enforce_max_length(
+        normalize_sound_reference(next_params.get("useSound", item.params.get("useSound", ""))),
+        max_length=2048,
+        field_name="useSound",
+    )
+    next_params["emitSound"] = enforce_max_length(
+        normalize_sound_reference(next_params.get("emitSound", item.params.get("emitSound", ""))),
+        max_length=2048,
+        field_name="emitSound",
+    )
     return keep_only_known_params(next_params, PARAM_KEYS)

@@ -19,6 +19,8 @@ export type EffectRuntime = {
   flangerLfoGain: GainNode | null;
 };
 
+const reverbImpulseCache = new WeakMap<AudioContext, Map<string, AudioBuffer>>();
+
 export function clampEffectLevel(value: number): number {
   const clamped = Math.max(0, Math.min(100, value));
   return Math.round(clamped * 10) / 10;
@@ -96,7 +98,7 @@ export function connectEffectChain(
 
   if (effect === 'reverb') {
     const convolver = audioCtx.createConvolver();
-    convolver.buffer = createImpulseResponse(audioCtx, 0.4 + effectMix * 4.2, 1 + effectMix * 3.6);
+    convolver.buffer = getCachedImpulseResponse(audioCtx, clampEffectLevel(effectValue));
     const wetGain = audioCtx.createGain();
     wetGain.gain.value = 0.06 + effectMix * 0.94;
     const dryGain = audioCtx.createGain();
@@ -143,6 +145,25 @@ export function connectEffectChain(
   runtime.flangerLfoGain = lfoGain;
   runtime.nodes.push(delay, feedback, wetGain, lfoGain, dryGain);
   return runtime;
+}
+
+/** Returns a cached impulse response for a reverb amount bucket and sample rate. */
+function getCachedImpulseResponse(audioCtx: AudioContext, effectValue: number): AudioBuffer {
+  const roundedLevel = Math.round(Math.max(0, Math.min(100, effectValue)));
+  const cacheKey = `${audioCtx.sampleRate}:${roundedLevel}`;
+  let ctxCache = reverbImpulseCache.get(audioCtx);
+  if (!ctxCache) {
+    ctxCache = new Map<string, AudioBuffer>();
+    reverbImpulseCache.set(audioCtx, ctxCache);
+  }
+  const existing = ctxCache.get(cacheKey);
+  if (existing) {
+    return existing;
+  }
+  const mix = roundedLevel / 100;
+  const impulse = createImpulseResponse(audioCtx, 0.4 + mix * 4.2, 1 + mix * 3.6);
+  ctxCache.set(cacheKey, impulse);
+  return impulse;
 }
 
 /** Generates a synthetic impulse buffer used by the reverb convolver effect. */

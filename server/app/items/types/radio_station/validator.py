@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ....models import WorldItem
+from ...sound_policy import enforce_max_length, normalize_media_reference
 from ...helpers import keep_only_known_params
 from .definition import CHANNEL_OPTIONS, EFFECT_OPTIONS, PARAM_KEYS
 
@@ -10,10 +11,11 @@ from .definition import CHANNEL_OPTIONS, EFFECT_OPTIONS, PARAM_KEYS
 def validate_update(item: WorldItem, next_params: dict) -> dict:
     """Validate and normalize radio params."""
 
-    stream_url = str(next_params.get("streamUrl", "")).strip()
-    if len(stream_url) > 2048:
-        raise ValueError("streamUrl must be 2048 characters or less.")
-    next_params["streamUrl"] = stream_url
+    next_params["streamUrl"] = enforce_max_length(
+        normalize_media_reference(next_params.get("streamUrl", "")),
+        max_length=2048,
+        field_name="streamUrl",
+    )
 
     enabled_value = next_params.get("enabled", True)
     if isinstance(enabled_value, bool):

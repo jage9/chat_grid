@@ -40,6 +40,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - Piano runtime control no longer depends on parsing `item_action_result.message` text.
 - `item_piano_status` carries machine-readable piano events (`use_mode_entered`, record/playback transitions).
 - `item_use_sound` contains absolute item world coordinates (`x`, `y`) and sound path.
+  - For carried items, source coordinates resolve to the carrier's current position.
 - `item_piano_note` contains:
   - `itemId`, `senderId`, `keyId`, `midi`, `on`
   - resolved `instrument`, `voiceMode`, `octave`, `attack`, `decay`, `release`, `brightness`, `emitRange`
@@ -69,6 +70,10 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - Server is authoritative for all action validation and normalization.
 - Server is authoritative for movement acceptance (bounds + rate/delta checks).
 - Client validates incoming packet shapes and applies runtime behavior.
+- Sound/media field normalization uses shared server policy helpers:
+  - `none/off` normalize to empty values
+  - bare filenames normalize to `sounds/<name>` for sound-reference fields
+  - media URL-like fields are trimmed/validated consistently
 - Client-side item edit validation is convenience only; server remains source of truth.
 
 ## Heartbeat/Stale Recovery
