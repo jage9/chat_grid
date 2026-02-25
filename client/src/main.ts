@@ -597,10 +597,14 @@ function updateConnectAvailability(): void {
   if (hasSessionToken) {
     const label = sanitizeAuthUsername(authUsername) || 'current account';
     dom.authSessionText.textContent = `Logged in as ${label}.`;
+    dom.showRegisterButton.classList.add('hidden');
+    dom.showLoginButton.classList.add('hidden');
     dom.loginView.classList.add('hidden');
     dom.registerView.classList.add('hidden');
     dom.authSessionView.classList.remove('hidden');
   } else {
+    dom.showRegisterButton.classList.remove('hidden');
+    dom.showLoginButton.classList.remove('hidden');
     dom.loginView.classList.toggle('hidden', authMode !== 'login');
     dom.registerView.classList.toggle('hidden', authMode !== 'register');
     dom.authSessionView.classList.add('hidden');
