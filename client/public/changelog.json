@@ -3,6 +3,8 @@
     {
       "date": "February 24, 2026",
       "items": [
+        "Added secondary actions with Shift+Enter. Currently, it works on the radio for now playing."
+        "Added now playing for media streams.",
         "Added user accounts. Username cannot be changed but nicknames can.",
         "Did a lot of behind-the-scenes work, including rewriting the item system and moving a lot of things away from the client. If things break, please let me know."
       ]
