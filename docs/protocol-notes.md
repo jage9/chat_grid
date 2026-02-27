@@ -46,6 +46,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 ## Item Packet Behavior
 
 - `item_upsert` is full-state replacement for one item, not partial patch.
+- `item_upsert.item.display` is server-owned display text for readonly/system properties (for example: `createdAt`, `updatedAt`, `capabilities`, `useSound`, `emitSound`).
 - `item_action_result` messages are intended for direct screen-reader/user status feedback.
 - Piano runtime control no longer depends on parsing `item_action_result.message` text.
 - `item_piano_status` carries machine-readable piano events (`use_mode_entered`, record/playback transitions).

@@ -34,17 +34,7 @@ export function createItemPropertyPresentation(deps: PresentationDeps): {
 
   const getItemPropertyValue = (item: WorldItem, key: string): string => {
     if (key === 'title') return item.title;
-    if (key === 'type') return item.type;
-    if (key === 'x') return String(item.x);
-    if (key === 'y') return String(item.y);
-    if (key === 'carrierId') return item.carrierId ?? 'none';
-    if (key === 'version') return String(item.version);
-    if (key === 'createdBy') return item.createdBy;
-    if (key === 'createdAt') return deps.formatTimestampMs(item.createdAt);
-    if (key === 'updatedAt') return deps.formatTimestampMs(item.updatedAt);
-    if (key === 'capabilities') return item.capabilities.join(', ') || 'none';
-    if (key === 'useSound') return toSoundDisplayName(item.params.useSound ?? item.useSound);
-    if (key === 'emitSound') return toSoundDisplayName(item.params.emitSound ?? item.emitSound);
+    if (item.display && typeof item.display[key] === 'string') return item.display[key];
     const metadata = getItemPropertyMetadata(item.type, key);
     const globalValue = getItemTypeGlobalProperties(item.type)?.[key];
     const paramValue = item.params[key];
@@ -69,6 +59,17 @@ export function createItemPropertyPresentation(deps: PresentationDeps): {
     if (metadata?.valueType === 'list' || metadata?.valueType === 'text') {
       return rawValue === undefined || rawValue === null ? '' : String(rawValue);
     }
+    if (key === 'type') return item.type;
+    if (key === 'x') return String(item.x);
+    if (key === 'y') return String(item.y);
+    if (key === 'carrierId') return item.carrierId ?? 'none';
+    if (key === 'version') return String(item.version);
+    if (key === 'createdBy') return item.createdBy;
+    if (key === 'createdAt') return deps.formatTimestampMs(item.createdAt);
+    if (key === 'updatedAt') return deps.formatTimestampMs(item.updatedAt);
+    if (key === 'capabilities') return item.capabilities.join(', ') || 'none';
+    if (key === 'useSound') return toSoundDisplayName(item.params.useSound ?? item.useSound);
+    if (key === 'emitSound') return toSoundDisplayName(item.params.emitSound ?? item.emitSound);
     if (paramValue !== undefined) return String(paramValue);
     if (globalValue !== undefined) return String(globalValue);
     return '';

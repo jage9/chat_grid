@@ -6,7 +6,7 @@ import argparse
 import asyncio
 from collections import deque
 from contextlib import suppress
-from datetime import datetime
+from datetime import datetime, timezone
 from getpass import getpass
 from importlib.metadata import PackageNotFoundError, version as package_version
 import json
@@ -354,6 +354,48 @@ class SignalingServer:
         if isinstance(item.useSound, str) and item.useSound.strip():
             return item.useSound.strip()
         return None
+
+    @staticmethod
+    def _format_display_sound_name(value: object) -> str:
+        """Return display-friendly sound token (file name only) for item property menus."""
+
+        raw = str(value or "").strip()
+        if not raw:
+            return "none"
+        if raw.lower() == "none":
+            return "none"
+        without_query = raw.split("?", 1)[0].split("#", 1)[0]
+        segments = [segment for segment in without_query.split("/") if segment]
+        return segments[-1] if segments else raw
+
+    @staticmethod
+    def _format_display_timestamp_ms(value: int) -> str:
+        """Format epoch milliseconds to compact UTC text used in item property menus."""
+
+        dt = datetime.fromtimestamp(value / 1000, tz=timezone.utc)
+        return dt.strftime("%Y-%m-%d %H:%M")
+
+    def _build_item_display_values(self, item: WorldItem) -> dict[str, str]:
+        """Build server-authoritative item property display values for readonly/system fields."""
+
+        return {
+            "type": item.type,
+            "x": str(item.x),
+            "y": str(item.y),
+            "carrierId": item.carrierId or "none",
+            "version": str(item.version),
+            "createdBy": item.createdBy,
+            "createdAt": self._format_display_timestamp_ms(item.createdAt),
+            "updatedAt": self._format_display_timestamp_ms(item.updatedAt),
+            "capabilities": ", ".join(item.capabilities) if item.capabilities else "none",
+            "useSound": self._format_display_sound_name(item.params.get("useSound", item.useSound)),
+            "emitSound": self._format_display_sound_name(item.params.get("emitSound", item.emitSound)),
+        }
+
+    def _outbound_item(self, item: WorldItem) -> WorldItem:
+        """Return one outbound item snapshot enriched with server-owned display values."""
+
+        return item.model_copy(update={"display": self._build_item_display_values(item)})
 
     def _get_item_emit_range(self, item: WorldItem) -> int:
         """Return effective emit range for one item with sane bounds."""
@@ -1023,7 +1065,7 @@ class SignalingServer:
     async def _broadcast_item(self, item: WorldItem) -> None:
         """Broadcast a full item snapshot update to all connected clients."""
 
-        await self._broadcast(ItemUpsertPacket(type="item_upsert", item=item))
+        await self._broadcast(ItemUpsertPacket(type="item_upsert", item=self._outbound_item(item)))
 
     async def start(self) -> None:
         """Start websocket serving and run until cancelled."""
@@ -1117,7 +1159,7 @@ class SignalingServer:
             id=client.id,
             player=RemoteUser(id=client.id, nickname=client.nickname, x=client.x, y=client.y),
             users=users,
-            items=[item.model_dump(exclude_none=True) for item in self.items.values()],
+            items=[self._outbound_item(item).model_dump(exclude_none=True) for item in self.items.values()],
             worldConfig={
                 "gridSize": self.grid_size,
                 "movementTickMs": self.movement_tick_ms,

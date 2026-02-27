@@ -15,6 +15,7 @@ export const itemSchema = z.object({
   emitSound: z.string().optional(),
   params: z.record(z.string(), z.unknown()),
   carrierId: z.string().nullable().optional(),
+  display: z.record(z.string(), z.string()).optional(),
 });
 
 export const welcomeMessageSchema = z.object({

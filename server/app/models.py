@@ -251,6 +251,7 @@ class WorldItem(BaseModel):
     emitSound: str | None = None
     params: dict
     carrierId: str | None = None
+    display: dict[str, str] | None = None
 
 
 class PersistedWorldItem(BaseModel):

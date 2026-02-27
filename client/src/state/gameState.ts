@@ -19,6 +19,7 @@ export type WorldItem = {
   emitSound?: string;
   params: Record<string, unknown>;
   carrierId?: string | null;
+  display?: Record<string, string>;
 };
 
 export type SelectionContext = 'pickup' | 'drop' | 'delete' | 'edit' | 'use' | 'secondaryUse' | 'inspect' | null;
