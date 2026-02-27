@@ -117,6 +117,12 @@ AUTH_FAILURE_JITTER_MAX_MS = 0.08
 RADIO_METADATA_POLL_INTERVAL_S = 10.0
 RADIO_METADATA_TIMEOUT_S = 6.0
 CLOCK_ANNOUNCE_POLL_INTERVAL_S = 1.0
+ADMIN_MENU_ACTION_DEFINITIONS: tuple[dict[str, str], ...] = (
+    {"id": "manage_roles", "label": "Role management", "permission": "role.manage"},
+    {"id": "change_user_role", "label": "Change user role", "permission": "user.change_role"},
+    {"id": "ban_user", "label": "Ban user", "permission": "user.ban_unban"},
+    {"id": "unban_user", "label": "Unban user", "permission": "user.ban_unban"},
+)
 
 
 class SignalingServer:
@@ -237,6 +243,18 @@ class SignalingServer:
             "passwordMaxLength": self.auth_service.password_max_length,
         }
 
+    def _build_admin_menu_actions_for_client(self, client: ClientConnection | None) -> list[dict[str, str]]:
+        """Build server-authored admin menu actions allowed for one client."""
+
+        if client is None:
+            return []
+        client_permissions = client.permissions or set()
+        return [
+            {"id": action["id"], "label": action["label"]}
+            for action in ADMIN_MENU_ACTION_DEFINITIONS
+            if action["permission"] in client_permissions
+        ]
+
     @staticmethod
     def _sorted_permissions(values: set[str] | tuple[str, ...] | None) -> list[str]:
         """Return deterministic sorted permission list."""
@@ -278,6 +296,7 @@ class SignalingServer:
                 type="auth_permissions",
                 role=client.role,
                 permissions=permissions,
+                adminMenuActions=self._build_admin_menu_actions_for_client(client),
             ),
         )
 
@@ -1279,7 +1298,7 @@ class SignalingServer:
                 "movementTickMs": self.movement_tick_ms,
                 "movementMaxStepsPerTick": self.movement_max_steps_per_tick,
             },
-            uiDefinitions=self._build_ui_definitions(),
+            uiDefinitions=self._build_ui_definitions(client),
             serverInfo={"instanceId": self.instance_id, "version": self.server_version},
             auth={
                 "authenticated": client.authenticated,
@@ -1480,6 +1499,7 @@ class SignalingServer:
                 username=session.user.username,
                 role=session.user.role,
                 permissions=self._sorted_permissions(session.user.permissions),
+                adminMenuActions=self._build_admin_menu_actions_for_client(client),
                 nickname=client.nickname,
                 authPolicy=self._auth_policy(),
             ),
@@ -1487,7 +1507,7 @@ class SignalingServer:
         await self._activate_authenticated_client(client)
         return True
 
-    def _build_ui_definitions(self) -> dict:
+    def _build_ui_definitions(self, client: ClientConnection | None = None) -> dict:
         """Build server-owned UI definitions for item/menu rendering."""
 
         item_types: list[dict] = []
@@ -1507,6 +1527,7 @@ class SignalingServer:
         return {
             "itemTypeOrder": list(ITEM_TYPE_SEQUENCE),
             "itemTypes": item_types,
+            "adminMenu": {"actions": self._build_admin_menu_actions_for_client(client)},
         }
 
     async def _broadcast_wheel_result_after_delay(
@@ -1598,6 +1619,10 @@ class SignalingServer:
                 await deny("user_set_role", "Not authorized.")
                 return True
             users = self.auth_service.list_users_for_admin()
+            if packet.action == "ban":
+                users = [entry for entry in users if str(entry.get("status")) == "active"]
+            elif packet.action == "unban":
+                users = [entry for entry in users if str(entry.get("status")) == "disabled"]
             await self._send(client.websocket, AdminUsersListResultPacket(type="admin_users_list", users=users))
             return True
 
@@ -1758,8 +1783,8 @@ class SignalingServer:
             PACKET_LOGGER.warning("invalid packet from id=%s: %s", client.id, exc)
             return
 
-        # Compatibility path for local tests injecting pre-authenticated clients
-        # directly into server.clients without running websocket auth handshake.
+        # Test-harness compatibility: some unit tests inject clients directly into
+        # `server.clients` without running auth handshake packets.
         if not client.authenticated and client.websocket in self.clients:
             client.authenticated = True
             client.user_id = client.user_id or client.id

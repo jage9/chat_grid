@@ -758,7 +758,6 @@ class AuthService:
                 password_hash TEXT NOT NULL,
                 email TEXT UNIQUE,
                 role_id INTEGER,
-                role TEXT,
                 status TEXT NOT NULL CHECK(status IN ('active', 'disabled')) DEFAULT 'active',
                 created_at_ms INTEGER NOT NULL,
                 updated_at_ms INTEGER NOT NULL,
@@ -866,26 +865,12 @@ class AuthService:
                 )
 
     def _backfill_user_roles(self) -> None:
-        """Backfill users.role_id from legacy users.role text, defaulting to user."""
+        """Backfill users.role_id defaults for any null role assignment."""
 
         role_id_by_name = self._role_id_by_name()
         default_user_role_id = role_id_by_name.get("user")
         if default_user_role_id is None:
             raise AuthError("Default user role missing.")
-
-        user_cols = {str(row["name"]) for row in self._db_fetchall("PRAGMA table_info(users)")}
-        has_legacy_role = "role" in user_cols
-        if has_legacy_role:
-            rows = self._db_fetchall("SELECT id, role, role_id FROM users")
-            for row in rows:
-                if row["role_id"] is not None:
-                    continue
-                legacy_role = str(row["role"] or "").strip().lower()
-                mapped_role = legacy_role if legacy_role in role_id_by_name else "user"
-                self._db_execute(
-                    "UPDATE users SET role_id = ?, updated_at_ms = ? WHERE id = ?",
-                    (role_id_by_name.get(mapped_role, default_user_role_id), self.now_ms(), int(row["id"])),
-                )
         self._db_execute(
             "UPDATE users SET role_id = ?, updated_at_ms = ? WHERE role_id IS NULL",
             (default_user_role_id, self.now_ms()),

@@ -18,7 +18,7 @@
   - uses `welcome.player` as authoritative starting position (restored from server-side account state when available)
    - records `welcome.serverInfo` (`instanceId`, `version`) for restart detection
    - if `welcome.serverInfo.version` differs from running client version, auto-reloads the page
-   - applies `welcome.uiDefinitions` for item menus/properties/options
+   - applies `welcome.uiDefinitions` for item menus/properties/options and admin menu labels/order
    - sends initial `update_position` echo from server-assigned starting tile
    - sends initial `update_nickname`
    - creates peer runtimes for known users

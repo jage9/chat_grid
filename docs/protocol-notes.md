@@ -18,7 +18,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `admin_role_create`: create role.
 - `admin_role_update_permissions`: replace one role permission set.
 - `admin_role_delete`: delete role with replacement role reassignment.
-- `admin_users_list`: request user list for admin actions.
+- `admin_users_list`: request user list for admin actions (`action`: `set_role | ban | unban`).
 - `admin_user_set_role`: set target user role.
 - `admin_user_ban` / `admin_user_unban`: disable/enable user account.
 - `update_position`: client movement intent; server enforces world bounds and movement rate policy.
@@ -101,6 +101,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - `itemTypes[].editableProperties`: editable property keys by item type
   - `itemTypes[].propertyMetadata`: property-level metadata (`valueType`, optional `label`, optional `range`, optional `tooltip`, optional `maxLength`, optional `options`, optional `visibleWhen`)
   - `itemTypes[].globalProperties`: non-editable global values (`useSound`, `emitSound`, `useCooldownMs`, `emitRange`, `directional`, `emitSoundSpeed`, `emitSoundTempo`)
+  - `adminMenu.actions`: server-authored admin root menu labels/ordering for the authenticated user.
 - Client item UI requires this metadata from the server; there is no fallback item definition map.
 - Client property help/type rendering is metadata-driven; it does not infer fallback types/tooltips from hardcoded key heuristics.
 - `visibleWhen` supports equality checks and string negation via `!` prefix (example: `{"mediaEffect": "!off"}`).

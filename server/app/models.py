@@ -86,6 +86,7 @@ class AdminRoleDeletePacket(BasePacket):
 
 class AdminUsersListPacket(BasePacket):
     type: Literal["admin_users_list"]
+    action: Literal["set_role", "ban", "unban"] | None = None
 
 
 class AdminUserSetRolePacket(BasePacket):
@@ -226,6 +227,7 @@ class AuthResultPacket(BasePacket):
     username: str | None = None
     role: str | None = None
     permissions: list[str] | None = None
+    adminMenuActions: list[dict[str, str]] | None = None
     nickname: str | None = None
     authPolicy: dict | None = None
 
@@ -234,6 +236,7 @@ class AuthPermissionsPacket(BasePacket):
     type: Literal["auth_permissions"]
     role: str
     permissions: list[str]
+    adminMenuActions: list[dict[str, str]] | None = None
 
 
 class UserLeftPacket(BasePacket):

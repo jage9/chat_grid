@@ -186,10 +186,8 @@ type AuthPolicy = {
   passwordMaxLength: number;
 };
 
-type AdminMenuActionId = 'manage_roles' | 'change_user_role' | 'ban_user' | 'unban_user';
-
 type AdminMenuAction = {
-  id: AdminMenuActionId;
+  id: string;
   label: string;
 };
 
@@ -300,6 +298,7 @@ let itemPropertiesShowAll = false;
 let activeTeleportLoopStop: (() => void) | null = null;
 let activeTeleportLoopToken = 0;
 const adminMenuActions: AdminMenuAction[] = [];
+let serverAdminMenuActions: AdminMenuAction[] = [];
 let adminMenuIndex = 0;
 let adminRoles: AdminRoleSummary[] = [];
 let adminRoleIndex = 0;
@@ -593,6 +592,16 @@ function applyAuthPermissions(role: string | null | undefined, permissions: stri
   authRole = String(role || 'user').trim() || 'user';
   authPermissions = new Set((permissions || []).map((value) => String(value).trim()).filter((value) => value.length > 0));
   applyVoiceSendPermission();
+}
+
+/** Applies server-authored admin menu actions for current session. */
+function applyServerAdminMenuActions(actions: Array<{ id: string; label: string }> | null | undefined): void {
+  serverAdminMenuActions = (actions || [])
+    .map((entry) => ({
+      id: String(entry.id || '').trim(),
+      label: String(entry.label || '').trim(),
+    }))
+    .filter((entry) => entry.id.length > 0 && entry.label.length > 0);
 }
 
 /** Applies server-authoritative voice.send permission immediately to local outbound track state. */
@@ -1485,6 +1494,7 @@ function sendAuthRequest(): void {
 function handleAuthRequired(message: Extract<IncomingMessage, { type: 'auth_required' }>): void {
   applyAuthPolicy(message.authPolicy);
   applyAuthPermissions('user', []);
+  applyServerAdminMenuActions([]);
   setConnectionStatus('Authentication required.');
   updateStatus(message.message);
 }
@@ -1502,6 +1512,7 @@ async function handleAuthResult(message: Extract<IncomingMessage, { type: 'auth_
       settings.saveAuthSessionToken('');
     }
     applyAuthPermissions('user', []);
+    applyServerAdminMenuActions([]);
     setConnectionStatus(message.message);
     mediaSession.setConnecting(false);
     updateConnectAvailability();
@@ -1526,6 +1537,7 @@ async function handleAuthResult(message: Extract<IncomingMessage, { type: 'auth_
     }
   }
   applyAuthPermissions(message.role, message.permissions);
+  applyServerAdminMenuActions(message.adminMenuActions);
   dom.authPassword.value = '';
   dom.registerPassword.value = '';
   dom.registerPasswordConfirm.value = '';
@@ -1539,6 +1551,7 @@ function logOutAccount(): void {
   settings.saveAuthSessionToken('');
   settings.saveAuthUsername('');
   applyAuthPermissions('user', []);
+  applyServerAdminMenuActions([]);
   if (state.running) {
     signaling.send({ type: 'auth_logout' });
     disconnect();
@@ -1552,6 +1565,7 @@ function logOutAccount(): void {
 function handleAuthPermissions(message: Extract<IncomingMessage, { type: 'auth_permissions' }>): void {
   const hadVoiceSend = voiceSendAllowed;
   applyAuthPermissions(message.role, message.permissions);
+  applyServerAdminMenuActions(message.adminMenuActions);
   if (hadVoiceSend && !voiceSendAllowed) {
     updateStatus('Voice send permission revoked.');
   }
@@ -1562,18 +1576,7 @@ function handleAuthPermissions(message: Extract<IncomingMessage, { type: 'auth_p
 
 /** Returns available admin-menu root actions based on current permission set. */
 function getAvailableAdminActions(): AdminMenuAction[] {
-  const actions: AdminMenuAction[] = [];
-  if (hasPermission('role.manage')) {
-    actions.push({ id: 'manage_roles', label: 'Role management' });
-  }
-  if (hasPermission('user.change_role')) {
-    actions.push({ id: 'change_user_role', label: 'Change user role' });
-  }
-  if (hasPermission('user.ban_unban')) {
-    actions.push({ id: 'ban_user', label: 'Ban user' });
-    actions.push({ id: 'unban_user', label: 'Unban user' });
-  }
-  return actions;
+  return [...serverAdminMenuActions];
 }
 
 /** Handles server role-list response for admin menu flows. */
@@ -1806,6 +1809,10 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   if (message.type === 'welcome') {
     applyAuthPolicy(message.auth?.policy);
     applyAuthPermissions(message.auth?.role, message.auth?.permissions);
+    const uiAdminActions =
+      (message.uiDefinitions as { adminMenu?: { actions?: Array<{ id: string; label: string }> } } | undefined)?.adminMenu?.actions ??
+      message.auth?.adminMenuActions;
+    applyServerAdminMenuActions(uiAdminActions);
     const incomingInstanceId = String(message.serverInfo?.instanceId ?? '').trim() || null;
     const incomingVersion = String(message.serverInfo?.version ?? '').trim() || 'unknown';
     connectedAnnouncement = reconnectInFlight
@@ -2637,19 +2644,19 @@ function handleAdminMenuModeInput(code: string, key: string): void {
     }
     if (selected.id === 'change_user_role') {
       adminPendingUserAction = 'set_role';
-      signaling.send({ type: 'admin_users_list' });
+      signaling.send({ type: 'admin_users_list', action: 'set_role' });
       updateStatus('Loading users...');
       return;
     }
     if (selected.id === 'ban_user') {
       adminPendingUserAction = 'ban';
-      signaling.send({ type: 'admin_users_list' });
+      signaling.send({ type: 'admin_users_list', action: 'ban' });
       updateStatus('Loading users...');
       return;
     }
     if (selected.id === 'unban_user') {
       adminPendingUserAction = 'unban';
-      signaling.send({ type: 'admin_users_list' });
+      signaling.send({ type: 'admin_users_list', action: 'unban' });
       updateStatus('Loading users...');
     }
     return;
@@ -2818,17 +2825,31 @@ function handleAdminUserListModeInput(code: string, key: string): void {
       return;
     }
     if (adminPendingUserAction === 'ban') {
+      adminUsers.splice(adminUserIndex, 1);
+      if (adminUsers.length > 0) {
+        adminUserIndex = Math.min(adminUserIndex, adminUsers.length - 1);
+        const next = adminUsers[adminUserIndex];
+        updateStatus(`${next.username}, ${next.role}, ${next.status}.`);
+      } else {
+        state.mode = 'adminMenu';
+        updateStatus('No users to ban.');
+      }
       signaling.send({ type: 'admin_user_ban', username: selected.username });
-      state.mode = 'normal';
-      adminPendingUserAction = null;
-      updateStatus(`Banning ${selected.username}...`);
+      adminPendingUserAction = 'ban';
       return;
     }
     if (adminPendingUserAction === 'unban') {
+      adminUsers.splice(adminUserIndex, 1);
+      if (adminUsers.length > 0) {
+        adminUserIndex = Math.min(adminUserIndex, adminUsers.length - 1);
+        const next = adminUsers[adminUserIndex];
+        updateStatus(`${next.username}, ${next.role}, ${next.status}.`);
+      } else {
+        state.mode = 'adminMenu';
+        updateStatus('No users to unban.');
+      }
       signaling.send({ type: 'admin_user_unban', username: selected.username });
-      state.mode = 'normal';
-      adminPendingUserAction = null;
-      updateStatus(`Unbanning ${selected.username}...`);
+      adminPendingUserAction = 'unban';
       return;
     }
     return;
@@ -2858,9 +2879,19 @@ function handleAdminUserRoleSelectModeInput(code: string, key: string): void {
   if (control.type === 'select') {
     const selectedRole = adminRoles[adminRoleIndex];
     signaling.send({ type: 'admin_user_set_role', username: adminSelectedUsername, role: selectedRole.name });
-    state.mode = 'normal';
+    for (const user of adminUsers) {
+      if (user.username === adminSelectedUsername) {
+        user.role = selectedRole.name;
+      }
+    }
+    state.mode = 'adminUserList';
     adminPendingUserAction = null;
-    updateStatus(`Setting ${adminSelectedUsername} to ${selectedRole.name}...`);
+    const selectedUser = adminUsers.find((user) => user.username === adminSelectedUsername);
+    if (selectedUser) {
+      updateStatus(`${selectedUser.username}, ${selectedUser.role}, ${selectedUser.status}.`);
+    } else {
+      updateStatus('Select user.');
+    }
     return;
   }
   if (control.type === 'cancel') {

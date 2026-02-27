@@ -57,6 +57,7 @@ export const welcomeMessageSchema = z.object({
       username: z.string().nullable().optional(),
       role: z.string().nullable().optional(),
       permissions: z.array(z.string()).optional(),
+      adminMenuActions: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
       policy: z
         .object({
           usernameMinLength: z.number().int().positive(),
@@ -100,6 +101,11 @@ export const welcomeMessageSchema = z.object({
           globalProperties: z.record(z.string(), z.unknown()).optional(),
         }),
       ),
+      adminMenu: z
+        .object({
+          actions: z.array(z.object({ id: z.string(), label: z.string() })),
+        })
+        .optional(),
     })
     .optional(),
 });
@@ -125,6 +131,7 @@ export const authResultSchema = z.object({
   username: z.string().optional(),
   role: z.string().optional(),
   permissions: z.array(z.string()).optional(),
+  adminMenuActions: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
   nickname: z.string().optional(),
   authPolicy: z
     .object({
@@ -267,6 +274,7 @@ export const authPermissionsSchema = z.object({
   type: z.literal('auth_permissions'),
   role: z.string(),
   permissions: z.array(z.string()),
+  adminMenuActions: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
 });
 
 const adminRoleSummarySchema = z.object({
@@ -345,7 +353,7 @@ export type OutgoingMessage =
   | { type: 'admin_role_create'; name: string }
   | { type: 'admin_role_update_permissions'; role: string; permissions: string[] }
   | { type: 'admin_role_delete'; role: string; replacementRole: string }
-  | { type: 'admin_users_list' }
+  | { type: 'admin_users_list'; action?: 'set_role' | 'ban' | 'unban' }
   | { type: 'admin_user_set_role'; username: string; role: string }
   | { type: 'admin_user_ban'; username: string }
   | { type: 'admin_user_unban'; username: string }
