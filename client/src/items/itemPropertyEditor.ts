@@ -117,10 +117,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       }
       const metadata = deps.getItemPropertyMetadata(item.type, selectedKey);
       if (metadata?.valueType === 'boolean') {
-        let current = item.params[selectedKey];
-        if (typeof current !== 'boolean') {
-          current = item.params[selectedKey] === true;
-        }
+        const current = deps.getItemPropertyValue(item, selectedKey).toLowerCase() === 'on';
         const nextValue = !current;
         deps.suppressItemPropertyEchoMs(600);
         deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: nextValue } });
@@ -169,8 +166,8 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       }
       const metadata = deps.getItemPropertyMetadata(item.type, selectedKey);
       if (metadata?.valueType === 'boolean') {
-        const current = item.params[selectedKey];
-        const nextValue = typeof current === 'boolean' ? !current : deps.getItemPropertyValue(item, selectedKey).toLowerCase() !== 'on';
+        const current = deps.getItemPropertyValue(item, selectedKey).toLowerCase() === 'on';
+        const nextValue = !current;
         deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: nextValue } });
         deps.onPreviewPropertyChange?.(item, selectedKey, nextValue);
         deps.updateStatus(`${deps.itemPropertyLabel(selectedKey)}: ${nextValue ? 'on' : 'off'}`);
@@ -188,7 +185,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         selectedKey === 'title'
           ? item.title
           : selectedMetadata?.valueType === 'boolean'
-            ? item.params[selectedKey] === true
+            ? deps.getItemPropertyValue(item, selectedKey).toLowerCase() === 'on'
               ? 'on'
               : 'off'
             : String(item.params[selectedKey] ?? '');

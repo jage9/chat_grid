@@ -48,16 +48,7 @@ export function createItemPropertyPresentation(deps: PresentationDeps): {
     if (key === 'capabilities') return item.capabilities.join(', ') || 'none';
     if (key === 'useSound') return toSoundDisplayName(item.params.useSound ?? item.useSound);
     if (key === 'emitSound') return toSoundDisplayName(item.params.emitSound ?? item.emitSound);
-    if (key === 'enabled') return item.params.enabled === false ? 'off' : 'on';
-    if (key === 'directional') {
-      if (typeof item.params.directional === 'boolean') {
-        return item.params.directional ? 'on' : 'off';
-      }
-      return getItemTypeGlobalProperties(item.type).directional === true ? 'on' : 'off';
-    }
     if (key === 'timeZone') return String(item.params.timeZone ?? getDefaultClockTimeZone());
-    if (key === 'use24Hour') return item.params.use24Hour === true ? 'on' : 'off';
-    if (key === 'topOfHourAnnounce') return item.params.topOfHourAnnounce === true ? 'on' : 'off';
     if (key === 'mediaChannel') return normalizeRadioChannel(item.params.mediaChannel);
     if (key === 'mediaEffect') return normalizeRadioEffect(item.params.mediaEffect);
     if (key === 'mediaEffectValue') return String(normalizeRadioEffectValue(item.params.mediaEffectValue));
@@ -73,9 +64,18 @@ export function createItemPropertyPresentation(deps: PresentationDeps): {
       if (!Number.isFinite(parsed)) return '15';
       return String(Math.round(parsed));
     }
-    const paramValue = item.params[key];
-    if (paramValue !== undefined) return String(paramValue);
+    const metadata = getItemPropertyMetadata(item.type, key);
     const globalValue = getItemTypeGlobalProperties(item.type)?.[key];
+    const paramValue = item.params[key];
+    const rawValue = paramValue !== undefined ? paramValue : globalValue;
+    if (metadata?.valueType === 'boolean') {
+      if (rawValue === undefined && key === 'enabled') return 'on';
+      return rawValue === true ? 'on' : 'off';
+    }
+    if (metadata?.valueType === 'sound') {
+      return toSoundDisplayName(rawValue);
+    }
+    if (paramValue !== undefined) return String(paramValue);
     if (globalValue !== undefined) return String(globalValue);
     return '';
   };
