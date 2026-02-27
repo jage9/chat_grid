@@ -120,7 +120,7 @@
   "use24Hour": false,
   "topOfHourAnnounce": true,
   "alarmEnabled": false,
-  "alarmTime": ""
+  "alarmTime": "12:00 AM"
 }
 ```
 
@@ -137,7 +137,8 @@
 - `use24Hour`: boolean (or `on/off` in updates), default `false`.
 - `topOfHourAnnounce`: boolean (or `on/off` in updates), default `true`.
 - `alarmEnabled`: boolean (or `on/off` in updates), default `false`.
-- `alarmTime`: blank when unset; when set, accepts `HH:MM` (24-hour mode) or `H:MM AM/PM` (12-hour mode).
+- `alarmTime`: default `12:00 AM`; accepts `HH:MM` (24-hour mode) or `H:MM AM/PM` (12-hour mode).
+- UI visibility: `alarmTime` is shown only when `alarmEnabled=true` (`visibleWhen` metadata).
 - Global defaults: `useSound=none`, `emitSound=sounds/clock.ogg`.
 - Clock speech announcement audio is emitted via `item_clock_announce` packets using `/sounds/clock/el640/*.ogg`.
 

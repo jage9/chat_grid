@@ -67,7 +67,7 @@ DEFAULT_PARAMS: dict = {
     "use24Hour": False,
     "topOfHourAnnounce": True,
     "alarmEnabled": False,
-    "alarmTime": "",
+    "alarmTime": "12:00 AM",
 }
 PARAM_KEYS: tuple[str, ...] = ("timeZone", "use24Hour", "topOfHourAnnounce", "alarmEnabled", "alarmTime")
 
@@ -81,5 +81,6 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "text",
         "tooltip": "Alarm time. Uses 24-hour HH:MM when 24 hour format is on, otherwise H:MM AM/PM.",
         "maxLength": 8,
+        "visibleWhen": {"alarmEnabled": True},
     },
 }

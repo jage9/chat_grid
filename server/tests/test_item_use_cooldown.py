@@ -286,8 +286,9 @@ async def test_clock_timezone_update_validates(monkeypatch: pytest.MonkeyPatch) 
         client,
         json.dumps({"type": "item_update", "itemId": item.id, "params": {"alarmEnabled": True}}),
     )
-    assert send_payloads[-1].ok is False
-    assert "alarmtime must be a valid time" in send_payloads[-1].message.lower()
+    assert send_payloads[-1].ok is True
+    assert item.params.get("alarmEnabled") is True
+    assert item.params.get("alarmTime") == "12:00 AM"
 
     await server._handle_message(
         client,
