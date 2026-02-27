@@ -631,12 +631,14 @@ export class AudioEngine {
     if (initial) {
       sample.gainNode.gain.setTargetAtTime(gainValue, this.audioCtx.currentTime, ONE_SHOT_ATTACK_SECONDS);
     } else {
-      sample.gainNode.gain.setTargetAtTime(gainValue, this.audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
+      sample.gainNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
+      sample.gainNode.gain.linearRampToValueAtTime(gainValue, this.audioCtx.currentTime + SPATIAL_RAMP_SECONDS);
     }
     if (sample.pannerNode) {
       const panValue = mix?.pan ?? 0;
       const resolvedPan = this.outputMode === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
-      sample.pannerNode.pan.setTargetAtTime(resolvedPan, this.audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
+      sample.pannerNode.pan.cancelScheduledValues(this.audioCtx.currentTime);
+      sample.pannerNode.pan.linearRampToValueAtTime(resolvedPan, this.audioCtx.currentTime + SPATIAL_RAMP_SECONDS);
     }
   }
 
