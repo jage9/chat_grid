@@ -309,7 +309,7 @@ export class RadioStationRuntime {
         pannerNode: output.panner,
         mix,
         outputMode: this.audio.getOutputMode(),
-        transition: 'linear',
+        transition: 'target',
       });
     }
   }

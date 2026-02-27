@@ -237,7 +237,7 @@ export class ItemEmitRuntime {
         pannerNode: output.panner,
         mix: scaledMix,
         outputMode: this.audio.getOutputMode(),
-        transition: 'linear',
+        transition: 'target',
       });
       this.tryStartEmitPlayback(itemId, output.element);
     }
