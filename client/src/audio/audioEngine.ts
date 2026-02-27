@@ -7,7 +7,7 @@ import {
   type EffectId,
   type EffectRuntime,
 } from './effects';
-import { resolveSpatialMix } from './spatial';
+import { applySpatialMixToNodes, resolveSpatialMix, SPATIAL_RAMP_SECONDS, SPATIAL_TIME_CONSTANT_SECONDS } from './spatial';
 
 export type SpatialPeerRuntime = {
   nickname: string;
@@ -29,8 +29,6 @@ type SoundSpec = {
 };
 
 type OutputMode = 'stereo' | 'mono';
-const SPATIAL_RAMP_SECONDS = 0.2;
-const SPATIAL_TIME_CONSTANT_SECONDS = SPATIAL_RAMP_SECONDS / 3;
 const ONE_SHOT_ATTACK_SECONDS = 0.02;
 type ActiveSpatialSampleRuntime = {
   sourceX: number;
@@ -310,14 +308,16 @@ export class AudioEngine {
         nearFieldDistance: 1.5,
         nearFieldGain: 1,
       });
-      const gainValue = mix?.gain ?? 0;
       const listenGain = Number.isFinite(peer.listenGain) ? Math.max(0, peer.listenGain as number) : 1;
-      const panValue = mix?.pan ?? 0;
-      peer.gain.gain.setTargetAtTime(gainValue * listenGain, this.audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
-      if (peer.panner) {
-        const resolvedPan = this.outputMode === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
-        peer.panner.pan.setValueAtTime(resolvedPan, this.audioCtx.currentTime);
-      }
+      const scaledMix = mix ? { ...mix, gain: mix.gain * listenGain } : null;
+      applySpatialMixToNodes({
+        audioCtx: this.audioCtx,
+        gainNode: peer.gain,
+        pannerNode: peer.panner ?? null,
+        mix: scaledMix,
+        outputMode: this.outputMode,
+        transition: 'target',
+      });
     }
   }
 
@@ -627,19 +627,24 @@ export class AudioEngine {
       range: sample.range,
       baseGain: sample.baseGain,
     });
-    const gainValue = mix?.gain ?? 0;
     if (initial) {
+      const gainValue = mix?.gain ?? 0;
       sample.gainNode.gain.setTargetAtTime(gainValue, this.audioCtx.currentTime, ONE_SHOT_ATTACK_SECONDS);
-    } else {
-      sample.gainNode.gain.cancelScheduledValues(this.audioCtx.currentTime);
-      sample.gainNode.gain.linearRampToValueAtTime(gainValue, this.audioCtx.currentTime + SPATIAL_RAMP_SECONDS);
+      if (sample.pannerNode) {
+        const panValue = mix?.pan ?? 0;
+        const resolvedPan = this.outputMode === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
+        sample.pannerNode.pan.setValueAtTime(resolvedPan, this.audioCtx.currentTime);
+      }
+      return;
     }
-    if (sample.pannerNode) {
-      const panValue = mix?.pan ?? 0;
-      const resolvedPan = this.outputMode === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
-      sample.pannerNode.pan.cancelScheduledValues(this.audioCtx.currentTime);
-      sample.pannerNode.pan.linearRampToValueAtTime(resolvedPan, this.audioCtx.currentTime + SPATIAL_RAMP_SECONDS);
-    }
+    applySpatialMixToNodes({
+      audioCtx: this.audioCtx,
+      gainNode: sample.gainNode,
+      pannerNode: sample.pannerNode,
+      mix,
+      outputMode: this.outputMode,
+      transition: 'linear',
+    });
   }
 
   private async getSampleBuffer(url: string): Promise<AudioBuffer> {

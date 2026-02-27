@@ -3,7 +3,7 @@ import { getItemTypeGlobalProperties } from '../items/itemRegistry';
 import { AudioEngine } from './audioEngine';
 import { connectEffectChain, disconnectEffectRuntime, type EffectId, type EffectRuntime } from './effects';
 import { normalizeRadioEffect, normalizeRadioEffectValue } from './radioStationRuntime';
-import { resolveSpatialMix } from './spatial';
+import { applySpatialMixToNodes, resolveSpatialMix } from './spatial';
 import { volumePercentToGain } from './volume';
 
 type EmitOutput = {
@@ -27,8 +27,6 @@ type EmitSpatialConfig = {
 const ITEM_EMIT_BASE_GAIN = 1;
 const SUBSCRIBE_PRELOAD_SQUARES = 5;
 const UNSUBSCRIBE_HYSTERESIS_SQUARES = 8;
-const SPATIAL_RAMP_SECONDS = 0.2;
-const SPATIAL_TIME_CONSTANT_SECONDS = SPATIAL_RAMP_SECONDS / 3;
 const STREAM_PLAY_RETRY_MS = 5000;
 const STREAM_PLAY_MAX_RETRIES = 6;
 const STREAM_PLAY_RESET_COOLDOWN_MS = 60000;
@@ -231,15 +229,17 @@ export class ItemEmitRuntime {
           rearGain: 0.4,
         },
       });
-      const gainValue = mix?.gain ?? 0;
-      const panValue = mix?.pan ?? 0;
       const emitVolume = volumePercentToGain(item.params.emitVolume, 100);
-      output.gain.gain.setTargetAtTime(gainValue * emitVolume, audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
+      const scaledMix = mix ? { ...mix, gain: mix.gain * emitVolume } : null;
+      applySpatialMixToNodes({
+        audioCtx,
+        gainNode: output.gain,
+        pannerNode: output.panner,
+        mix: scaledMix,
+        outputMode: this.audio.getOutputMode(),
+        transition: 'linear',
+      });
       this.tryStartEmitPlayback(itemId, output.element);
-      if (output.panner) {
-        const resolvedPan = this.audio.getOutputMode() === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
-        output.panner.pan.setTargetAtTime(resolvedPan, audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
-      }
     }
   }
 

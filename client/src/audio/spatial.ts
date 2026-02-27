@@ -20,6 +20,45 @@ export type SpatialMixResult = {
   pan: number;
 };
 
+export const SPATIAL_RAMP_SECONDS = 0.2;
+export const SPATIAL_TIME_CONSTANT_SECONDS = SPATIAL_RAMP_SECONDS / 3;
+
+type SpatialOutputMode = 'stereo' | 'mono';
+
+type ApplySpatialNodeOptions = {
+  audioCtx: AudioContext;
+  gainNode: GainNode;
+  pannerNode: StereoPannerNode | null;
+  mix: SpatialMixResult | null;
+  outputMode: SpatialOutputMode;
+  transition: 'linear' | 'target';
+};
+
+/**
+ * Applies one resolved spatial mix to gain/pan nodes with a shared transition profile.
+ */
+export function applySpatialMixToNodes(options: ApplySpatialNodeOptions): void {
+  const { audioCtx, gainNode, pannerNode, mix, outputMode, transition } = options;
+  const gainValue = mix?.gain ?? 0;
+  const panValue = mix?.pan ?? 0;
+  const resolvedPan = outputMode === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
+
+  if (transition === 'linear') {
+    gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
+    gainNode.gain.linearRampToValueAtTime(gainValue, audioCtx.currentTime + SPATIAL_RAMP_SECONDS);
+    if (pannerNode) {
+      pannerNode.pan.cancelScheduledValues(audioCtx.currentTime);
+      pannerNode.pan.linearRampToValueAtTime(resolvedPan, audioCtx.currentTime + SPATIAL_RAMP_SECONDS);
+    }
+    return;
+  }
+
+  gainNode.gain.setTargetAtTime(gainValue, audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
+  if (pannerNode) {
+    pannerNode.pan.setTargetAtTime(resolvedPan, audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
+  }
+}
+
 type DirectionalProfile = {
   attenuationFactor: number;
   offAxisRatio: number;

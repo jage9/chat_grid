@@ -1,7 +1,7 @@
 import { HEARING_RADIUS, type WorldItem } from '../state/gameState';
 import { EFFECT_IDS, clampEffectLevel, connectEffectChain, disconnectEffectRuntime, type EffectId, type EffectRuntime } from './effects';
 import { AudioEngine } from './audioEngine';
-import { resolveSpatialMix } from './spatial';
+import { applySpatialMixToNodes, resolveSpatialMix } from './spatial';
 import { volumePercentToGain } from './volume';
 
 export const RADIO_CHANNEL_OPTIONS = ['stereo', 'mono', 'left', 'right'] as const;
@@ -165,8 +165,6 @@ type RadioSpatialConfig = {
 
 const SUBSCRIBE_PRELOAD_SQUARES = 5;
 const UNSUBSCRIBE_HYSTERESIS_SQUARES = 8;
-const SPATIAL_RAMP_SECONDS = 0.2;
-const SPATIAL_TIME_CONSTANT_SECONDS = SPATIAL_RAMP_SECONDS / 3;
 const STREAM_PLAY_RETRY_MS = 5000;
 const STREAM_PLAY_MAX_RETRIES = 6;
 const STREAM_PLAY_RESET_COOLDOWN_MS = 60000;
@@ -305,13 +303,14 @@ export class RadioStationRuntime {
           rearGain: 0.4,
         },
       });
-      const gainValue = mix?.gain ?? 0;
-      const panValue = mix?.pan ?? 0;
-      output.gain.gain.setTargetAtTime(gainValue, audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
-      if (output.panner) {
-        const resolvedPan = this.audio.getOutputMode() === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
-        output.panner.pan.setTargetAtTime(resolvedPan, audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
-      }
+      applySpatialMixToNodes({
+        audioCtx,
+        gainNode: output.gain,
+        pannerNode: output.panner,
+        mix,
+        outputMode: this.audio.getOutputMode(),
+        transition: 'linear',
+      });
     }
   }
 
