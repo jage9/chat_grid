@@ -44,6 +44,7 @@ from .item_catalog import (
 )
 from .item_type_handlers import get_item_type_handler
 from .item_service import ItemService
+from .items.types.clock.time_format import parse_alarm_time_flexible
 from .models import (
     AuthLoginPacket,
     AuthLogoutPacket,
@@ -164,6 +165,7 @@ class SignalingServer:
         self._radio_metadata_task: asyncio.Task[None] | None = None
         self._clock_announce_task: asyncio.Task[None] | None = None
         self._clock_top_of_hour_markers: dict[str, str] = {}
+        self._clock_alarm_markers: dict[str, str] = {}
 
     @staticmethod
     def _resolve_server_version() -> str:
@@ -487,8 +489,8 @@ class SignalingServer:
             return
 
     @classmethod
-    def _build_clock_announcement_sounds(cls, params: dict, *, top_of_hour: bool) -> list[str]:
-        """Build ordered EL640 sample URLs for one clock announcement."""
+    def _build_clock_time_sounds(cls, params: dict) -> list[str]:
+        """Build ordered EL640 sample URLs for just the clock time phrase."""
 
         tz_name = cls._normalize_clock_timezone(params.get("timeZone"))
         use_24_hour = cls._parse_clock_use_24_hour(params.get("use24Hour")) is True
@@ -498,10 +500,7 @@ class SignalingServer:
         ampm = "AM" if hour24 < 12 else "PM"
         hour12 = hour24 % 12 or 12
 
-        sounds: list[str] = []
-        if top_of_hour:
-            sounds.append("/sounds/clock/el640/hour1.ogg")
-        sounds.append("/sounds/clock/el640/its.ogg")
+        sounds: list[str] = ["/sounds/clock/el640/its.ogg"]
 
         if use_24_hour:
             if hour24 < 20:
@@ -529,16 +528,30 @@ class SignalingServer:
 
         if not use_24_hour:
             sounds.append(f"/sounds/clock/el640/{ampm}.ogg")
-        if top_of_hour:
+        return sounds
+
+    @classmethod
+    def _build_clock_announcement_sounds(cls, params: dict, *, top_of_hour: bool, alarm: bool) -> list[str]:
+        """Build ordered EL640 sample URLs for one clock announcement variant."""
+
+        sounds: list[str] = []
+        if alarm:
+            sounds.append("/sounds/clock/el640/announcement.ogg")
+        elif top_of_hour:
+            sounds.append("/sounds/clock/el640/hour1.ogg")
+        sounds.extend(cls._build_clock_time_sounds(params))
+        if alarm:
+            sounds.append("/sounds/clock/el640/alarm.ogg")
+        elif top_of_hour:
             sounds.append("/sounds/clock/el640/hour2.ogg")
         return sounds
 
-    async def _broadcast_clock_announcement(self, item: WorldItem, *, top_of_hour: bool) -> None:
+    async def _broadcast_clock_announcement(self, item: WorldItem, *, top_of_hour: bool, alarm: bool) -> None:
         """Broadcast one server-authoritative clock speech sequence from item position."""
 
         sound_x, sound_y = self._get_item_sound_source_position(item)
         sound_range = self._get_item_emit_range(item)
-        sounds = self._build_clock_announcement_sounds(item.params, top_of_hour=top_of_hour)
+        sounds = self._build_clock_announcement_sounds(item.params, top_of_hour=top_of_hour, alarm=alarm)
         if not sounds:
             return
         await self._broadcast(
@@ -561,21 +574,30 @@ class SignalingServer:
                 for stale_id in list(self._clock_top_of_hour_markers.keys()):
                     if stale_id not in valid_clock_ids:
                         self._clock_top_of_hour_markers.pop(stale_id, None)
+                for stale_id in list(self._clock_alarm_markers.keys()):
+                    if stale_id not in valid_clock_ids:
+                        self._clock_alarm_markers.pop(stale_id, None)
                 for item in self.items.values():
                     if item.type != "clock":
                         continue
-                    enabled = item.params.get("topOfHourAnnounce", True)
-                    if enabled is not True:
-                        continue
                     tz_name = self._normalize_clock_timezone(item.params.get("timeZone"))
                     now = datetime.now(ZoneInfo(tz_name))
-                    if now.minute != 0 or now.second > 1:
-                        continue
-                    marker = now.strftime("%Y-%m-%d-%H")
-                    if self._clock_top_of_hour_markers.get(item.id) == marker:
-                        continue
-                    self._clock_top_of_hour_markers[item.id] = marker
-                    await self._broadcast_clock_announcement(item, top_of_hour=True)
+                    top_of_hour_enabled = item.params.get("topOfHourAnnounce", True) is True
+                    if top_of_hour_enabled and now.minute == 0 and now.second <= 1:
+                        marker = now.strftime("%Y-%m-%d-%H")
+                        if self._clock_top_of_hour_markers.get(item.id) != marker:
+                            self._clock_top_of_hour_markers[item.id] = marker
+                            await self._broadcast_clock_announcement(item, top_of_hour=True, alarm=False)
+
+                    alarm_enabled = item.params.get("alarmEnabled", False) is True
+                    alarm_time = parse_alarm_time_flexible(item.params.get("alarmTime", ""))
+                    if alarm_enabled and alarm_time is not None:
+                        alarm_hour, alarm_minute = alarm_time
+                        if now.hour == alarm_hour and now.minute == alarm_minute and now.second <= 1:
+                            marker = now.strftime("%Y-%m-%d-%H-%M")
+                            if self._clock_alarm_markers.get(item.id) != marker:
+                                self._clock_alarm_markers[item.id] = marker
+                                await self._broadcast_clock_announcement(item, top_of_hour=False, alarm=True)
                 await asyncio.sleep(CLOCK_ANNOUNCE_POLL_INTERVAL_S)
         except asyncio.CancelledError:
             return
@@ -1826,7 +1848,7 @@ class SignalingServer:
                     )
                 )
             if item.type == "clock":
-                await self._broadcast_clock_announcement(item, top_of_hour=False)
+                await self._broadcast_clock_announcement(item, top_of_hour=False, alarm=False)
             if item.type == "piano":
                 await self._send_piano_status(
                     client,

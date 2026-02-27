@@ -167,6 +167,21 @@ async def test_item_secondary_use_missing_handler_returns_message(monkeypatch: p
     assert "No secondary action" in results[-1].message
 
 
+def test_clock_alarm_announcement_sequence_shape() -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    params = {"timeZone": "America/Detroit", "use24Hour": False}
+
+    alarm_sounds = server._build_clock_announcement_sounds(params, top_of_hour=False, alarm=True)
+    assert alarm_sounds
+    assert alarm_sounds[0] == "/sounds/clock/el640/announcement.ogg"
+    assert alarm_sounds[-1] == "/sounds/clock/el640/alarm.ogg"
+
+    top_of_hour_sounds = server._build_clock_announcement_sounds(params, top_of_hour=True, alarm=False)
+    assert top_of_hour_sounds
+    assert top_of_hour_sounds[0] == "/sounds/clock/el640/hour1.ogg"
+    assert top_of_hour_sounds[-1] == "/sounds/clock/el640/hour2.ogg"
+
+
 @pytest.mark.asyncio
 async def test_auth_login_uses_hash_offload(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)

@@ -102,6 +102,8 @@ This is behavior-focused documentation for item types and their defaults.
   - `timeZone="America/Detroit"`
   - `use24Hour=false`
   - `topOfHourAnnounce=true`
+  - `alarmEnabled=false`
+  - `alarmTime=""`
 - Global:
   - `useSound=none`
   - `emitSound=sounds/clock.ogg`
@@ -117,10 +119,13 @@ This is behavior-focused documentation for item types and their defaults.
 - `timeZone`: one of `CLOCK_TIME_ZONE_OPTIONS` in `server/app/item_catalog.py`
 - `use24Hour`: boolean or on/off style input
 - `topOfHourAnnounce`: boolean or on/off style input
+- `alarmEnabled`: boolean or on/off style input
+- `alarmTime`: `HH:MM` when `use24Hour=true`, otherwise `H:MM AM/PM`
 
 ### Audio
 - Spoken clock assets live under `client/public/sounds/clock/el640/`.
 - Top-of-hour routine (when enabled) uses `hour1.ogg` + time phrase + `hour2.ogg`.
+- Alarm routine (when enabled and time matches) uses `announcement.ogg` + time phrase + `alarm.ogg`.
 
 ## `widget`
 

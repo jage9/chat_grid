@@ -118,7 +118,9 @@
 {
   "timeZone": "America/Detroit",
   "use24Hour": false,
-  "topOfHourAnnounce": true
+  "topOfHourAnnounce": true,
+  "alarmEnabled": false,
+  "alarmTime": ""
 }
 ```
 
@@ -134,6 +136,8 @@
   `Pacific/Honolulu`, `Pacific/Kiritimati`, `Pacific/Noumea`, `Pacific/Pago_Pago`, `UTC`.
 - `use24Hour`: boolean (or `on/off` in updates), default `false`.
 - `topOfHourAnnounce`: boolean (or `on/off` in updates), default `true`.
+- `alarmEnabled`: boolean (or `on/off` in updates), default `false`.
+- `alarmTime`: blank when unset; when set, accepts `HH:MM` (24-hour mode) or `H:MM AM/PM` (12-hour mode).
 - Global defaults: `useSound=none`, `emitSound=sounds/clock.ogg`.
 - Clock speech announcement audio is emitted via `item_clock_announce` packets using `/sounds/clock/el640/*.ogg`.
 

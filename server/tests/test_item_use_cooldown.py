@@ -282,6 +282,29 @@ async def test_clock_timezone_update_validates(monkeypatch: pytest.MonkeyPatch) 
     assert send_payloads[-1].ok is False
     assert "timezone must be one of" in send_payloads[-1].message.lower()
 
+    await server._handle_message(
+        client,
+        json.dumps({"type": "item_update", "itemId": item.id, "params": {"alarmEnabled": True}}),
+    )
+    assert send_payloads[-1].ok is False
+    assert "alarmtime must be a valid time" in send_payloads[-1].message.lower()
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "item_update", "itemId": item.id, "params": {"alarmTime": "3:15 PM", "alarmEnabled": True}}),
+    )
+    assert send_payloads[-1].ok is True
+    assert item.params.get("alarmEnabled") is True
+    assert item.params.get("alarmTime") == "3:15 PM"
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "item_update", "itemId": item.id, "params": {"use24Hour": True}}),
+    )
+    assert send_payloads[-1].ok is True
+    assert item.params.get("use24Hour") is True
+    assert item.params.get("alarmTime") == "15:15"
+
 
 @pytest.mark.asyncio
 async def test_failed_wheel_use_does_not_consume_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
