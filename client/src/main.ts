@@ -414,7 +414,6 @@ function renderHelp(help: HelpData): void {
     const sectionHeading = document.createElement('h3');
     sectionHeading.textContent = section.title;
     dom.instructions.appendChild(sectionHeading);
-    lines.push(section.title);
     for (const item of section.items) {
       const line = document.createElement('p');
       const keys = document.createElement('b');
@@ -1593,10 +1592,13 @@ function handleAdminRolesList(message: Extract<IncomingMessage, { type: 'admin_r
   adminPermissionTooltips = { ...(message.permissionTooltips ?? {}) };
   if (adminPendingUserAction === 'set_role' && adminSelectedUsername) {
     state.mode = 'adminUserRoleSelect';
-    adminRoleIndex = 0;
+    const selectedUser = adminUsers.find((entry) => entry.username === adminSelectedUsername);
+    const currentRoleIndex =
+      selectedUser ? adminRoles.findIndex((entry) => entry.name === selectedUser.role) : -1;
+    adminRoleIndex = currentRoleIndex >= 0 ? currentRoleIndex : 0;
     const first = adminRoles[0];
-    if (first) {
-      updateStatus(first.name);
+    if (first && adminRoles[adminRoleIndex]) {
+      updateStatus(adminRoles[adminRoleIndex].name);
       audio.sfxUiBlip();
     } else {
       updateStatus('No roles available.');
@@ -1656,6 +1658,16 @@ function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admi
       const target = adminUsers.find((entry) => entry.username === adminPendingUserMutation.username);
       if (target) {
         target.role = adminPendingUserMutation.role;
+      }
+      if (state.mode === 'adminUserRoleSelect') {
+        state.mode = 'adminUserList';
+        adminPendingUserAction = 'set_role';
+        const userIndex = adminUsers.findIndex((entry) => entry.username === adminPendingUserMutation.username);
+        if (userIndex >= 0) {
+          adminUserIndex = userIndex;
+          const selected = adminUsers[adminUserIndex];
+          updateStatus(`${selected.username}, ${selected.role}, ${selected.status}.`);
+        }
       }
     } else if (adminPendingUserMutation.action === 'ban') {
       adminUsers = adminUsers.filter((entry) => entry.username !== adminPendingUserMutation.username);
@@ -2921,14 +2933,6 @@ function handleAdminUserRoleSelectModeInput(code: string, key: string): void {
     const selectedRole = adminRoles[adminRoleIndex];
     adminPendingUserMutation = { action: 'set_role', username: adminSelectedUsername, role: selectedRole.name };
     signaling.send({ type: 'admin_user_set_role', username: adminSelectedUsername, role: selectedRole.name });
-    state.mode = 'adminUserList';
-    adminPendingUserAction = 'set_role';
-    const selectedUser = adminUsers.find((user) => user.username === adminSelectedUsername);
-    if (selectedUser) {
-      updateStatus(`${selectedUser.username}, ${selectedUser.role}, ${selectedUser.status}.`);
-    } else {
-      updateStatus('Select user.');
-    }
     return;
   }
   if (control.type === 'cancel') {
