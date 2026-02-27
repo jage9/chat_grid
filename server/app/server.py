@@ -1794,7 +1794,7 @@ class SignalingServer:
                 ),
                 exclude=client.websocket,
             )
-            await self._send_item_result(client, True, "drop", f"Dropped {item.title}.", item.id)
+            await self._send_item_result(client, True, "drop", f"Dropped {item.title} at {item.x}, {item.y}.", item.id)
             return
 
         if isinstance(packet, ItemDeletePacket):
