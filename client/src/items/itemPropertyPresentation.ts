@@ -1,8 +1,5 @@
-import { normalizeDegrees } from '../audio/spatial';
-import { normalizeRadioChannel, normalizeRadioEffect, normalizeRadioEffectValue } from '../audio/radioStationRuntime';
 import { type WorldItem } from '../state/gameState';
 import {
-  getDefaultClockTimeZone,
   getEditableItemPropertyKeys,
   getItemPropertyMetadata,
   getItemPropertyOptionValues,
@@ -48,22 +45,6 @@ export function createItemPropertyPresentation(deps: PresentationDeps): {
     if (key === 'capabilities') return item.capabilities.join(', ') || 'none';
     if (key === 'useSound') return toSoundDisplayName(item.params.useSound ?? item.useSound);
     if (key === 'emitSound') return toSoundDisplayName(item.params.emitSound ?? item.emitSound);
-    if (key === 'timeZone') return String(item.params.timeZone ?? getDefaultClockTimeZone());
-    if (key === 'mediaChannel') return normalizeRadioChannel(item.params.mediaChannel);
-    if (key === 'mediaEffect') return normalizeRadioEffect(item.params.mediaEffect);
-    if (key === 'mediaEffectValue') return String(normalizeRadioEffectValue(item.params.mediaEffectValue));
-    if (key === 'emitEffect') return normalizeRadioEffect(item.params.emitEffect);
-    if (key === 'emitEffectValue') return String(normalizeRadioEffectValue(item.params.emitEffectValue));
-    if (key === 'facing') {
-      const parsed = Number(item.params.facing ?? 0);
-      if (!Number.isFinite(parsed)) return '0';
-      return String(Math.round(normalizeDegrees(parsed) * 10) / 10);
-    }
-    if (key === 'emitRange') {
-      const parsed = Number(item.params.emitRange ?? getItemTypeGlobalProperties(item.type)?.emitRange ?? 15);
-      if (!Number.isFinite(parsed)) return '15';
-      return String(Math.round(parsed));
-    }
     const metadata = getItemPropertyMetadata(item.type, key);
     const globalValue = getItemTypeGlobalProperties(item.type)?.[key];
     const paramValue = item.params[key];
@@ -74,6 +55,19 @@ export function createItemPropertyPresentation(deps: PresentationDeps): {
     }
     if (metadata?.valueType === 'sound') {
       return toSoundDisplayName(rawValue);
+    }
+    if (metadata?.valueType === 'number') {
+      const parsed = Number(rawValue);
+      if (!Number.isFinite(parsed)) return '';
+      const step = metadata.range?.step;
+      if (step && step > 0 && Number.isFinite(step)) {
+        const precision = String(step).includes('.') ? String(step).split('.')[1]?.length ?? 0 : 0;
+        return String(Number(parsed.toFixed(precision)));
+      }
+      return String(parsed);
+    }
+    if (metadata?.valueType === 'list' || metadata?.valueType === 'text') {
+      return rawValue === undefined || rawValue === null ? '' : String(rawValue);
     }
     if (paramValue !== undefined) return String(paramValue);
     if (globalValue !== undefined) return String(globalValue);
