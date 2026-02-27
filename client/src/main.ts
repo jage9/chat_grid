@@ -1640,7 +1640,11 @@ function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admi
   if (message.action === 'role_update_permissions') {
     return;
   }
-  updateStatus(message.message);
+  const suppressStatusMessage =
+    message.ok && message.action === 'user_set_role' && adminPendingUserMutation?.action === 'set_role';
+  if (!suppressStatusMessage) {
+    updateStatus(message.message);
+  }
   if (!message.ok) {
     adminPendingUserMutation = null;
     audio.sfxUiCancel();
