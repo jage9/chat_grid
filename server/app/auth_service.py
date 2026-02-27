@@ -55,6 +55,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[str]] = {
         "item.delete.own",
         "item.delete.any",
         "item.use",
+        "item.pickup_drop.own",
         "item.pickup_drop.any",
         "chat.send",
         "voice.send",
@@ -855,6 +856,12 @@ class AuthService:
             else:
                 existing = self._db_fetchall("SELECT permission_key FROM role_permissions WHERE role_id = ?", (role_id,))
                 if existing:
+                    if role_name == "editor":
+                        # Keep existing editor customizations but ensure own pickup/drop is present.
+                        self._db_execute(
+                            "INSERT OR IGNORE INTO role_permissions (role_id, permission_key) VALUES (?, ?)",
+                            (role_id, "item.pickup_drop.own"),
+                        )
                     # Preserve existing customizations for non-admin defaults.
                     continue
                 allowed = DEFAULT_ROLE_PERMISSIONS.get(role_name, set())

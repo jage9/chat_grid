@@ -1588,7 +1588,7 @@ function handleAdminRolesList(message: Extract<IncomingMessage, { type: 'admin_r
     adminRoleIndex = 0;
     const first = adminRoles[0];
     if (first) {
-      updateStatus(`Set ${adminSelectedUsername} role. ${first.name}.`);
+      updateStatus(first.name);
       audio.sfxUiBlip();
     } else {
       updateStatus('No roles available.');
@@ -1629,6 +1629,9 @@ function handleAdminUsersList(message: Extract<IncomingMessage, { type: 'admin_u
 
 /** Handles structured admin action result packets. */
 function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admin_action_result' }>): void {
+  if (message.action === 'role_update_permissions') {
+    return;
+  }
   updateStatus(message.message);
   if (message.ok) {
     audio.sfxUiConfirm();
@@ -2409,8 +2412,8 @@ function handleEffectSelectModeInput(code: string, key: string): void {
   }
 
   if (control.type === 'cancel') {
-    state.mode = 'normal';
-    updateStatus('Cancelled.');
+    state.mode = 'adminMenu';
+    updateStatus('Admin menu.');
     audio.sfxUiCancel();
   }
 }
@@ -2872,7 +2875,7 @@ function handleAdminUserRoleSelectModeInput(code: string, key: string): void {
   const control = handleListControlKey(code, key, adminRoles, adminRoleIndex, (entry) => entry.name);
   if (control.type === 'move') {
     adminRoleIndex = control.index;
-    updateStatus(`${adminSelectedUsername}: ${adminRoles[adminRoleIndex].name}.`);
+    updateStatus(adminRoles[adminRoleIndex].name);
     audio.sfxUiBlip();
     return;
   }
