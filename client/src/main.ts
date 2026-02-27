@@ -310,6 +310,7 @@ let adminUserIndex = 0;
 let adminPendingUserAction: 'set_role' | 'ban' | 'unban' | null = null;
 let adminSelectedRoleName = '';
 let adminSelectedUsername = '';
+let adminPendingRoleChange: { username: string; role: string } | null = null;
 let activeTeleport:
   | {
       startX: number;
@@ -1632,6 +1633,27 @@ function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admi
   if (message.action === 'role_update_permissions') {
     return;
   }
+  if (message.action === 'user_set_role') {
+    if (message.ok && adminPendingRoleChange) {
+      for (const user of adminUsers) {
+        if (user.username === adminPendingRoleChange.username) {
+          user.role = adminPendingRoleChange.role;
+        }
+      }
+      if (state.mode === 'adminUserList' && adminUsers.length > 0) {
+        adminUserIndex = Math.max(0, Math.min(adminUserIndex, adminUsers.length - 1));
+        const selected = adminUsers[adminUserIndex];
+        updateStatus(`${selected.username}, ${selected.role}, ${selected.status}.`);
+      }
+      adminPendingRoleChange = null;
+      audio.sfxUiConfirm();
+      return;
+    }
+    adminPendingRoleChange = null;
+    updateStatus(message.message);
+    audio.sfxUiCancel();
+    return;
+  }
   updateStatus(message.message);
   if (message.ok) {
     audio.sfxUiConfirm();
@@ -2881,14 +2903,10 @@ function handleAdminUserRoleSelectModeInput(code: string, key: string): void {
   }
   if (control.type === 'select') {
     const selectedRole = adminRoles[adminRoleIndex];
+    adminPendingRoleChange = { username: adminSelectedUsername, role: selectedRole.name };
     signaling.send({ type: 'admin_user_set_role', username: adminSelectedUsername, role: selectedRole.name });
-    for (const user of adminUsers) {
-      if (user.username === adminSelectedUsername) {
-        user.role = selectedRole.name;
-      }
-    }
     state.mode = 'adminUserList';
-    adminPendingUserAction = null;
+    adminPendingUserAction = 'set_role';
     const selectedUser = adminUsers.find((user) => user.username === adminSelectedUsername);
     if (selectedUser) {
       updateStatus(`${selectedUser.username}, ${selectedUser.role}, ${selectedUser.status}.`);
