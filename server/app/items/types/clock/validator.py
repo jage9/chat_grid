@@ -8,7 +8,7 @@ from .definition import DEFAULT_TIME_ZONE, PARAM_KEYS, TIME_ZONE_OPTIONS
 from .time_format import format_alarm_time_for_mode, parse_alarm_time_flexible
 
 
-def validate_update(_item: WorldItem, next_params: dict) -> dict:
+def validate_update(item: WorldItem, next_params: dict) -> dict:
     """Validate and normalize clock params."""
 
     time_zone = str(next_params.get("timeZone", DEFAULT_TIME_ZONE)).strip()
@@ -24,16 +24,22 @@ def validate_update(_item: WorldItem, next_params: dict) -> dict:
     if alarm_enabled is None:
         raise ValueError("alarmEnabled must be on/off.")
     alarm_time_raw = str(next_params.get("alarmTime", "") or "").strip()
+    previous_alarm_time_raw = str(item.params.get("alarmTime", "") or "").strip()
+    previous_use_24_hour = parse_bool_like_or_none(item.params.get("use24Hour"))
+    if previous_use_24_hour is None:
+        previous_use_24_hour = False
+
+    should_validate_alarm_time = alarm_time_raw != previous_alarm_time_raw or use_24_hour != previous_use_24_hour
     parsed_alarm = parse_alarm_time_flexible(alarm_time_raw) if alarm_time_raw else None
-    if alarm_enabled and parsed_alarm is None:
-        raise ValueError("alarmTime must be a valid time (HH:MM or H:MM AM/PM) when alarm is on.")
-    if alarm_time_raw and parsed_alarm is None:
+    if should_validate_alarm_time and alarm_time_raw and parsed_alarm is None:
         raise ValueError("alarmTime must be a valid time (HH:MM or H:MM AM/PM).")
+
     next_params["timeZone"] = time_zone
     next_params["use24Hour"] = use_24_hour
     next_params["topOfHourAnnounce"] = top_of_hour_announce
     next_params["alarmEnabled"] = alarm_enabled
-    next_params["alarmTime"] = (
-        format_alarm_time_for_mode(parsed_alarm[0], parsed_alarm[1], use_24_hour) if parsed_alarm is not None else ""
-    )
+    if parsed_alarm is not None:
+        next_params["alarmTime"] = format_alarm_time_for_mode(parsed_alarm[0], parsed_alarm[1], use_24_hour)
+    else:
+        next_params["alarmTime"] = alarm_time_raw
     return keep_only_known_params(next_params, PARAM_KEYS)
