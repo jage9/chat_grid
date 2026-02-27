@@ -16,6 +16,7 @@ This document is the authoritative keymap for the client.
 - `U`: Speak connected users
 - `N`: Edit nickname
 - `/`: Start chat
+- `Shift+Z`: Admin menu (when role permissions allow)
 - `,` / `.`: Previous/next message
 - `<` / `>`: First/last message
 
@@ -74,6 +75,20 @@ Applies to effect select, user/item list modes, item selection, item property li
 - `Escape`: Exit/cancel
 - `Space`: Read tooltip/help for current option (where metadata is available)
 - First-letter navigation: jump to next matching entry
+
+## Admin Modes
+
+- `Shift+Z`: Open admin menu
+- Admin menu options are permission-gated and include:
+  - role management
+  - change user role
+  - ban user
+  - unban user
+- In admin role management:
+  - role list includes role user-counts
+  - `Enter` on role opens permission toggles
+  - `Enter` on `Add role` opens role name editor
+  - role delete prompts replacement role selection
 
 ## Piano Use Mode
 

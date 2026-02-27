@@ -63,6 +63,47 @@ class AuthLogoutPacket(BasePacket):
     type: Literal["auth_logout"]
 
 
+class AdminRolesListPacket(BasePacket):
+    type: Literal["admin_roles_list"]
+
+
+class AdminRoleCreatePacket(BasePacket):
+    type: Literal["admin_role_create"]
+    name: str = Field(min_length=1, max_length=32)
+
+
+class AdminRoleUpdatePermissionsPacket(BasePacket):
+    type: Literal["admin_role_update_permissions"]
+    role: str = Field(min_length=1, max_length=32)
+    permissions: list[str]
+
+
+class AdminRoleDeletePacket(BasePacket):
+    type: Literal["admin_role_delete"]
+    role: str = Field(min_length=1, max_length=32)
+    replacementRole: str = Field(min_length=1, max_length=32)
+
+
+class AdminUsersListPacket(BasePacket):
+    type: Literal["admin_users_list"]
+
+
+class AdminUserSetRolePacket(BasePacket):
+    type: Literal["admin_user_set_role"]
+    username: str = Field(min_length=1, max_length=128)
+    role: str = Field(min_length=1, max_length=32)
+
+
+class AdminUserBanPacket(BasePacket):
+    type: Literal["admin_user_ban"]
+    username: str = Field(min_length=1, max_length=128)
+
+
+class AdminUserUnbanPacket(BasePacket):
+    type: Literal["admin_user_unban"]
+    username: str = Field(min_length=1, max_length=128)
+
+
 class PingPacket(BasePacket):
     type: Literal["ping"]
     clientSentAt: int
@@ -131,6 +172,14 @@ ClientPacket = (
     | AuthLoginPacket
     | AuthResumePacket
     | AuthLogoutPacket
+    | AdminRolesListPacket
+    | AdminRoleCreatePacket
+    | AdminRoleUpdatePermissionsPacket
+    | AdminRoleDeletePacket
+    | AdminUsersListPacket
+    | AdminUserSetRolePacket
+    | AdminUserBanPacket
+    | AdminUserUnbanPacket
     | PingPacket
     | ItemAddPacket
     | ItemPickupPacket
@@ -176,8 +225,15 @@ class AuthResultPacket(BasePacket):
     sessionToken: str | None = None
     username: str | None = None
     role: str | None = None
+    permissions: list[str] | None = None
     nickname: str | None = None
     authPolicy: dict | None = None
+
+
+class AuthPermissionsPacket(BasePacket):
+    type: Literal["auth_permissions"]
+    role: str
+    permissions: list[str]
 
 
 class UserLeftPacket(BasePacket):
@@ -343,3 +399,43 @@ class ItemPianoStatusPacket(BasePacket):
         "playback_stopped",
     ]
     recordingState: Literal["idle", "recording", "paused", "playback"] | None = None
+
+
+class AdminRoleSummary(BaseModel):
+    id: int
+    name: str
+    isSystem: bool
+    userCount: int
+    permissions: list[str]
+
+
+class AdminRolesListResultPacket(BasePacket):
+    type: Literal["admin_roles_list"]
+    roles: list[AdminRoleSummary]
+    permissionKeys: list[str]
+
+
+class AdminUserSummary(BaseModel):
+    id: str
+    username: str
+    role: str
+    status: Literal["active", "disabled"]
+
+
+class AdminUsersListResultPacket(BasePacket):
+    type: Literal["admin_users_list"]
+    users: list[AdminUserSummary]
+
+
+class AdminActionResultPacket(BasePacket):
+    type: Literal["admin_action_result"]
+    ok: bool
+    action: Literal[
+        "role_create",
+        "role_update_permissions",
+        "role_delete",
+        "user_set_role",
+        "user_ban",
+        "user_unban",
+    ]
+    message: str

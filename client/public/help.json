@@ -41,6 +41,10 @@
           "description": "Start chat"
         },
         {
+          "keys": "Shift+Z",
+          "description": "Admin menu (when your role allows it)"
+        },
+        {
           "keys": "Comma / Period",
           "description": "Previous/next message"
         },

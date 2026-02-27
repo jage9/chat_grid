@@ -72,6 +72,10 @@ type MessageHandlerDeps = {
   playClockAnnouncement: (sounds: string[], x: number, y: number, range?: number) => void;
   handleAuthRequired: (message: Extract<IncomingMessage, { type: 'auth_required' }>) => void;
   handleAuthResult: (message: Extract<IncomingMessage, { type: 'auth_result' }>) => Promise<void>;
+  handleAuthPermissions: (message: Extract<IncomingMessage, { type: 'auth_permissions' }>) => void;
+  handleAdminRolesList: (message: Extract<IncomingMessage, { type: 'admin_roles_list' }>) => void;
+  handleAdminUsersList: (message: Extract<IncomingMessage, { type: 'admin_users_list' }>) => void;
+  handleAdminActionResult: (message: Extract<IncomingMessage, { type: 'admin_action_result' }>) => void;
   isPeerNegotiationReady: () => boolean;
   enqueuePendingSignal: (message: Extract<IncomingMessage, { type: 'signal' }>) => void;
 };
@@ -88,6 +92,18 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
 
       case 'auth_result':
         await deps.handleAuthResult(message);
+        break;
+      case 'auth_permissions':
+        deps.handleAuthPermissions(message);
+        break;
+      case 'admin_roles_list':
+        deps.handleAdminRolesList(message);
+        break;
+      case 'admin_users_list':
+        deps.handleAdminUsersList(message);
+        break;
+      case 'admin_action_result':
+        deps.handleAdminActionResult(message);
         break;
 
       case 'welcome':

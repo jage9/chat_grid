@@ -186,6 +186,28 @@ type AuthPolicy = {
   passwordMaxLength: number;
 };
 
+type AdminMenuActionId = 'manage_roles' | 'change_user_role' | 'ban_user' | 'unban_user';
+
+type AdminMenuAction = {
+  id: AdminMenuActionId;
+  label: string;
+};
+
+type AdminRoleSummary = {
+  id: number;
+  name: string;
+  isSystem: boolean;
+  userCount: number;
+  permissions: string[];
+};
+
+type AdminUserSummary = {
+  id: string;
+  username: string;
+  role: string;
+  status: 'active' | 'disabled';
+};
+
 /** Builds linearized help-view lines from sectioned help content. */
 function buildHelpLines(help: HelpData): string[] {
   const lines: string[] = [];
@@ -236,6 +258,9 @@ let authMode: 'login' | 'register' = 'login';
 let authSessionToken = settings.loadAuthSessionToken();
 let authUsername = settings.loadAuthUsername();
 let authPolicy: AuthPolicy | null = null;
+let authRole = 'user';
+let authPermissions = new Set<string>();
+let voiceSendAllowed = true;
 let pendingAuthRequest = false;
 const messageBuffer: string[] = [];
 let messageCursor = -1;
@@ -274,6 +299,18 @@ let suppressItemPropertyEchoUntilMs = 0;
 let itemPropertiesShowAll = false;
 let activeTeleportLoopStop: (() => void) | null = null;
 let activeTeleportLoopToken = 0;
+const adminMenuActions: AdminMenuAction[] = [];
+let adminMenuIndex = 0;
+let adminRoles: AdminRoleSummary[] = [];
+let adminRoleIndex = 0;
+let adminPermissionKeys: string[] = [];
+let adminRolePermissionIndex = 0;
+let adminRoleDeleteReplacementIndex = 0;
+let adminUsers: AdminUserSummary[] = [];
+let adminUserIndex = 0;
+let adminPendingUserAction: 'set_role' | 'ban' | 'unban' | null = null;
+let adminSelectedRoleName = '';
+let adminSelectedUsername = '';
 let activeTeleport:
   | {
       startX: number;
@@ -544,6 +581,28 @@ function loadPersistedAuthPolicy(): void {
   } catch {
     // Ignore malformed persisted policy and keep live server policy source of truth.
   }
+}
+
+/** Returns whether currently authenticated user has a specific permission key. */
+function hasPermission(key: string): boolean {
+  return authPermissions.has(key);
+}
+
+/** Applies latest role + permission set from server auth packets. */
+function applyAuthPermissions(role: string | null | undefined, permissions: string[] | null | undefined): void {
+  authRole = String(role || 'user').trim() || 'user';
+  authPermissions = new Set((permissions || []).map((value) => String(value).trim()).filter((value) => value.length > 0));
+  applyVoiceSendPermission();
+}
+
+/** Applies server-authoritative voice.send permission immediately to local outbound track state. */
+function applyVoiceSendPermission(): void {
+  voiceSendAllowed = hasPermission('voice.send');
+  if (voiceSendAllowed) {
+    mediaSession.applyMuteToTrack(state.isMuted);
+    return;
+  }
+  mediaSession.applyMuteToTrack(true);
 }
 
 /** Enables/disables the connect button based on state and nickname validity. */
@@ -1011,6 +1070,7 @@ function textInputMaxLengthForMode(mode: typeof state.mode): number | null {
   if (mode === 'chat') return 500;
   if (mode === 'itemPropertyEdit') return 500;
   if (mode === 'micGainEdit') return 8;
+  if (mode === 'adminRoleNameEdit') return 32;
   return null;
 }
 
@@ -1030,7 +1090,13 @@ function pasteIntoActiveTextInput(raw: string): boolean {
 
 /** Whether the current mode uses the shared single-line text editing pipeline. */
 function isTextEditingMode(mode: typeof state.mode): boolean {
-  return mode === 'nickname' || mode === 'chat' || mode === 'itemPropertyEdit' || mode === 'micGainEdit';
+  return (
+    mode === 'nickname' ||
+    mode === 'chat' ||
+    mode === 'itemPropertyEdit' ||
+    mode === 'micGainEdit' ||
+    mode === 'adminRoleNameEdit'
+  );
 }
 
 /** Applies keyboard edits to the shared text buffer and emits cursor/deletion speech hints. */
@@ -1276,6 +1342,7 @@ async function checkMicPermission(): Promise<boolean> {
 /** Starts local microphone capture and rebuilds the outbound track pipeline. */
 async function setupLocalMedia(audioDeviceId = ''): Promise<void> {
   await mediaSession.setupLocalMedia(audioDeviceId);
+  applyVoiceSendPermission();
 }
 
 /** Runs a short RMS sample to estimate and apply a usable microphone input gain. */
@@ -1417,6 +1484,7 @@ function sendAuthRequest(): void {
 /** Handles server auth-required prompts prior to world welcome. */
 function handleAuthRequired(message: Extract<IncomingMessage, { type: 'auth_required' }>): void {
   applyAuthPolicy(message.authPolicy);
+  applyAuthPermissions('user', []);
   setConnectionStatus('Authentication required.');
   updateStatus(message.message);
 }
@@ -1433,6 +1501,7 @@ async function handleAuthResult(message: Extract<IncomingMessage, { type: 'auth_
       authSessionToken = '';
       settings.saveAuthSessionToken('');
     }
+    applyAuthPermissions('user', []);
     setConnectionStatus(message.message);
     mediaSession.setConnecting(false);
     updateConnectAvailability();
@@ -1456,6 +1525,7 @@ async function handleAuthResult(message: Extract<IncomingMessage, { type: 'auth_
       state.player.nickname = resolved;
     }
   }
+  applyAuthPermissions(message.role, message.permissions);
   dom.authPassword.value = '';
   dom.registerPassword.value = '';
   dom.registerPasswordConfirm.value = '';
@@ -1468,6 +1538,7 @@ function logOutAccount(): void {
   authUsername = '';
   settings.saveAuthSessionToken('');
   settings.saveAuthUsername('');
+  applyAuthPermissions('user', []);
   if (state.running) {
     signaling.send({ type: 'auth_logout' });
     disconnect();
@@ -1475,6 +1546,92 @@ function logOutAccount(): void {
   setAuthMode('login');
   updateStatus('Logged out.');
   updateConnectAvailability();
+}
+
+/** Handles server-pushed role/permission refresh events for the current session. */
+function handleAuthPermissions(message: Extract<IncomingMessage, { type: 'auth_permissions' }>): void {
+  const hadVoiceSend = voiceSendAllowed;
+  applyAuthPermissions(message.role, message.permissions);
+  if (hadVoiceSend && !voiceSendAllowed) {
+    updateStatus('Voice send permission revoked.');
+  }
+  if (!hadVoiceSend && voiceSendAllowed) {
+    updateStatus('Voice send permission granted.');
+  }
+}
+
+/** Returns available admin-menu root actions based on current permission set. */
+function getAvailableAdminActions(): AdminMenuAction[] {
+  const actions: AdminMenuAction[] = [];
+  if (hasPermission('role.manage')) {
+    actions.push({ id: 'manage_roles', label: 'Role management' });
+  }
+  if (hasPermission('user.change_role')) {
+    actions.push({ id: 'change_user_role', label: 'Change user role' });
+  }
+  if (hasPermission('user.ban_unban')) {
+    actions.push({ id: 'ban_user', label: 'Ban user' });
+    actions.push({ id: 'unban_user', label: 'Unban user' });
+  }
+  return actions;
+}
+
+/** Handles server role-list response for admin menu flows. */
+function handleAdminRolesList(message: Extract<IncomingMessage, { type: 'admin_roles_list' }>): void {
+  adminRoles = [...message.roles].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  adminPermissionKeys = [...message.permissionKeys].sort((a, b) => a.localeCompare(b));
+  if (adminPendingUserAction === 'set_role' && adminSelectedUsername) {
+    state.mode = 'adminUserRoleSelect';
+    adminRoleIndex = 0;
+    const first = adminRoles[0];
+    if (first) {
+      updateStatus(`Set ${adminSelectedUsername} role. ${first.name}.`);
+      audio.sfxUiBlip();
+    } else {
+      updateStatus('No roles available.');
+      audio.sfxUiCancel();
+      state.mode = 'normal';
+      adminPendingUserAction = null;
+      adminSelectedUsername = '';
+    }
+    return;
+  }
+  state.mode = 'adminRoleList';
+  adminRoleIndex = 0;
+  const first = adminRoles[0];
+  if (first) {
+    updateStatus(`${first.name}, ${first.userCount}.`);
+  } else {
+    updateStatus('No roles found.');
+  }
+  audio.sfxUiBlip();
+}
+
+/** Handles server user-list response for admin menu flows. */
+function handleAdminUsersList(message: Extract<IncomingMessage, { type: 'admin_users_list' }>): void {
+  adminUsers = [...message.users].sort((a, b) => a.username.localeCompare(b.username, undefined, { sensitivity: 'base' }));
+  if (adminUsers.length === 0) {
+    updateStatus('No users available.');
+    audio.sfxUiCancel();
+    state.mode = 'normal';
+    adminPendingUserAction = null;
+    return;
+  }
+  state.mode = 'adminUserList';
+  adminUserIndex = 0;
+  const first = adminUsers[0];
+  updateStatus(`${first.username}, ${first.role}, ${first.status}.`);
+  audio.sfxUiBlip();
+}
+
+/** Handles structured admin action result packets. */
+function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admin_action_result' }>): void {
+  updateStatus(message.message);
+  if (message.ok) {
+    audio.sfxUiConfirm();
+  } else {
+    audio.sfxUiCancel();
+  }
 }
 
 /** Builds dependencies shared by connect/disconnect flow helpers. */
@@ -1625,6 +1782,10 @@ const onAppMessage = createOnMessageHandler({
   },
   handleAuthRequired,
   handleAuthResult,
+  handleAuthPermissions,
+  handleAdminRolesList,
+  handleAdminUsersList,
+  handleAdminActionResult,
   isPeerNegotiationReady: () => peerNegotiationReady,
   enqueuePendingSignal: (message) => {
     pendingSignalMessages.push(message);
@@ -1644,6 +1805,7 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   let connectedAnnouncement: string | null = null;
   if (message.type === 'welcome') {
     applyAuthPolicy(message.auth?.policy);
+    applyAuthPermissions(message.auth?.role, message.auth?.permissions);
     const incomingInstanceId = String(message.serverInfo?.instanceId ?? '').trim() || null;
     const incomingVersion = String(message.serverInfo?.version ?? '').trim() || 'unknown';
     connectedAnnouncement = reconnectInFlight
@@ -1715,6 +1877,11 @@ async function setupMediaAfterAuth(): Promise<void> {
 
 /** Toggles local microphone track mute state. */
 function toggleMute(): void {
+  if (!voiceSendAllowed) {
+    updateStatus('Voice send is disabled for this account.');
+    audio.sfxUiCancel();
+    return;
+  }
   state.isMuted = !state.isMuted;
   mediaSession.applyMuteToTrack(state.isMuted);
   updateStatus(state.isMuted ? 'Muted.' : 'Unmuted.');
@@ -1797,6 +1964,11 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
       audio.sfxUiBlip();
       return;
     case 'openMicGainEdit':
+      if (!voiceSendAllowed) {
+        updateStatus('Voice send is disabled for this account.');
+        audio.sfxUiCancel();
+        return;
+      }
       state.mode = 'micGainEdit';
       state.nicknameInput = formatSteppedNumber(audio.getOutboundInputGain(), MIC_INPUT_GAIN_STEP);
       state.cursorPos = state.nicknameInput.length;
@@ -1807,8 +1979,25 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
       audio.sfxUiBlip();
       return;
     case 'calibrateMicrophone':
+      if (!voiceSendAllowed) {
+        updateStatus('Voice send is disabled for this account.');
+        audio.sfxUiCancel();
+        return;
+      }
       void calibrateMicInputGain();
       return;
+    case 'openAdminMenu': {
+      const actions = getAvailableAdminActions();
+      if (actions.length === 0) {
+        return;
+      }
+      adminMenuActions.splice(0, adminMenuActions.length, ...actions);
+      adminMenuIndex = 0;
+      state.mode = 'adminMenu';
+      updateStatus(`Admin: ${adminMenuActions[0].label}.`);
+      audio.sfxUiBlip();
+      return;
+    }
     case 'useItem': {
       const carried = getCarriedItem();
       if (carried) {
@@ -2425,6 +2614,292 @@ function handleSelectItemModeInput(code: string, key: string): void {
   }
 }
 
+/** Handles top-level Shift+Z admin menu action selection. */
+function handleAdminMenuModeInput(code: string, key: string): void {
+  if (adminMenuActions.length === 0) {
+    state.mode = 'normal';
+    return;
+  }
+  const control = handleListControlKey(code, key, adminMenuActions, adminMenuIndex, (entry) => entry.label);
+  if (control.type === 'move') {
+    adminMenuIndex = control.index;
+    updateStatus(adminMenuActions[adminMenuIndex].label);
+    audio.sfxUiBlip();
+    return;
+  }
+  if (control.type === 'select') {
+    const selected = adminMenuActions[adminMenuIndex];
+    if (!selected) return;
+    if (selected.id === 'manage_roles') {
+      signaling.send({ type: 'admin_roles_list' });
+      updateStatus('Loading roles...');
+      return;
+    }
+    if (selected.id === 'change_user_role') {
+      adminPendingUserAction = 'set_role';
+      signaling.send({ type: 'admin_users_list' });
+      updateStatus('Loading users...');
+      return;
+    }
+    if (selected.id === 'ban_user') {
+      adminPendingUserAction = 'ban';
+      signaling.send({ type: 'admin_users_list' });
+      updateStatus('Loading users...');
+      return;
+    }
+    if (selected.id === 'unban_user') {
+      adminPendingUserAction = 'unban';
+      signaling.send({ type: 'admin_users_list' });
+      updateStatus('Loading users...');
+    }
+    return;
+  }
+  if (control.type === 'cancel') {
+    state.mode = 'normal';
+    updateStatus('Cancelled.');
+    audio.sfxUiCancel();
+  }
+}
+
+/** Handles role list selection flow, including add-role entry. */
+function handleAdminRoleListModeInput(code: string, key: string): void {
+  const entries: Array<{ label: string; role?: AdminRoleSummary }> = [
+    ...adminRoles.map((role) => ({ label: `${role.name}, ${role.userCount}`, role })),
+    { label: 'Add role' },
+  ];
+  const control = handleListControlKey(code, key, entries, adminRoleIndex, (entry) => entry.label);
+  if (control.type === 'move') {
+    adminRoleIndex = control.index;
+    updateStatus(entries[adminRoleIndex]?.label || '');
+    audio.sfxUiBlip();
+    return;
+  }
+  if (control.type === 'select') {
+    const selected = entries[adminRoleIndex];
+    if (!selected) return;
+    if (!selected.role) {
+      state.mode = 'adminRoleNameEdit';
+      state.nicknameInput = '';
+      state.cursorPos = 0;
+      replaceTextOnNextType = false;
+      updateStatus('New role name.');
+      audio.sfxUiBlip();
+      return;
+    }
+    adminSelectedRoleName = selected.role.name;
+    adminRolePermissionIndex = 0;
+    state.mode = 'adminRolePermissionList';
+    updateStatus(`${adminSelectedRoleName} permissions.`);
+    audio.sfxUiBlip();
+    return;
+  }
+  if (control.type === 'cancel') {
+    state.mode = 'normal';
+    updateStatus('Cancelled.');
+    audio.sfxUiCancel();
+  }
+}
+
+/** Handles role permission toggle and delete flow. */
+function handleAdminRolePermissionListModeInput(code: string, key: string): void {
+  const role = adminRoles.find((entry) => entry.name === adminSelectedRoleName);
+  if (!role) {
+    state.mode = 'adminRoleList';
+    return;
+  }
+  const entries = [...adminPermissionKeys, '__delete_role__'];
+  const control = handleListControlKey(code, key, entries, adminRolePermissionIndex, (entry) =>
+    entry === '__delete_role__' ? `Delete role ${role.name}` : `${entry} ${role.permissions.includes(entry) ? 'on' : 'off'}`,
+  );
+  if (control.type === 'move') {
+    adminRolePermissionIndex = control.index;
+    const value = entries[adminRolePermissionIndex];
+    if (value === '__delete_role__') {
+      updateStatus(`Delete role ${role.name}.`);
+    } else {
+      updateStatus(`${value} ${role.permissions.includes(value) ? 'on' : 'off'}`);
+    }
+    audio.sfxUiBlip();
+    return;
+  }
+  if (control.type === 'select') {
+    const value = entries[adminRolePermissionIndex];
+    if (value === '__delete_role__') {
+      if (role.name === 'admin') {
+        updateStatus('Admin role cannot be deleted.');
+        audio.sfxUiCancel();
+        return;
+      }
+      const replacementCandidates = adminRoles.filter((entry) => entry.name !== role.name);
+      if (replacementCandidates.length === 0) {
+        updateStatus('No replacement role available.');
+        audio.sfxUiCancel();
+        return;
+      }
+      adminRoleDeleteReplacementIndex = 0;
+      state.mode = 'adminRoleDeleteReplacement';
+      updateStatus(`Replacement role: ${replacementCandidates[0].name}.`);
+      audio.sfxUiBlip();
+      return;
+    }
+    const nextPermissions = new Set(role.permissions);
+    if (nextPermissions.has(value)) {
+      nextPermissions.delete(value);
+    } else {
+      nextPermissions.add(value);
+    }
+    role.permissions = [...nextPermissions].sort((a, b) => a.localeCompare(b));
+    signaling.send({ type: 'admin_role_update_permissions', role: role.name, permissions: role.permissions });
+    updateStatus(`${value} ${role.permissions.includes(value) ? 'on' : 'off'}`);
+    audio.sfxUiBlip();
+    return;
+  }
+  if (control.type === 'cancel') {
+    state.mode = 'adminRoleList';
+    updateStatus('Roles.');
+    audio.sfxUiCancel();
+  }
+}
+
+/** Handles replacement-role selection while deleting a role. */
+function handleAdminRoleDeleteReplacementModeInput(code: string, key: string): void {
+  const candidates = adminRoles.filter((entry) => entry.name !== adminSelectedRoleName);
+  if (candidates.length === 0) {
+    state.mode = 'adminRolePermissionList';
+    return;
+  }
+  const control = handleListControlKey(code, key, candidates, adminRoleDeleteReplacementIndex, (entry) => entry.name);
+  if (control.type === 'move') {
+    adminRoleDeleteReplacementIndex = control.index;
+    updateStatus(`Replacement role: ${candidates[adminRoleDeleteReplacementIndex].name}.`);
+    audio.sfxUiBlip();
+    return;
+  }
+  if (control.type === 'select') {
+    const replacement = candidates[adminRoleDeleteReplacementIndex];
+    signaling.send({
+      type: 'admin_role_delete',
+      role: adminSelectedRoleName,
+      replacementRole: replacement.name,
+    });
+    state.mode = 'adminRoleList';
+    updateStatus(`Deleting ${adminSelectedRoleName}...`);
+    return;
+  }
+  if (control.type === 'cancel') {
+    state.mode = 'adminRolePermissionList';
+    updateStatus(`${adminSelectedRoleName} permissions.`);
+    audio.sfxUiCancel();
+  }
+}
+
+/** Handles user list selection for change-role/ban/unban flows. */
+function handleAdminUserListModeInput(code: string, key: string): void {
+  if (adminUsers.length === 0) {
+    state.mode = 'normal';
+    adminPendingUserAction = null;
+    return;
+  }
+  const control = handleListControlKey(code, key, adminUsers, adminUserIndex, (entry) => `${entry.username}, ${entry.role}, ${entry.status}`);
+  if (control.type === 'move') {
+    adminUserIndex = control.index;
+    const selected = adminUsers[adminUserIndex];
+    updateStatus(`${selected.username}, ${selected.role}, ${selected.status}.`);
+    audio.sfxUiBlip();
+    return;
+  }
+  if (control.type === 'select') {
+    const selected = adminUsers[adminUserIndex];
+    if (!selected) return;
+    adminSelectedUsername = selected.username;
+    if (adminPendingUserAction === 'set_role') {
+      signaling.send({ type: 'admin_roles_list' });
+      updateStatus(`Select new role for ${selected.username}.`);
+      return;
+    }
+    if (adminPendingUserAction === 'ban') {
+      signaling.send({ type: 'admin_user_ban', username: selected.username });
+      state.mode = 'normal';
+      adminPendingUserAction = null;
+      updateStatus(`Banning ${selected.username}...`);
+      return;
+    }
+    if (adminPendingUserAction === 'unban') {
+      signaling.send({ type: 'admin_user_unban', username: selected.username });
+      state.mode = 'normal';
+      adminPendingUserAction = null;
+      updateStatus(`Unbanning ${selected.username}...`);
+      return;
+    }
+    return;
+  }
+  if (control.type === 'cancel') {
+    state.mode = 'adminMenu';
+    adminPendingUserAction = null;
+    updateStatus('Admin menu.');
+    audio.sfxUiCancel();
+  }
+}
+
+/** Handles role selection for a previously selected user target. */
+function handleAdminUserRoleSelectModeInput(code: string, key: string): void {
+  if (adminRoles.length === 0) {
+    state.mode = 'normal';
+    adminPendingUserAction = null;
+    return;
+  }
+  const control = handleListControlKey(code, key, adminRoles, adminRoleIndex, (entry) => entry.name);
+  if (control.type === 'move') {
+    adminRoleIndex = control.index;
+    updateStatus(`${adminSelectedUsername}: ${adminRoles[adminRoleIndex].name}.`);
+    audio.sfxUiBlip();
+    return;
+  }
+  if (control.type === 'select') {
+    const selectedRole = adminRoles[adminRoleIndex];
+    signaling.send({ type: 'admin_user_set_role', username: adminSelectedUsername, role: selectedRole.name });
+    state.mode = 'normal';
+    adminPendingUserAction = null;
+    updateStatus(`Setting ${adminSelectedUsername} to ${selectedRole.name}...`);
+    return;
+  }
+  if (control.type === 'cancel') {
+    state.mode = 'adminUserList';
+    updateStatus('Select user.');
+    audio.sfxUiCancel();
+  }
+}
+
+/** Handles text edit for new-role creation from admin role list. */
+function handleAdminRoleNameEditModeInput(code: string, key: string, ctrlKey: boolean): void {
+  const editAction = getEditSessionAction(code);
+  if (editAction === 'submit') {
+    const name = state.nicknameInput.trim().toLowerCase();
+    if (!name) {
+      updateStatus('Role name required.');
+      audio.sfxUiCancel();
+      return;
+    }
+    signaling.send({ type: 'admin_role_create', name });
+    state.mode = 'adminRoleList';
+    state.nicknameInput = '';
+    state.cursorPos = 0;
+    replaceTextOnNextType = false;
+    updateStatus(`Creating role ${name}...`);
+    return;
+  }
+  if (editAction === 'cancel') {
+    state.mode = 'adminRoleList';
+    state.nicknameInput = '';
+    state.cursorPos = 0;
+    replaceTextOnNextType = false;
+    updateStatus('Cancelled.');
+    audio.sfxUiCancel();
+    return;
+  }
+  applyTextInputEdit(code, key, 32, ctrlKey, true);
+}
+
 const itemPropertyEditor = createItemPropertyEditor({
   state,
   signalingSend: (message) => signaling.send(message as OutgoingMessage),
@@ -2607,6 +3082,14 @@ function setupInputHandlers(): void {
         listItems: (currentCode, currentKey) => handleListItemsModeInput(currentCode, currentKey),
         addItem: (currentCode, currentKey) => handleAddItemModeInput(currentCode, currentKey),
         selectItem: (currentCode, currentKey) => handleSelectItemModeInput(currentCode, currentKey),
+        adminMenu: (currentCode, currentKey) => handleAdminMenuModeInput(currentCode, currentKey),
+        adminRoleList: (currentCode, currentKey) => handleAdminRoleListModeInput(currentCode, currentKey),
+        adminRolePermissionList: (currentCode, currentKey) => handleAdminRolePermissionListModeInput(currentCode, currentKey),
+        adminRoleDeleteReplacement: (currentCode, currentKey) => handleAdminRoleDeleteReplacementModeInput(currentCode, currentKey),
+        adminUserList: (currentCode, currentKey) => handleAdminUserListModeInput(currentCode, currentKey),
+        adminUserRoleSelect: (currentCode, currentKey) => handleAdminUserRoleSelectModeInput(currentCode, currentKey),
+        adminRoleNameEdit: (currentCode, currentKey, currentCtrlKey) =>
+          handleAdminRoleNameEditModeInput(currentCode, currentKey, currentCtrlKey),
         itemProperties: (currentCode, currentKey) => itemPropertyEditor.handleItemPropertiesModeInput(currentCode, currentKey),
         itemPropertyEdit: (currentCode, currentKey, currentCtrlKey) =>
           itemPropertyEditor.handleItemPropertyEditModeInput(currentCode, currentKey, currentCtrlKey),

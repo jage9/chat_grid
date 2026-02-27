@@ -39,6 +39,13 @@ export type GameMode =
   | 'itemProperties'
   | 'itemPropertyEdit'
   | 'itemPropertyOptionSelect'
+  | 'adminMenu'
+  | 'adminRoleList'
+  | 'adminRolePermissionList'
+  | 'adminRoleDeleteReplacement'
+  | 'adminUserList'
+  | 'adminUserRoleSelect'
+  | 'adminRoleNameEdit'
   | 'pianoUse';
 
 export type Player = {

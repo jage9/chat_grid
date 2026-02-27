@@ -14,6 +14,13 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `auth_login`: authenticate with username/password.
 - `auth_resume`: resume prior session via stored session token.
 - `auth_logout`: revoke current session and disconnect.
+- `admin_roles_list`: request server role list (with user counts + permission sets).
+- `admin_role_create`: create role.
+- `admin_role_update_permissions`: replace one role permission set.
+- `admin_role_delete`: delete role with replacement role reassignment.
+- `admin_users_list`: request user list for admin actions.
+- `admin_user_set_role`: set target user role.
+- `admin_user_ban` / `admin_user_unban`: disable/enable user account.
 - `update_position`: client movement intent; server enforces world bounds and movement rate policy.
 - `teleport_complete`: client signals teleport landing; server rebroadcasts spatial landing cue.
 - `update_nickname`: nickname change request (server enforces uniqueness).
@@ -28,6 +35,10 @@ This is a behavior guide for packet semantics beyond raw schemas.
 
 - `auth_required`: authentication challenge after websocket connect.
 - `auth_result`: auth success/failure and session/account metadata.
+- `auth_permissions`: server-pushed live role/permission refresh for current session.
+- `admin_roles_list`: role list response payload.
+- `admin_users_list`: user list response payload.
+- `admin_action_result`: structured result for admin actions.
 - `welcome`: initial snapshot with users/items plus server UI/world metadata.
 - `signal`: forwarded WebRTC offer/answer/ICE.
 - `update_position`, `update_nickname`, `user_left`: presence updates.
@@ -72,6 +83,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - `userId`
   - `username`
   - `role`
+  - `permissions`
   - `policy` (`usernameMinLength`, `usernameMaxLength`, `passwordMinLength`, `passwordMaxLength`)
 - `auth_required.authPolicy`: server auth limits advertised before login/register submit.
 - `auth_result.authPolicy`: server auth limits echoed on auth success/failure responses.
@@ -103,6 +115,8 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - repeated auth failures are rate-limited by IP and IP+identity windows
   - auth failures include small randomized response jitter to reduce high-resolution probing
 - Client validates incoming packet shapes and applies runtime behavior.
+- Server is authoritative for role/permission checks on every privileged packet.
+- `voice.send` permission changes are pushed at runtime via `auth_permissions`.
 - Sound/media field normalization uses shared server policy helpers:
   - `none/off` normalize to empty values
   - bare filenames normalize to `sounds/<name>` for sound-reference fields

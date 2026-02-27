@@ -56,6 +56,7 @@ export const welcomeMessageSchema = z.object({
       userId: z.string().nullable().optional(),
       username: z.string().nullable().optional(),
       role: z.string().nullable().optional(),
+      permissions: z.array(z.string()).optional(),
       policy: z
         .object({
           usernameMinLength: z.number().int().positive(),
@@ -123,6 +124,7 @@ export const authResultSchema = z.object({
   sessionToken: z.string().optional(),
   username: z.string().optional(),
   role: z.string().optional(),
+  permissions: z.array(z.string()).optional(),
   nickname: z.string().optional(),
   authPolicy: z
     .object({
@@ -261,6 +263,52 @@ export const itemPianoStatusSchema = z.object({
   recordingState: z.enum(['idle', 'recording', 'paused', 'playback']).optional(),
 });
 
+export const authPermissionsSchema = z.object({
+  type: z.literal('auth_permissions'),
+  role: z.string(),
+  permissions: z.array(z.string()),
+});
+
+const adminRoleSummarySchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  isSystem: z.boolean(),
+  userCount: z.number().int().nonnegative(),
+  permissions: z.array(z.string()),
+});
+
+export const adminRolesListSchema = z.object({
+  type: z.literal('admin_roles_list'),
+  roles: z.array(adminRoleSummarySchema),
+  permissionKeys: z.array(z.string()),
+});
+
+export const adminUsersListSchema = z.object({
+  type: z.literal('admin_users_list'),
+  users: z.array(
+    z.object({
+      id: z.string(),
+      username: z.string(),
+      role: z.string(),
+      status: z.enum(['active', 'disabled']),
+    }),
+  ),
+});
+
+export const adminActionResultSchema = z.object({
+  type: z.literal('admin_action_result'),
+  ok: z.boolean(),
+  action: z.enum([
+    'role_create',
+    'role_update_permissions',
+    'role_delete',
+    'user_set_role',
+    'user_ban',
+    'user_unban',
+  ]),
+  message: z.string(),
+});
+
 export const incomingMessageSchema = z.discriminatedUnion('type', [
   authRequiredSchema,
   authResultSchema,
@@ -280,6 +328,10 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   itemClockAnnounceSchema,
   itemPianoNoteSchema,
   itemPianoStatusSchema,
+  authPermissionsSchema,
+  adminRolesListSchema,
+  adminUsersListSchema,
+  adminActionResultSchema,
 ]);
 
 export type IncomingMessage = z.infer<typeof incomingMessageSchema>;
@@ -289,6 +341,14 @@ export type OutgoingMessage =
   | { type: 'auth_login'; username: string; password: string }
   | { type: 'auth_resume'; sessionToken: string }
   | { type: 'auth_logout' }
+  | { type: 'admin_roles_list' }
+  | { type: 'admin_role_create'; name: string }
+  | { type: 'admin_role_update_permissions'; role: string; permissions: string[] }
+  | { type: 'admin_role_delete'; role: string; replacementRole: string }
+  | { type: 'admin_users_list' }
+  | { type: 'admin_user_set_role'; username: string; role: string }
+  | { type: 'admin_user_ban'; username: string }
+  | { type: 'admin_user_unban'; username: string }
   | { type: 'signal'; targetId: string; sdp?: RTCSessionDescriptionInit; ice?: RTCIceCandidateInit }
   | { type: 'update_position'; x: number; y: number }
   | { type: 'teleport_complete'; x: number; y: number }

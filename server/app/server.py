@@ -48,10 +48,22 @@ from .items.types.clock.time_format import parse_alarm_time_flexible
 from .models import (
     AuthLoginPacket,
     AuthLogoutPacket,
+    AuthPermissionsPacket,
     AuthRegisterPacket,
     AuthRequiredPacket,
     AuthResultPacket,
     AuthResumePacket,
+    AdminActionResultPacket,
+    AdminRoleCreatePacket,
+    AdminRoleDeletePacket,
+    AdminRoleUpdatePermissionsPacket,
+    AdminRolesListPacket,
+    AdminRolesListResultPacket,
+    AdminUserBanPacket,
+    AdminUserSetRolePacket,
+    AdminUserUnbanPacket,
+    AdminUsersListPacket,
+    AdminUsersListResultPacket,
     BroadcastChatMessagePacket,
     BroadcastNicknamePacket,
     BroadcastPositionPacket,
@@ -224,6 +236,61 @@ class SignalingServer:
             "passwordMinLength": self.auth_service.password_min_length,
             "passwordMaxLength": self.auth_service.password_max_length,
         }
+
+    @staticmethod
+    def _sorted_permissions(values: set[str] | tuple[str, ...] | None) -> list[str]:
+        """Return deterministic sorted permission list."""
+
+        if not values:
+            return []
+        return sorted(str(value) for value in values if str(value).strip())
+
+    def _client_has_permission(self, client: ClientConnection, key: str) -> bool:
+        """Return whether one authenticated client currently has a permission key."""
+
+        if not client.authenticated or not client.user_id:
+            return False
+        if client.permissions is None:
+            client.permissions = self.auth_service.get_user_permissions(client.user_id)
+        return key in client.permissions
+
+    def _refresh_client_permissions(self, client: ClientConnection) -> list[str]:
+        """Refresh one client's role/permissions from auth storage and return permissions list."""
+
+        if not client.user_id:
+            client.permissions = set()
+            return []
+        user = self.auth_service.get_user_by_id(client.user_id)
+        if user is None:
+            client.permissions = set()
+            return []
+        client.role = user.role
+        client.permissions = set(user.permissions)
+        return self._sorted_permissions(client.permissions)
+
+    async def _send_auth_permissions(self, client: ClientConnection) -> None:
+        """Push one authenticated client's current role + permission set."""
+
+        permissions = self._refresh_client_permissions(client)
+        await self._send(
+            client.websocket,
+            AuthPermissionsPacket(
+                type="auth_permissions",
+                role=client.role,
+                permissions=permissions,
+            ),
+        )
+
+    async def _sync_permissions_for_user_ids(self, user_ids: list[str]) -> None:
+        """Refresh and push permissions for active websocket clients matching user ids."""
+
+        wanted = {str(user_id) for user_id in user_ids}
+        if not wanted:
+            return
+        for active in self.clients.values():
+            if not active.user_id or active.user_id not in wanted:
+                continue
+            await self._send_auth_permissions(active)
 
     def _flush_state_save(self) -> None:
         """Immediately flush pending state persistence and clear debounce state."""
@@ -411,6 +478,14 @@ class SignalingServer:
         actor_id = client.user_id or client.id
         actor_name = client.username or client.nickname or actor_id
         return actor_id, actor_name
+
+    @staticmethod
+    def _owns_item(client: ClientConnection, item: WorldItem) -> bool:
+        """Return whether the authenticated client is the creator/owner of an item."""
+
+        if not client.user_id:
+            return False
+        return item.createdBy == client.user_id
 
     def _get_item_emit_range(self, item: WorldItem) -> int:
         """Return effective emit range for one item with sane bounds."""
@@ -1211,6 +1286,7 @@ class SignalingServer:
                 "userId": client.user_id,
                 "username": client.username,
                 "role": client.role if client.authenticated else None,
+                "permissions": self._sorted_permissions(client.permissions),
                 "policy": self._auth_policy(),
             },
         )
@@ -1230,6 +1306,7 @@ class SignalingServer:
             client.x = random.randrange(self.grid_size)
             client.y = random.randrange(self.grid_size)
         now_ms = self.item_service.now_ms()
+        self._refresh_client_permissions(client)
         client.last_position_update_ms = now_ms
         client.movement_window_index = self._movement_window_index(now_ms)
         client.movement_window_steps_used = 0
@@ -1324,6 +1401,7 @@ class SignalingServer:
                 if client.session_token:
                     self.auth_service.revoke(client.session_token)
                     client.session_token = None
+                client.permissions = set()
                 LOGGER.info("auth logout id=%s ip=%s username=%s", client.id, self._client_ip(client), client.username)
                 await self._send(
                     client.websocket,
@@ -1387,6 +1465,7 @@ class SignalingServer:
         client.user_id = session.user.id
         client.username = session.user.username
         client.role = session.user.role
+        client.permissions = set(session.user.permissions)
         client.session_token = session.token
         client.nickname = session.user.last_nickname or client.nickname
         client.saved_x = session.user.last_x
@@ -1400,6 +1479,7 @@ class SignalingServer:
                 sessionToken=session.token,
                 username=session.user.username,
                 role=session.user.role,
+                permissions=self._sorted_permissions(session.user.permissions),
                 nickname=client.nickname,
                 authPolicy=self._auth_policy(),
             ),
@@ -1449,6 +1529,220 @@ class SignalingServer:
                 BroadcastChatMessagePacket(type="chat_message", message=self_message, system=True),
             )
 
+    async def _send_admin_action_result(
+        self,
+        client: ClientConnection,
+        *,
+        ok: bool,
+        action: Literal[
+            "role_create",
+            "role_update_permissions",
+            "role_delete",
+            "user_set_role",
+            "user_ban",
+            "user_unban",
+        ],
+        message: str,
+    ) -> None:
+        """Send one structured admin action result packet to caller."""
+
+        await self._send(
+            client.websocket,
+            AdminActionResultPacket(type="admin_action_result", ok=ok, action=action, message=message),
+        )
+
+    async def _handle_admin_packet(self, client: ClientConnection, packet: ClientPacket) -> bool:
+        """Handle role/user administration packets with permission checks."""
+
+        if not isinstance(
+            packet,
+            (
+                AdminRolesListPacket,
+                AdminRoleCreatePacket,
+                AdminRoleUpdatePermissionsPacket,
+                AdminRoleDeletePacket,
+                AdminUsersListPacket,
+                AdminUserSetRolePacket,
+                AdminUserBanPacket,
+                AdminUserUnbanPacket,
+            ),
+        ):
+            return False
+
+        async def deny(action: str, message: str) -> None:
+            await self._send_admin_action_result(client, ok=False, action=action, message=message)
+
+        if isinstance(packet, AdminRolesListPacket):
+            if not (
+                self._client_has_permission(client, "role.manage")
+                or self._client_has_permission(client, "user.change_role")
+            ):
+                await deny("role_update_permissions", "Not authorized.")
+                return True
+            roles = self.auth_service.list_roles_with_counts()
+            await self._send(
+                client.websocket,
+                AdminRolesListResultPacket(
+                    type="admin_roles_list",
+                    roles=roles,
+                    permissionKeys=self.auth_service.list_all_permissions(),
+                ),
+            )
+            return True
+
+        if isinstance(packet, AdminUsersListPacket):
+            if not (
+                self._client_has_permission(client, "user.change_role")
+                or self._client_has_permission(client, "user.ban_unban")
+            ):
+                await deny("user_set_role", "Not authorized.")
+                return True
+            users = self.auth_service.list_users_for_admin()
+            await self._send(client.websocket, AdminUsersListResultPacket(type="admin_users_list", users=users))
+            return True
+
+        if isinstance(packet, AdminRoleCreatePacket):
+            if not self._client_has_permission(client, "role.manage"):
+                await deny("role_create", "Not authorized.")
+                return True
+            try:
+                created = self.auth_service.create_role(packet.name)
+            except AuthError as exc:
+                await deny("role_create", str(exc))
+                return True
+            LOGGER.info("role created actor=%s role=%s", client.user_id, created["name"])
+            await self._send_admin_action_result(client, ok=True, action="role_create", message=f"Created role {created['name']}.")
+            return True
+
+        if isinstance(packet, AdminRoleUpdatePermissionsPacket):
+            if not self._client_has_permission(client, "role.manage"):
+                await deny("role_update_permissions", "Not authorized.")
+                return True
+            affected_user_ids = self.auth_service.list_connected_user_ids_for_role(packet.role)
+            try:
+                assigned = self.auth_service.update_role_permissions(packet.role, packet.permissions)
+            except AuthError as exc:
+                await deny("role_update_permissions", str(exc))
+                return True
+            LOGGER.info(
+                "role permissions updated actor=%s role=%s permission_count=%d",
+                client.user_id,
+                packet.role,
+                len(assigned),
+            )
+            await self._sync_permissions_for_user_ids(affected_user_ids)
+            await self._send_admin_action_result(
+                client,
+                ok=True,
+                action="role_update_permissions",
+                message=f"Updated permissions for {packet.role}.",
+            )
+            return True
+
+        if isinstance(packet, AdminRoleDeletePacket):
+            if not self._client_has_permission(client, "role.manage"):
+                await deny("role_delete", "Not authorized.")
+                return True
+            try:
+                affected_usernames, replacement = self.auth_service.delete_role(packet.role, packet.replacementRole)
+            except AuthError as exc:
+                await deny("role_delete", str(exc))
+                return True
+            affected_ids = [
+                user_id
+                for username in affected_usernames
+                for user_id in [self.auth_service.get_user_id_by_username(username)]
+                if user_id is not None
+            ]
+            await self._sync_permissions_for_user_ids(affected_ids)
+            LOGGER.info(
+                "role deleted actor=%s role=%s replacement=%s affected=%d",
+                client.user_id,
+                packet.role,
+                replacement,
+                len(affected_usernames),
+            )
+            await self._send_admin_action_result(
+                client,
+                ok=True,
+                action="role_delete",
+                message=f"Deleted role {packet.role}; reassigned {len(affected_usernames)} users to {replacement}.",
+            )
+            return True
+
+        if isinstance(packet, AdminUserSetRolePacket):
+            if not self._client_has_permission(client, "user.change_role"):
+                await deny("user_set_role", "Not authorized.")
+                return True
+            target_id = self.auth_service.get_user_id_by_username(packet.username)
+            try:
+                username = self.auth_service.set_user_role(packet.username, packet.role, actor_user_id=client.user_id)
+            except AuthError as exc:
+                await deny("user_set_role", str(exc))
+                return True
+            if target_id:
+                await self._sync_permissions_for_user_ids([target_id])
+            LOGGER.info("user role changed actor=%s target=%s role=%s", client.user_id, username, packet.role)
+            await self._send_admin_action_result(
+                client,
+                ok=True,
+                action="user_set_role",
+                message=f"Set role for {username} to {packet.role}.",
+            )
+            return True
+
+        if isinstance(packet, AdminUserBanPacket):
+            if not self._client_has_permission(client, "user.ban_unban"):
+                await deny("user_ban", "Not authorized.")
+                return True
+            target_id = self.auth_service.get_user_id_by_username(packet.username)
+            try:
+                username = self.auth_service.set_user_status(packet.username, "disabled")
+            except AuthError as exc:
+                await deny("user_ban", str(exc))
+                return True
+            if target_id:
+                await self._sync_permissions_for_user_ids([target_id])
+                for active in list(self.clients.values()):
+                    if active.user_id != target_id:
+                        continue
+                    await self._send(
+                        active.websocket,
+                        AuthResultPacket(type="auth_result", ok=False, message="Account is disabled."),
+                    )
+                    await active.websocket.close()
+            LOGGER.info("user banned actor=%s target=%s", client.user_id, username)
+            await self._send_admin_action_result(
+                client,
+                ok=True,
+                action="user_ban",
+                message=f"Banned {username}.",
+            )
+            return True
+
+        if isinstance(packet, AdminUserUnbanPacket):
+            if not self._client_has_permission(client, "user.ban_unban"):
+                await deny("user_unban", "Not authorized.")
+                return True
+            target_id = self.auth_service.get_user_id_by_username(packet.username)
+            try:
+                username = self.auth_service.set_user_status(packet.username, "active")
+            except AuthError as exc:
+                await deny("user_unban", str(exc))
+                return True
+            if target_id:
+                await self._sync_permissions_for_user_ids([target_id])
+            LOGGER.info("user unbanned actor=%s target=%s", client.user_id, username)
+            await self._send_admin_action_result(
+                client,
+                ok=True,
+                action="user_unban",
+                message=f"Unbanned {username}.",
+            )
+            return True
+
+        return True
+
     async def _handle_message(self, client: ClientConnection, raw_message: str) -> None:
         """Decode, validate, and route one inbound client packet."""
 
@@ -1470,6 +1764,8 @@ class SignalingServer:
             client.authenticated = True
             client.user_id = client.user_id or client.id
             client.username = client.username or client.nickname
+            client.role = "admin"
+            client.permissions = set(self.auth_service.list_all_permissions())
 
         if await self._handle_auth_packet(client, packet):
             return
@@ -1478,6 +1774,9 @@ class SignalingServer:
                 client.websocket,
                 AuthResultPacket(type="auth_result", ok=False, message="Authenticate before sending gameplay actions."),
             )
+            return
+
+        if await self._handle_admin_packet(client, packet):
             return
 
         if isinstance(packet, UpdatePositionPacket):
@@ -1585,6 +1884,18 @@ class SignalingServer:
             return
 
         if isinstance(packet, UpdateNicknamePacket):
+            if not self._client_has_permission(client, "profile.update_nickname"):
+                await self._send(
+                    client.websocket,
+                    NicknameResultPacket(
+                        type="nickname_result",
+                        accepted=False,
+                        requestedNickname=packet.nickname,
+                        effectiveNickname=client.nickname,
+                        reason="Not authorized to change nickname.",
+                    ),
+                )
+                return
             requested_nickname = packet.nickname.strip()
             if not requested_nickname:
                 await self._send(
@@ -1676,6 +1987,16 @@ class SignalingServer:
             return
 
         if isinstance(packet, ChatMessagePacket):
+            if not self._client_has_permission(client, "chat.send"):
+                await self._send(
+                    client.websocket,
+                    BroadcastChatMessagePacket(
+                        type="chat_message",
+                        message="You are not allowed to send chat messages.",
+                        system=True,
+                    ),
+                )
+                return
             await self._broadcast(
                 BroadcastChatMessagePacket(
                     type="chat_message",
@@ -1695,6 +2016,9 @@ class SignalingServer:
             return
 
         if isinstance(packet, ItemAddPacket):
+            if not self._client_has_permission(client, "item.create"):
+                await self._send_item_result(client, False, "add", "Not authorized to create items.")
+                return
             if not is_known_item_type(packet.itemType):
                 await self._send_item_result(client, False, "add", "Unknown item type.")
                 return
@@ -1744,6 +2068,11 @@ class SignalingServer:
             if item.carrierId is None and (item.x != client.x or item.y != client.y):
                 await self._send_item_result(client, False, "pickup", "Item is not on your square.", item.id)
                 return
+            can_pickup_any = self._client_has_permission(client, "item.pickup_drop.any")
+            can_pickup_own = self._client_has_permission(client, "item.pickup_drop.own") and self._owns_item(client, item)
+            if not can_pickup_any and not can_pickup_own:
+                await self._send_item_result(client, False, "pickup", "Not authorized to pick up this item.", item.id)
+                return
             item.carrierId = client.id
             item.x = client.x
             item.y = client.y
@@ -1775,6 +2104,11 @@ class SignalingServer:
                 return
             if not self._is_in_bounds(packet.x, packet.y):
                 await self._send_item_result(client, False, "drop", "Drop position is out of bounds.", item.id)
+                return
+            can_drop_any = self._client_has_permission(client, "item.pickup_drop.any")
+            can_drop_own = self._client_has_permission(client, "item.pickup_drop.own") and self._owns_item(client, item)
+            if not can_drop_any and not can_drop_own:
+                await self._send_item_result(client, False, "drop", "Not authorized to drop this item.", item.id)
                 return
             item.carrierId = None
             item.x = packet.x
@@ -1808,6 +2142,11 @@ class SignalingServer:
             if item.carrierId is None and (item.x != client.x or item.y != client.y):
                 await self._send_item_result(client, False, "delete", "Item is not on your square.", item.id)
                 return
+            can_delete_any = self._client_has_permission(client, "item.delete.any")
+            can_delete_own = self._client_has_permission(client, "item.delete.own") and self._owns_item(client, item)
+            if not can_delete_any and not can_delete_own:
+                await self._send_item_result(client, False, "delete", "Not authorized to delete this item.", item.id)
+                return
             LOGGER.info(
                 "item deleted by=%s item_id=%s type=%s title=%s",
                 client.nickname,
@@ -1833,6 +2172,9 @@ class SignalingServer:
             return
 
         if isinstance(packet, ItemUsePacket):
+            if not self._client_has_permission(client, "item.use"):
+                await self._send_item_result(client, False, "use", "Not authorized to use items.")
+                return
             item = self.items.get(packet.itemId)
             if not item:
                 await self._send_item_result(client, False, "use", "Item not found.")
@@ -1918,6 +2260,9 @@ class SignalingServer:
             return
 
         if isinstance(packet, ItemSecondaryUsePacket):
+            if not self._client_has_permission(client, "item.use"):
+                await self._send_item_result(client, False, "secondary_use", "Not authorized to use items.")
+                return
             item = self.items.get(packet.itemId)
             if not item:
                 await self._send_item_result(client, False, "secondary_use", "Item not found.")
@@ -1965,6 +2310,8 @@ class SignalingServer:
             return
 
         if isinstance(packet, ItemPianoNotePacket):
+            if not self._client_has_permission(client, "item.use"):
+                return
             item = self.items.get(packet.itemId)
             if not item or item.type != "piano":
                 return
@@ -2021,6 +2368,9 @@ class SignalingServer:
             return
 
         if isinstance(packet, ItemPianoRecordingPacket):
+            if not self._client_has_permission(client, "item.use"):
+                await self._send_item_result(client, False, "use", "Not authorized to use items.")
+                return
             item = self.items.get(packet.itemId)
             if not item or item.type != "piano":
                 await self._send_item_result(client, False, "use", "Piano not found.")
@@ -2111,6 +2461,11 @@ class SignalingServer:
             if item.carrierId is None and (item.x != client.x or item.y != client.y):
                 await self._send_item_result(client, False, "update", "Item is not on your square.", item.id)
                 return
+            can_edit_any = self._client_has_permission(client, "item.edit.any")
+            can_edit_own = self._client_has_permission(client, "item.edit.own") and self._owns_item(client, item)
+            if not can_edit_any and not can_edit_own:
+                await self._send_item_result(client, False, "update", "Not authorized to edit this item.", item.id)
+                return
             if packet.title is not None:
                 title = packet.title.strip()
                 if not title:
@@ -2136,6 +2491,8 @@ class SignalingServer:
             await self._send_item_result(client, True, "update", f"Updated {item.title}.", item.id)
             return
 
+        if not self._client_has_permission(client, "voice.send"):
+            return
         target = self._find_by_id(packet.targetId)
         if not target:
             PACKET_LOGGER.info("signal target not found sender=%s target=%s", client.id, packet.targetId)

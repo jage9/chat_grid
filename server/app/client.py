@@ -17,6 +17,7 @@ class ClientConnection:
     user_id: str | None = None
     username: str | None = None
     role: str = "user"
+    permissions: set[str] | None = None
     session_token: str | None = None
     nickname: str = "user..."
     saved_x: int | None = None

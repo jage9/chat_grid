@@ -29,6 +29,7 @@ export type MainModeCommand =
   | 'locateOrListUsers'
   | 'openHelp'
   | 'openChat'
+  | 'openAdminMenu'
   | 'chatPrev'
   | 'chatNext'
   | 'chatFirst'
@@ -61,6 +62,7 @@ export function resolveMainModeCommand(code: string, shiftKey: boolean): MainMod
   if (code === 'KeyP') return shiftKey ? null : 'pingServer';
   if (code === 'KeyL') return 'locateOrListUsers';
   if (code === 'Slash') return shiftKey ? 'openHelp' : 'openChat';
+  if (code === 'KeyZ') return shiftKey ? 'openAdminMenu' : null;
   if (code === 'Comma') return shiftKey ? 'chatFirst' : 'chatPrev';
   if (code === 'Period') return shiftKey ? 'chatLast' : 'chatNext';
   if (code === 'Escape') return 'escape';
