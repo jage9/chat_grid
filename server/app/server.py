@@ -60,6 +60,7 @@ from .models import (
     ForwardSignalPacket,
     ItemActionResultPacket,
     ItemAddPacket,
+    ItemClockAnnouncePacket,
     ItemDeletePacket,
     ItemDropPacket,
     ItemPianoNoteBroadcastPacket,
@@ -102,6 +103,7 @@ AUTH_FAILURE_JITTER_MIN_MS = 0.02
 AUTH_FAILURE_JITTER_MAX_MS = 0.08
 RADIO_METADATA_POLL_INTERVAL_S = 10.0
 RADIO_METADATA_TIMEOUT_S = 6.0
+CLOCK_ANNOUNCE_POLL_INTERVAL_S = 1.0
 
 
 class SignalingServer:
@@ -160,6 +162,8 @@ class SignalingServer:
         self._auth_failures_by_ip: dict[str, deque[float]] = {}
         self._auth_failures_by_identity: dict[str, deque[float]] = {}
         self._radio_metadata_task: asyncio.Task[None] | None = None
+        self._clock_announce_task: asyncio.Task[None] | None = None
+        self._clock_top_of_hour_markers: dict[str, str] = {}
 
     @staticmethod
     def _resolve_server_version() -> str:
@@ -437,6 +441,98 @@ class SignalingServer:
             while True:
                 await self._refresh_radio_metadata_once()
                 await asyncio.sleep(RADIO_METADATA_POLL_INTERVAL_S)
+        except asyncio.CancelledError:
+            return
+
+    @classmethod
+    def _build_clock_announcement_sounds(cls, params: dict, *, top_of_hour: bool) -> list[str]:
+        """Build ordered EL640 sample URLs for one clock announcement."""
+
+        tz_name = cls._normalize_clock_timezone(params.get("timeZone"))
+        use_24_hour = cls._parse_clock_use_24_hour(params.get("use24Hour")) is True
+        now = datetime.now(ZoneInfo(tz_name))
+        hour24 = now.hour
+        minute = now.minute
+        ampm = "AM" if hour24 < 12 else "PM"
+        hour12 = hour24 % 12 or 12
+
+        sounds: list[str] = []
+        if top_of_hour:
+            sounds.append("/sounds/clock/el640/hour1.ogg")
+        sounds.append("/sounds/clock/el640/its.ogg")
+
+        if use_24_hour:
+            if hour24 < 20:
+                sounds.append(f"/sounds/clock/el640/{hour24}.ogg")
+            else:
+                tens = (hour24 // 10) * 10
+                ones = hour24 % 10
+                sounds.append(f"/sounds/clock/el640/{tens}.ogg")
+                if ones != 0:
+                    sounds.append(f"/sounds/clock/el640/{ones}.ogg")
+        else:
+            sounds.append(f"/sounds/clock/el640/{hour12}.ogg")
+
+        if minute > 0:
+            if minute < 10:
+                sounds.append("/sounds/clock/el640/o.ogg")
+            if minute < 20:
+                sounds.append(f"/sounds/clock/el640/{minute}.ogg")
+            else:
+                tens = (minute // 10) * 10
+                ones = minute % 10
+                sounds.append(f"/sounds/clock/el640/{tens}.ogg")
+                if ones != 0:
+                    sounds.append(f"/sounds/clock/el640/{ones}.ogg")
+
+        if not use_24_hour:
+            sounds.append(f"/sounds/clock/el640/{ampm}.ogg")
+        if top_of_hour:
+            sounds.append("/sounds/clock/el640/hour2.ogg")
+        return sounds
+
+    async def _broadcast_clock_announcement(self, item: WorldItem, *, top_of_hour: bool) -> None:
+        """Broadcast one server-authoritative clock speech sequence from item position."""
+
+        sound_x, sound_y = self._get_item_sound_source_position(item)
+        sounds = self._build_clock_announcement_sounds(item.params, top_of_hour=top_of_hour)
+        if not sounds:
+            return
+        await self._broadcast(
+            ItemClockAnnouncePacket(
+                type="item_clock_announce",
+                itemId=item.id,
+                sounds=sounds,
+                x=sound_x,
+                y=sound_y,
+            )
+        )
+
+    async def _run_clock_top_of_hour_loop(self) -> None:
+        """Background polling loop that triggers top-of-hour speech for clock items."""
+
+        try:
+            while True:
+                valid_clock_ids = {item.id for item in self.items.values() if item.type == "clock"}
+                for stale_id in list(self._clock_top_of_hour_markers.keys()):
+                    if stale_id not in valid_clock_ids:
+                        self._clock_top_of_hour_markers.pop(stale_id, None)
+                for item in self.items.values():
+                    if item.type != "clock":
+                        continue
+                    enabled = item.params.get("topOfHourAnnounce", True)
+                    if enabled is not True:
+                        continue
+                    tz_name = self._normalize_clock_timezone(item.params.get("timeZone"))
+                    now = datetime.now(ZoneInfo(tz_name))
+                    if now.minute != 0 or now.second > 1:
+                        continue
+                    marker = now.strftime("%Y-%m-%d-%H")
+                    if self._clock_top_of_hour_markers.get(item.id) == marker:
+                        continue
+                    self._clock_top_of_hour_markers[item.id] = marker
+                    await self._broadcast_clock_announcement(item, top_of_hour=True)
+                await asyncio.sleep(CLOCK_ANNOUNCE_POLL_INTERVAL_S)
         except asyncio.CancelledError:
             return
 
@@ -933,6 +1029,7 @@ class SignalingServer:
         protocol = "wss" if self._ssl_context else "ws"
         LOGGER.info("starting signaling server on %s://%s:%d", protocol, self.host, self.port)
         self._radio_metadata_task = asyncio.create_task(self._run_radio_metadata_loop())
+        self._clock_announce_task = asyncio.create_task(self._run_clock_top_of_hour_loop())
         try:
             async with serve(
                 self._handle_client,
@@ -943,6 +1040,11 @@ class SignalingServer:
             ):
                 await asyncio.Future()
         finally:
+            if self._clock_announce_task is not None:
+                self._clock_announce_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._clock_announce_task
+                self._clock_announce_task = None
             if self._radio_metadata_task is not None:
                 self._radio_metadata_task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -1660,10 +1762,11 @@ class SignalingServer:
                 await self._broadcast_item(item)
 
             self.item_last_use_ms[item.id] = now_ms
-            await self._broadcast(
-                BroadcastChatMessagePacket(type="chat_message", message=use_result.others_message, system=True),
-                exclude=client.websocket,
-            )
+            if use_result.others_message:
+                await self._broadcast(
+                    BroadcastChatMessagePacket(type="chat_message", message=use_result.others_message, system=True),
+                    exclude=client.websocket,
+                )
             use_sound = self._resolve_item_use_sound(item)
             if use_sound:
                 sound_x, sound_y = self._get_item_sound_source_position(item)
@@ -1676,6 +1779,8 @@ class SignalingServer:
                         y=sound_y,
                     )
                 )
+            if item.type == "clock":
+                await self._broadcast_clock_announcement(item, top_of_hour=False)
             if item.type == "piano":
                 await self._send_piano_status(
                     client,
@@ -2087,3 +2192,4 @@ def run() -> None:
         state_save_max_delay_ms=config.storage.state_save_max_delay_ms,
     )
     asyncio.run(server.start())
+    ItemClockAnnouncePacket,

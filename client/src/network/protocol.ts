@@ -215,6 +215,14 @@ export const itemUseSoundSchema = z.object({
   y: z.number().int(),
 });
 
+export const itemClockAnnounceSchema = z.object({
+  type: z.literal('item_clock_announce'),
+  itemId: z.string(),
+  sounds: z.array(z.string()),
+  x: z.number().int(),
+  y: z.number().int(),
+});
+
 export const itemPianoNoteSchema = z.object({
   type: z.literal('item_piano_note'),
   itemId: z.string(),
@@ -265,6 +273,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   itemRemoveSchema,
   itemActionResultSchema,
   itemUseSoundSchema,
+  itemClockAnnounceSchema,
   itemPianoNoteSchema,
   itemPianoStatusSchema,
 ]);

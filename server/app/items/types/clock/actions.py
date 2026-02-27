@@ -11,8 +11,8 @@ from ....models import WorldItem
 def use_item(item: WorldItem, nickname: str, clock_formatter: Callable[[dict], str]) -> ItemUseResult:
     """Read current clock time based on item configuration."""
 
-    display_time = clock_formatter(item.params)
+    _display_time = clock_formatter(item.params)
     return ItemUseResult(
-        self_message=f"{item.title} says {display_time}.",
-        others_message=f"{nickname} checks {item.title}. {item.title} says {display_time}.",
+        self_message="",
+        others_message="",
     )

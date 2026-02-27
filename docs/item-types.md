@@ -101,6 +101,7 @@ This is behavior-focused documentation for item types and their defaults.
 - Params:
   - `timeZone="America/Detroit"`
   - `use24Hour=false`
+  - `topOfHourAnnounce=true`
 - Global:
   - `useSound=none`
   - `emitSound=sounds/clock.ogg`
@@ -109,11 +110,17 @@ This is behavior-focused documentation for item types and their defaults.
   - `directional=false`
 
 ### Use
-- Reports current time from item timezone and format.
+- Broadcasts a spoken EL640-style time announcement as spatial audio from the clock position.
+- No text chat line is emitted for clock `use`.
 
 ### Validation
 - `timeZone`: one of `CLOCK_TIME_ZONE_OPTIONS` in `server/app/item_catalog.py`
 - `use24Hour`: boolean or on/off style input
+- `topOfHourAnnounce`: boolean or on/off style input
+
+### Audio
+- Spoken clock assets live under `client/public/sounds/clock/el640/`.
+- Top-of-hour routine (when enabled) uses `hour1.ogg` + time phrase + `hour2.ogg`.
 
 ## `widget`
 

@@ -69,6 +69,7 @@ type MessageHandlerDeps = {
   playLocateToneAt: (x: number, y: number) => void;
   resolveIncomingSoundUrl: (url: string) => string;
   playIncomingItemUseSound: (url: string, x: number, y: number) => void;
+  playClockAnnouncement: (sounds: string[], x: number, y: number) => void;
   handleAuthRequired: (message: Extract<IncomingMessage, { type: 'auth_required' }>) => void;
   handleAuthResult: (message: Extract<IncomingMessage, { type: 'auth_result' }>) => Promise<void>;
   isPeerNegotiationReady: () => boolean;
@@ -267,19 +268,26 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         if (handledByItemBehavior) {
           break;
         }
+        const text = message.message.trim();
         if (message.ok) {
           if (message.action === 'use' || message.action === 'secondary_use') {
-            deps.pushChatMessage(message.message);
+            if (text) {
+              deps.pushChatMessage(text);
+            }
             const item = message.itemId ? deps.getItemById(message.itemId) : null;
             if (message.action === 'use' && !item?.useSound && item && item.type !== 'piano') {
               deps.playLocateToneAt(item.x, item.y);
             }
           } else if (message.action !== 'update') {
-            deps.pushChatMessage(message.message);
+            if (text) {
+              deps.pushChatMessage(text);
+            }
             deps.audioUiConfirm();
           }
         } else {
-          deps.pushChatMessage(message.message);
+          if (text) {
+            deps.pushChatMessage(text);
+          }
           deps.audioUiCancel();
         }
         break;
@@ -297,6 +305,12 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
       case 'item_piano_note': {
         if (!deps.getAudioLayers().item) break;
         deps.handleRemotePianoNote(message);
+        break;
+      }
+
+      case 'item_clock_announce': {
+        if (!deps.getAudioLayers().world) break;
+        deps.playClockAnnouncement(message.sounds, message.x, message.y);
         break;
       }
 

@@ -117,7 +117,8 @@
 ```json
 {
   "timeZone": "America/Detroit",
-  "use24Hour": false
+  "use24Hour": false,
+  "topOfHourAnnounce": true
 }
 ```
 
@@ -132,7 +133,9 @@
   `Europe/London`, `Europe/Moscow`, `Pacific/Apia`, `Pacific/Auckland`, `Pacific/Chatham`,
   `Pacific/Honolulu`, `Pacific/Kiritimati`, `Pacific/Noumea`, `Pacific/Pago_Pago`, `UTC`.
 - `use24Hour`: boolean (or `on/off` in updates), default `false`.
+- `topOfHourAnnounce`: boolean (or `on/off` in updates), default `true`.
 - Global defaults: `useSound=none`, `emitSound=sounds/clock.ogg`.
+- Clock speech announcement audio is emitted via `item_clock_announce` packets using `/sounds/clock/el640/*.ogg`.
 
 ### `widget`
 
@@ -236,6 +239,18 @@
   "type": "item_use_sound",
   "itemId": "item-id",
   "sound": "sounds/roll.ogg",
+  "x": 12,
+  "y": 8
+}
+```
+
+- `item_clock_announce`:
+
+```json
+{
+  "type": "item_clock_announce",
+  "itemId": "item-id",
+  "sounds": ["/sounds/clock/el640/its.ogg", "/sounds/clock/el640/2.ogg", "/sounds/clock/el640/PM.ogg"],
   "x": 12,
   "y": 8
 }

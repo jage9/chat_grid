@@ -240,13 +240,12 @@ async def test_clock_use_reports_time_without_use_sound_packet(monkeypatch: pyte
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
     monkeypatch.setattr(server.item_service, "now_ms", lambda: 30_000)
-    monkeypatch.setattr(server, "_format_clock_display_time", lambda _params: "2:15 PM")
-
     await server._handle_message(client, json.dumps({"type": "item_use", "itemId": item.id}))
 
     assert send_payloads[-1].ok is True
-    assert send_payloads[-1].message == f"{item.title} says 2:15 PM."
+    assert send_payloads[-1].message == ""
     assert not any(getattr(packet, "type", "") == "item_use_sound" for packet in broadcast_payloads)
+    assert any(getattr(packet, "type", "") == "item_clock_announce" for packet in broadcast_payloads)
 
 
 @pytest.mark.asyncio

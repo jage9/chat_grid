@@ -406,6 +406,60 @@ export class AudioEngine {
     }
   }
 
+  /** Plays one spatial sample and resolves when playback finishes. */
+  async playSpatialSampleAndWait(
+    url: string,
+    sourcePosition: { x: number; y: number },
+    playerPosition: { x: number; y: number },
+    gain = 1,
+  ): Promise<void> {
+    await this.ensureContext();
+    const { audioCtx, sfxGainNode } = this;
+    if (!audioCtx || !sfxGainNode) return;
+
+    try {
+      const buffer = await this.getSampleBuffer(url);
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      const gainNode = audioCtx.createGain();
+      gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+      source.connect(gainNode);
+      let pannerNode: StereoPannerNode | null = null;
+      if (this.supportsStereoPanner() && this.outputMode === 'stereo') {
+        pannerNode = audioCtx.createStereoPanner();
+        gainNode.connect(pannerNode).connect(sfxGainNode);
+      } else {
+        gainNode.connect(sfxGainNode);
+      }
+      const runtime: ActiveSpatialSampleRuntime = {
+        sourceX: sourcePosition.x,
+        sourceY: sourcePosition.y,
+        baseGain: gain,
+        gainNode,
+        pannerNode,
+        sourceNode: source,
+      };
+      this.activeSpatialSamples.add(runtime);
+      this.applySpatialSampleRuntime(runtime, playerPosition, true);
+      await new Promise<void>((resolve) => {
+        source.onended = () => {
+          this.activeSpatialSamples.delete(runtime);
+          try {
+            source.disconnect();
+          } catch {
+            // Ignore stale graph disconnects.
+          }
+          gainNode.disconnect();
+          pannerNode?.disconnect();
+          resolve();
+        };
+        source.start();
+      });
+    } catch {
+      // Ignore sample decode/load errors.
+    }
+  }
+
   async playSample(url: string, gain = 1, fadeInMs = 0): Promise<void> {
     await this.ensureContext();
     const { audioCtx, sfxGainNode } = this;

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 LABEL = "clock"
 TOOLTIP = "It tells the time. What did you think it did?"
-EDITABLE_PROPERTIES: tuple[str, ...] = ("title", "timeZone", "use24Hour")
+EDITABLE_PROPERTIES: tuple[str, ...] = ("title", "timeZone", "use24Hour", "topOfHourAnnounce")
 CAPABILITIES: tuple[str, ...] = ("editable", "carryable", "deletable", "usable")
 USE_SOUND: str | None = None
 EMIT_SOUND = "sounds/clock.ogg"
@@ -55,11 +55,12 @@ TIME_ZONE_OPTIONS: tuple[str, ...] = (
     "Pacific/Pago_Pago",
     "UTC",
 )
-DEFAULT_PARAMS: dict = {"timeZone": DEFAULT_TIME_ZONE, "use24Hour": False}
-PARAM_KEYS: tuple[str, ...] = ("timeZone", "use24Hour")
+DEFAULT_PARAMS: dict = {"timeZone": DEFAULT_TIME_ZONE, "use24Hour": False, "topOfHourAnnounce": True}
+PARAM_KEYS: tuple[str, ...] = ("timeZone", "use24Hour", "topOfHourAnnounce")
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "title": {"valueType": "text", "tooltip": "Display name spoken and shown for this item.", "maxLength": 80},
     "timeZone": {"valueType": "list", "tooltip": "Timezone used when the clock speaks time.", "options": list(TIME_ZONE_OPTIONS)},
     "use24Hour": {"valueType": "boolean", "tooltip": "Use 24 hour format instead of AM/PM."},
+    "topOfHourAnnounce": {"valueType": "boolean", "tooltip": "Automatically announce time at the top of each hour."},
 }

@@ -294,6 +294,14 @@ class ItemUseSoundPacket(BasePacket):
     y: int
 
 
+class ItemClockAnnouncePacket(BasePacket):
+    type: Literal["item_clock_announce"]
+    itemId: str
+    sounds: list[str]
+    x: int
+    y: int
+
+
 class ItemPianoNoteBroadcastPacket(BasePacket):
     type: Literal["item_piano_note"]
     itemId: str

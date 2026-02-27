@@ -9,6 +9,7 @@ import {
   shouldProxyStreamUrl,
 } from './audio/radioStationRuntime';
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
+import { ClockAnnouncer } from './audio/clockAnnouncer';
 import { normalizeDegrees } from './audio/spatial';
 import {
   applyPastedText,
@@ -243,6 +244,7 @@ const messageBuffer: string[] = [];
 let messageCursor = -1;
 const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig);
 const itemEmitRuntime = new ItemEmitRuntime(audio, resolveIncomingSoundUrl, getItemSpatialConfig);
+const clockAnnouncer = new ClockAnnouncer(audio, () => ({ x: state.player.x, y: state.player.y }));
 let internalClipboardText = '';
 let replaceTextOnNextType = false;
 let pendingEscapeDisconnect = false;
@@ -1657,6 +1659,9 @@ const onAppMessage = createOnMessageHandler({
   resolveIncomingSoundUrl,
   playIncomingItemUseSound: (url, x, y) => {
     void audio.playSpatialSample(url, { x, y }, { x: state.player.x, y: state.player.y }, 1);
+  },
+  playClockAnnouncement: (sounds, x, y) => {
+    void clockAnnouncer.playSequence(sounds.map(resolveIncomingSoundUrl), x, y);
   },
   handleAuthRequired,
   handleAuthResult,

@@ -16,6 +16,10 @@ def validate_update(_item: WorldItem, next_params: dict) -> dict:
     use_24_hour = parse_bool_like_or_none(next_params.get("use24Hour"))
     if use_24_hour is None:
         raise ValueError("use24Hour must be on/off.")
+    top_of_hour_announce = parse_bool_like_or_none(next_params.get("topOfHourAnnounce"))
+    if top_of_hour_announce is None:
+        raise ValueError("topOfHourAnnounce must be on/off.")
     next_params["timeZone"] = time_zone
     next_params["use24Hour"] = use_24_hour
+    next_params["topOfHourAnnounce"] = top_of_hour_announce
     return keep_only_known_params(next_params, PARAM_KEYS)
