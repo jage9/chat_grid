@@ -82,8 +82,8 @@
           "description": "Pick up/drop item"
         },
         {
-          "keys": "Shift+D",
-          "description": "Delete item"
+          "keys": "Z",
+          "description": "Item management (delete/transfer when permitted)"
         },
         {
           "keys": "Enter",

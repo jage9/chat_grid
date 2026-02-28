@@ -326,6 +326,116 @@ async def test_item_drop_rejects_out_of_bounds(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.asyncio
+async def test_item_transfer_updates_item_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    owner_ws = _fake_ws()
+    target_ws = _fake_ws()
+    owner = ClientConnection(
+        websocket=owner_ws,
+        id="u1",
+        nickname="owner",
+        authenticated=True,
+        user_id="1",
+        username="owner_user",
+        permissions={"item.transfer.own"},
+        x=5,
+        y=6,
+    )
+    target = ClientConnection(
+        websocket=target_ws,
+        id="u2",
+        nickname="target",
+        authenticated=True,
+        user_id="2",
+        username="target_user",
+        permissions=set(),
+        x=10,
+        y=10,
+    )
+    server.clients[owner_ws] = owner
+    server.clients[target_ws] = target
+    item = server.item_service.default_item(owner, "dice")
+    item.x = owner.x
+    item.y = owner.y
+    server.item_service.add_item(item)
+
+    send_payloads: list[object] = []
+    broadcasted_items: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast_item(broadcast_item: object) -> None:
+        broadcasted_items.append(broadcast_item)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+
+    await server._handle_message(owner, json.dumps({"type": "item_transfer", "itemId": item.id, "targetId": target.id}))
+
+    assert item.createdBy == target.user_id
+    assert item.createdByName == target.username
+    assert broadcasted_items
+    assert send_payloads
+    result = send_payloads[-1]
+    assert result.type == "item_action_result"
+    assert result.ok is True
+    assert result.action == "transfer"
+
+
+@pytest.mark.asyncio
+async def test_item_transfer_rejects_when_not_authorized(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    owner_ws = _fake_ws()
+    target_ws = _fake_ws()
+    owner = ClientConnection(
+        websocket=owner_ws,
+        id="u1",
+        nickname="owner",
+        authenticated=True,
+        user_id="1",
+        username="owner_user",
+        permissions={"item.use"},
+        x=5,
+        y=6,
+    )
+    target = ClientConnection(
+        websocket=target_ws,
+        id="u2",
+        nickname="target",
+        authenticated=True,
+        user_id="2",
+        username="target_user",
+        permissions=set(),
+        x=10,
+        y=10,
+    )
+    server.clients[owner_ws] = owner
+    server.clients[target_ws] = target
+    item = server.item_service.default_item(owner, "dice")
+    item.x = owner.x
+    item.y = owner.y
+    server.item_service.add_item(item)
+
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+
+    await server._handle_message(owner, json.dumps({"type": "item_transfer", "itemId": item.id, "targetId": target.id}))
+
+    assert item.createdBy == owner.user_id
+    assert send_payloads
+    result = send_payloads[-1]
+    assert result.type == "item_action_result"
+    assert result.ok is False
+    assert result.action == "transfer"
+    assert "not authorized" in result.message.lower()
+
+
+@pytest.mark.asyncio
 async def test_broadcast_fanout_is_concurrent(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws1 = _fake_ws()

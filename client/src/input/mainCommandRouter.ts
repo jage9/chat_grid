@@ -23,7 +23,8 @@ export type MainModeCommand =
   | 'speakUsers'
   | 'addItem'
   | 'locateOrListItems'
-  | 'pickupDropOrDelete'
+  | 'pickupDropItem'
+  | 'openItemManagement'
   | 'editOrInspectItem'
   | 'pingServer'
   | 'locateOrListUsers'
@@ -57,12 +58,12 @@ export function resolveMainModeCommand(code: string, shiftKey: boolean): MainMod
   if (code === 'KeyU') return shiftKey ? null : 'speakUsers';
   if (code === 'KeyA') return shiftKey ? null : 'addItem';
   if (code === 'KeyI') return 'locateOrListItems';
-  if (code === 'KeyD') return 'pickupDropOrDelete';
+  if (code === 'KeyD') return shiftKey ? null : 'pickupDropItem';
   if (code === 'KeyO') return 'editOrInspectItem';
   if (code === 'KeyP') return shiftKey ? null : 'pingServer';
   if (code === 'KeyL') return 'locateOrListUsers';
   if (code === 'Slash') return shiftKey ? 'openHelp' : 'openChat';
-  if (code === 'KeyZ') return shiftKey ? 'openAdminMenu' : null;
+  if (code === 'KeyZ') return shiftKey ? 'openAdminMenu' : 'openItemManagement';
   if (code === 'Comma') return shiftKey ? 'chatFirst' : 'chatPrev';
   if (code === 'Period') return shiftKey ? 'chatLast' : 'chatNext';
   if (code === 'Escape') return 'escape';

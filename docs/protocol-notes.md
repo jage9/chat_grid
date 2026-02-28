@@ -27,6 +27,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `chat_message`: player chat.
 - `ping`: latency measurement.
 - `item_add`, `item_pickup`, `item_drop`, `item_delete`, `item_use`, `item_update`: item actions.
+- `item_transfer`: transfer item ownership to another connected user.
 - `item_secondary_use`: trigger type-specific secondary action when implemented.
 - `item_piano_note`: realtime piano note on/off for active piano use mode.
 - `item_piano_recording`: piano record/playback control (`toggle_record`, `playback`, `stop_playback`).
@@ -59,6 +60,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_upsert` is full-state replacement for one item, not partial patch.
 - `item_upsert.item.display` is server-owned display text for readonly/system properties (for example: `createdBy`, `updatedBy`, `createdAt`, `updatedAt`, `capabilities`, `useSound`, `emitSound`).
 - `item_action_result` messages are intended for direct screen-reader/user status feedback.
+  - `action` includes: `add`, `pickup`, `drop`, `delete`, `transfer`, `use`, `secondary_use`, `update`
 - Successful `item_pickup` and `item_drop` also emit system chat lines to other users in the room.
 - Piano runtime control no longer depends on parsing `item_action_result.message` text.
 - `item_piano_status` carries machine-readable piano events (`use_mode_entered`, record/playback transitions).

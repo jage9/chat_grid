@@ -132,6 +132,12 @@ class ItemDeletePacket(BasePacket):
     itemId: str
 
 
+class ItemTransferPacket(BasePacket):
+    type: Literal["item_transfer"]
+    itemId: str
+    targetId: str
+
+
 class ItemUsePacket(BasePacket):
     type: Literal["item_use"]
     itemId: str
@@ -186,6 +192,7 @@ ClientPacket = (
     | ItemPickupPacket
     | ItemDropPacket
     | ItemDeletePacket
+    | ItemTransferPacket
     | ItemUsePacket
     | ItemSecondaryUsePacket
     | ItemPianoNotePacket
@@ -348,7 +355,7 @@ class ItemRemovePacket(BasePacket):
 class ItemActionResultPacket(BasePacket):
     type: Literal["item_action_result"]
     ok: bool
-    action: Literal["add", "pickup", "drop", "delete", "use", "secondary_use", "update"]
+    action: Literal["add", "pickup", "drop", "delete", "transfer", "use", "secondary_use", "update"]
     message: str
     itemId: str | None = None
 

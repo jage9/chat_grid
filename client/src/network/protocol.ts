@@ -214,7 +214,7 @@ export const itemRemoveSchema = z.object({
 export const itemActionResultSchema = z.object({
   type: z.literal('item_action_result'),
   ok: z.boolean(),
-  action: z.enum(['add', 'pickup', 'drop', 'delete', 'use', 'secondary_use', 'update']),
+  action: z.enum(['add', 'pickup', 'drop', 'delete', 'transfer', 'use', 'secondary_use', 'update']),
   message: z.string(),
   itemId: z.string().optional(),
 });
@@ -369,6 +369,7 @@ export type OutgoingMessage =
   | { type: 'item_pickup'; itemId: string }
   | { type: 'item_drop'; itemId: string; x: number; y: number }
   | { type: 'item_delete'; itemId: string }
+  | { type: 'item_transfer'; itemId: string; targetId: string }
   | { type: 'item_use'; itemId: string }
   | { type: 'item_secondary_use'; itemId: string }
   | { type: 'item_piano_note'; itemId: string; keyId: string; midi: number; on: boolean }

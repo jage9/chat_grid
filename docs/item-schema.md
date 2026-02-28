@@ -243,7 +243,7 @@
 {
   "type": "item_action_result",
   "ok": true,
-  "action": "add | pickup | drop | delete | use | update",
+  "action": "add | pickup | drop | delete | transfer | use | secondary_use | update",
   "message": "human-readable status",
   "itemId": "optional-item-id"
 }

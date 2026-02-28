@@ -23,7 +23,7 @@ export type WorldItem = {
   display?: Record<string, string>;
 };
 
-export type SelectionContext = 'pickup' | 'drop' | 'delete' | 'edit' | 'use' | 'secondaryUse' | 'inspect' | null;
+export type SelectionContext = 'pickup' | 'drop' | 'delete' | 'edit' | 'use' | 'secondaryUse' | 'inspect' | 'manage' | null;
 
 export type GameMode =
   | 'normal'
@@ -39,6 +39,9 @@ export type GameMode =
   | 'itemProperties'
   | 'itemPropertyEdit'
   | 'itemPropertyOptionSelect'
+  | 'itemManageOptions'
+  | 'itemManageTransferUser'
+  | 'confirmYesNo'
   | 'adminMenu'
   | 'adminRoleList'
   | 'adminRolePermissionList'

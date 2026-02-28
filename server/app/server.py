@@ -86,6 +86,7 @@ from .models import (
     ItemPickupPacket,
     ItemRemovePacket,
     ItemSecondaryUsePacket,
+    ItemTransferPacket,
     ItemUpdatePacket,
     ItemUpsertPacket,
     ItemUsePacket,
@@ -1240,7 +1241,7 @@ class SignalingServer:
         self,
         client: ClientConnection,
         ok: bool,
-        action: Literal["add", "pickup", "drop", "delete", "use", "secondary_use", "update"],
+        action: Literal["add", "pickup", "drop", "delete", "transfer", "use", "secondary_use", "update"],
         message: str,
         item_id: str | None = None,
     ) -> None:
@@ -2441,6 +2442,44 @@ class SignalingServer:
             await self._broadcast(ItemRemovePacket(type="item_remove", itemId=item.id))
             self._request_state_save()
             await self._send_item_result(client, True, "delete", f"Deleted {item.title}.", item.id)
+            return
+
+        if isinstance(packet, ItemTransferPacket):
+            item = self.items.get(packet.itemId)
+            if not item:
+                await self._send_item_result(client, False, "transfer", "Item not found.")
+                return
+            if item.carrierId:
+                await self._send_item_result(client, False, "transfer", "Item cannot be transferred while carried.", item.id)
+                return
+            if item.x != client.x or item.y != client.y:
+                await self._send_item_result(client, False, "transfer", "Item is not on your square.", item.id)
+                return
+            can_transfer_any = self._client_has_permission(client, "item.transfer.any")
+            can_transfer_own = self._client_has_permission(client, "item.transfer.own") and self._owns_item(client, item)
+            if not can_transfer_any and not can_transfer_own:
+                await self._send_item_result(client, False, "transfer", "Not authorized to transfer this item.", item.id)
+                return
+            target = self._get_client_by_id(packet.targetId)
+            if not target or not target.authenticated or not target.user_id:
+                await self._send_item_result(client, False, "transfer", "Target user is not available.", item.id)
+                return
+            if target.id == client.id:
+                await self._send_item_result(client, False, "transfer", "Cannot transfer an item to yourself.", item.id)
+                return
+            if item.createdBy == target.user_id:
+                await self._send_item_result(client, False, "transfer", "Item already belongs to that user.", item.id)
+                return
+            item.createdBy = target.user_id
+            item.createdByName = target.username or target.nickname
+            item.updatedAt = self.item_service.now_ms()
+            actor_id, actor_name = self._item_updated_actor(client)
+            item.updatedBy = actor_id
+            item.updatedByName = actor_name
+            item.version += 1
+            await self._broadcast_item(item)
+            self._request_state_save()
+            await self._send_item_result(client, True, "transfer", f"Transferred {item.title} to {target.nickname}.", item.id)
             return
 
         if isinstance(packet, ItemUsePacket):

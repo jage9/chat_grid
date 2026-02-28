@@ -30,3 +30,9 @@ def test_item_piano_recording_packet_validates() -> None:
     assert packet.type == "item_piano_recording"
     stop_packet = adapter.validate_python({"type": "item_piano_recording", "itemId": "p1", "action": "stop_record"})
     assert stop_packet.type == "item_piano_recording"
+
+
+def test_item_transfer_packet_validates() -> None:
+    adapter = TypeAdapter(ClientPacket)
+    packet = adapter.validate_python({"type": "item_transfer", "itemId": "i1", "targetId": "u2"})
+    assert packet.type == "item_transfer"

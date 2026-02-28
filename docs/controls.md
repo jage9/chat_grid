@@ -31,7 +31,7 @@ This document is the authoritative keymap for the client.
 - `O`: Edit item properties
 - `Shift+O`: Inspect all item properties
 - `D`: Pick up/drop item
-- `Shift+D`: Delete item
+- `Z`: Item management menu (delete/transfer when permitted)
 - `Enter`: Use item
 - `Shift+Enter`: Secondary item action
 
@@ -81,6 +81,12 @@ Applies to effect select, user/item list modes, item selection, item property li
 - `Escape`: Exit/cancel
 - `Space`: Read tooltip/help for current option (where metadata is available)
 - First-letter navigation: jump to next matching entry
+
+## Yes/No Confirmation Menu
+
+- `ArrowUp` / `ArrowDown`: Move between `No` and `Yes`
+- `Enter`: Confirm current choice (default selection is `No`)
+- `Escape`: Cancel
 
 ## Admin Modes
 

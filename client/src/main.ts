@@ -26,6 +26,7 @@ import {
 import { resolveMainModeCommand } from './input/mainCommandRouter';
 import { dispatchModeInput } from './input/modeDispatcher';
 import { handleListControlKey } from './input/listController';
+import { handleYesNoMenuInput, YES_NO_OPTIONS } from './input/yesNoMenu';
 import { getEditSessionAction } from './input/editSession';
 import { formatSteppedNumber, snapNumberToStep } from './input/numeric';
 import { type IncomingMessage, type OutgoingMessage } from './network/protocol';
@@ -211,6 +212,20 @@ type AdminPendingUserMutation =
   | { action: 'ban'; username: string }
   | { action: 'unban'; username: string };
 
+type ItemManagementAction = 'delete' | 'transfer';
+
+type ItemManagementOption = {
+  action: ItemManagementAction;
+  label: string;
+};
+
+type ItemManagementConfirmContext = {
+  itemId: string;
+  action: ItemManagementAction;
+  prompt: string;
+  targetId?: string;
+};
+
 /** Builds linearized help-view lines from sectioned help content. */
 function buildHelpLines(help: HelpData): string[] {
   const lines: string[] = [];
@@ -263,6 +278,7 @@ let lastAnnouncementAt = 0;
 let outputMode = settings.loadOutputMode();
 let authMode: 'login' | 'register' = 'login';
 let authUsername = settings.loadAuthUsername();
+let authUserId = '';
 let authPolicy: AuthPolicy | null = null;
 let authRole = 'user';
 let authPermissions = new Set<string>();
@@ -320,6 +336,13 @@ let adminPendingUserAction: 'set_role' | 'ban' | 'unban' | null = null;
 let adminSelectedRoleName = '';
 let adminSelectedUsername = '';
 let adminPendingUserMutation: AdminPendingUserMutation | null = null;
+let itemManagementSelectedItemId: string | null = null;
+let itemManagementOptions: ItemManagementOption[] = [];
+let itemManagementOptionIndex = 0;
+let itemManagementTargetUserIds: string[] = [];
+let itemManagementTargetUserIndex = 0;
+let itemManagementConfirmIndex = 0;
+let itemManagementConfirmContext: ItemManagementConfirmContext | null = null;
 let activeTeleport:
   | {
       startX: number;
@@ -1000,7 +1023,10 @@ function getCarriedItem(): WorldItem | null {
 }
 
 /** Opens the shared item-selection flow for the provided context and items. */
-function beginItemSelection(context: 'pickup' | 'delete' | 'edit' | 'use' | 'inspect', items: WorldItem[]): void {
+function beginItemSelection(
+  context: 'pickup' | 'delete' | 'edit' | 'use' | 'secondaryUse' | 'inspect' | 'manage',
+  items: WorldItem[],
+): void {
   if (items.length === 0) {
     updateStatus('No items available.');
     audio.sfxUiCancel();
@@ -1012,6 +1038,66 @@ function beginItemSelection(context: 'pickup' | 'delete' | 'edit' | 'use' | 'ins
   state.selectedItemIndex = 0;
   updateStatus(`Select item: ${itemLabel(items[0])}.`);
   audio.sfxUiBlip();
+}
+
+/** Returns whether the local user can delete the provided item. */
+function canManageDeleteItem(item: WorldItem): boolean {
+  if (hasPermission('item.delete.any')) return true;
+  return hasPermission('item.delete.own') && authUserId.length > 0 && item.createdBy === authUserId;
+}
+
+/** Returns whether the local user can transfer the provided item. */
+function canManageTransferItem(item: WorldItem): boolean {
+  if (hasPermission('item.transfer.any')) return true;
+  return hasPermission('item.transfer.own') && authUserId.length > 0 && item.createdBy === authUserId;
+}
+
+/** Builds available item-management actions for one selected item. */
+function itemManagementOptionsFor(item: WorldItem): ItemManagementOption[] {
+  const options: ItemManagementOption[] = [];
+  if (canManageDeleteItem(item)) {
+    options.push({ action: 'delete', label: 'Delete item' });
+  }
+  if (canManageTransferItem(item) && state.peers.size > 0) {
+    options.push({ action: 'transfer', label: 'Transfer item' });
+  }
+  return options;
+}
+
+/** Opens item-management options for one selected item. */
+function beginItemManagement(item: WorldItem): void {
+  const options = itemManagementOptionsFor(item);
+  if (options.length === 0) {
+    updateStatus('No item management actions available.');
+    audio.sfxUiCancel();
+    return;
+  }
+  itemManagementSelectedItemId = item.id;
+  itemManagementOptions = options;
+  itemManagementOptionIndex = 0;
+  state.mode = 'itemManageOptions';
+  updateStatus(itemManagementOptions[0].label);
+  audio.sfxUiBlip();
+}
+
+/** Opens standardized yes/no confirmation prompt for a pending item-management action. */
+function openItemManagementConfirm(context: ItemManagementConfirmContext): void {
+  itemManagementConfirmContext = context;
+  itemManagementConfirmIndex = 0;
+  state.mode = 'confirmYesNo';
+  updateStatus(`${context.prompt} ${YES_NO_OPTIONS[itemManagementConfirmIndex].label}.`);
+  audio.sfxUiBlip();
+}
+
+/** Clears temporary item-management menu state. */
+function resetItemManagementState(): void {
+  itemManagementSelectedItemId = null;
+  itemManagementOptions = [];
+  itemManagementOptionIndex = 0;
+  itemManagementTargetUserIds = [];
+  itemManagementTargetUserIndex = 0;
+  itemManagementConfirmIndex = 0;
+  itemManagementConfirmContext = null;
 }
 
 /** Opens item property browsing/editing mode for one item. */
@@ -1507,6 +1593,7 @@ function sendAuthRequest(): void {
 function handleAuthRequired(message: Extract<IncomingMessage, { type: 'auth_required' }>): void {
   const hadPendingRequest = pendingAuthRequest;
   pendingAuthRequest = false;
+  authUserId = '';
   applyAuthPolicy(message.authPolicy);
   applyAuthPermissions('user', []);
   applyServerAdminMenuActions([]);
@@ -1530,6 +1617,7 @@ async function handleAuthResult(message: Extract<IncomingMessage, { type: 'auth_
   pendingAuthRequest = false;
   applyAuthPolicy(message.authPolicy);
   if (!message.ok) {
+    authUserId = '';
     dom.authPassword.value = '';
     dom.registerPassword.value = '';
     dom.registerPasswordConfirm.value = '';
@@ -1570,6 +1658,7 @@ async function handleAuthResult(message: Extract<IncomingMessage, { type: 'auth_
 
 /** Clears stored auth session and returns UI to login mode. */
 function logOutAccount(): void {
+  authUserId = '';
   authUsername = '';
   void clearHttpOnlySessionCookie();
   settings.saveAuthUsername('');
@@ -1808,6 +1897,7 @@ function disconnect(): void {
   activeTeleport = null;
   peerNegotiationReady = false;
   pendingSignalMessages = [];
+  resetItemManagementState();
   itemBehaviorRegistry.cleanup();
 }
 
@@ -1920,6 +2010,7 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   let connectedAnnouncement: string | null = null;
   let playSelfLoginSound = false;
   if (message.type === 'welcome') {
+    authUserId = String(message.auth?.userId || '').trim();
     applyAuthPolicy(message.auth?.policy);
     applyAuthPermissions(message.auth?.role, message.auth?.permissions);
     const uiAdminActions =
@@ -2230,22 +2321,8 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
         );
         return;
       }
-    case 'pickupDropOrDelete': {
+    case 'pickupDropItem': {
       const carried = getCarriedItem();
-      if (shiftKey) {
-        const squareItems = getItemsAtPosition(state.player.x, state.player.y);
-        if (squareItems.length === 0) {
-          updateStatus('No items to delete.');
-          audio.sfxUiCancel();
-          return;
-        }
-        if (squareItems.length === 1) {
-          signaling.send({ type: 'item_delete', itemId: squareItems[0].id });
-          return;
-        }
-        beginItemSelection('delete', squareItems);
-        return;
-      }
       if (carried) {
         signaling.send({ type: 'item_drop', itemId: carried.id, x: state.player.x, y: state.player.y });
         return;
@@ -2261,6 +2338,26 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
         return;
       }
       beginItemSelection('pickup', squareItems);
+      return;
+    }
+    case 'openItemManagement': {
+      const squareItems = getItemsAtPosition(state.player.x, state.player.y);
+      if (squareItems.length === 0) {
+        updateStatus('No items to manage on this square.');
+        audio.sfxUiCancel();
+        return;
+      }
+      const manageable = squareItems.filter((item) => itemManagementOptionsFor(item).length > 0);
+      if (manageable.length === 0) {
+        updateStatus('No permitted item management actions here.');
+        audio.sfxUiCancel();
+        return;
+      }
+      if (manageable.length === 1) {
+        beginItemManagement(manageable[0]);
+        return;
+      }
+      beginItemSelection('manage', manageable);
       return;
     }
     case 'editOrInspectItem': {
@@ -2730,6 +2827,10 @@ function handleSelectItemModeInput(code: string, key: string): void {
       beginItemProperties(selected, true);
       return;
     }
+    if (context === 'manage') {
+      beginItemManagement(selected);
+      return;
+    }
     return;
   }
   if (control.type === 'cancel') {
@@ -2737,6 +2838,157 @@ function handleSelectItemModeInput(code: string, key: string): void {
     state.selectionContext = null;
     updateStatus('Cancelled.');
     audio.sfxUiCancel();
+  }
+}
+
+/** Handles item-management action menu (`z`) for the selected square item. */
+function handleItemManageOptionsModeInput(code: string, key: string): void {
+  if (!itemManagementSelectedItemId) {
+    state.mode = 'normal';
+    resetItemManagementState();
+    return;
+  }
+  const item = state.items.get(itemManagementSelectedItemId);
+  if (!item) {
+    state.mode = 'normal';
+    resetItemManagementState();
+    updateStatus('Item no longer exists.');
+    audio.sfxUiCancel();
+    return;
+  }
+  itemManagementOptions = itemManagementOptionsFor(item);
+  if (itemManagementOptions.length === 0) {
+    state.mode = 'normal';
+    resetItemManagementState();
+    updateStatus('No item management actions available.');
+    audio.sfxUiCancel();
+    return;
+  }
+  itemManagementOptionIndex = Math.max(0, Math.min(itemManagementOptionIndex, itemManagementOptions.length - 1));
+  const control = handleListControlKey(code, key, itemManagementOptions, itemManagementOptionIndex, (entry) => entry.label);
+  if (control.type === 'move') {
+    itemManagementOptionIndex = control.index;
+    updateStatus(itemManagementOptions[itemManagementOptionIndex].label);
+    audio.sfxUiBlip();
+    return;
+  }
+  if (control.type === 'select') {
+    const option = itemManagementOptions[itemManagementOptionIndex];
+    if (option.action === 'delete') {
+      openItemManagementConfirm({
+        itemId: item.id,
+        action: 'delete',
+        prompt: `Delete ${itemLabel(item)}?`,
+      });
+      return;
+    }
+    const targetIds = Array.from(state.peers.values())
+      .map((peer) => peer.id)
+      .filter((peerId) => peerId !== state.player.id && state.peers.has(peerId))
+      .sort((a, b) => {
+        const left = state.peers.get(a)?.nickname ?? '';
+        const right = state.peers.get(b)?.nickname ?? '';
+        return left.localeCompare(right, undefined, { sensitivity: 'base' });
+      });
+    if (targetIds.length === 0) {
+      updateStatus('No users available to transfer to.');
+      audio.sfxUiCancel();
+      return;
+    }
+    itemManagementTargetUserIds = targetIds;
+    itemManagementTargetUserIndex = 0;
+    state.mode = 'itemManageTransferUser';
+    const firstLabel = state.peers.get(itemManagementTargetUserIds[0])?.nickname ?? 'Unknown user';
+    updateStatus(firstLabel);
+    audio.sfxUiBlip();
+    return;
+  }
+  if (control.type === 'cancel') {
+    state.mode = 'normal';
+    resetItemManagementState();
+    updateStatus('Cancelled.');
+    audio.sfxUiCancel();
+  }
+}
+
+/** Handles target-user selection for item transfer action. */
+function handleItemManageTransferUserModeInput(code: string, key: string): void {
+  if (!itemManagementSelectedItemId || itemManagementTargetUserIds.length === 0) {
+    state.mode = 'itemManageOptions';
+    return;
+  }
+  const control = handleListControlKey(code, key, itemManagementTargetUserIds, itemManagementTargetUserIndex, (userId) => {
+    return state.peers.get(userId)?.nickname ?? 'Unknown user';
+  });
+  if (control.type === 'move') {
+    itemManagementTargetUserIndex = control.index;
+    const label = state.peers.get(itemManagementTargetUserIds[itemManagementTargetUserIndex])?.nickname ?? 'Unknown user';
+    updateStatus(label);
+    audio.sfxUiBlip();
+    return;
+  }
+  if (control.type === 'select') {
+    const item = state.items.get(itemManagementSelectedItemId);
+    const targetId = itemManagementTargetUserIds[itemManagementTargetUserIndex];
+    if (!item || !targetId) {
+      state.mode = 'itemManageOptions';
+      audio.sfxUiCancel();
+      return;
+    }
+    const targetLabel = state.peers.get(targetId)?.nickname ?? 'Unknown user';
+    openItemManagementConfirm({
+      itemId: item.id,
+      action: 'transfer',
+      prompt: `Transfer ${itemLabel(item)} to ${targetLabel}?`,
+      targetId,
+    });
+    return;
+  }
+  if (control.type === 'cancel') {
+    state.mode = 'itemManageOptions';
+    updateStatus(itemManagementOptions[itemManagementOptionIndex]?.label ?? 'Item management.');
+    audio.sfxUiCancel();
+  }
+}
+
+/** Handles standardized yes/no confirmation for pending item-management actions. */
+function handleConfirmYesNoModeInput(code: string, key: string): void {
+  if (!itemManagementConfirmContext) {
+    state.mode = 'normal';
+    resetItemManagementState();
+    return;
+  }
+  const control = handleYesNoMenuInput(code, key, itemManagementConfirmIndex);
+  if (control.type === 'move') {
+    itemManagementConfirmIndex = control.index;
+    updateStatus(`${itemManagementConfirmContext.prompt} ${YES_NO_OPTIONS[itemManagementConfirmIndex].label}.`);
+    audio.sfxUiBlip();
+    return;
+  }
+  if (control.type === 'cancel') {
+    state.mode = 'itemManageOptions';
+    itemManagementConfirmContext = null;
+    updateStatus(itemManagementOptions[itemManagementOptionIndex]?.label ?? 'Item management.');
+    audio.sfxUiCancel();
+    return;
+  }
+  if (control.type === 'select') {
+    const selected = YES_NO_OPTIONS[itemManagementConfirmIndex];
+    const context = itemManagementConfirmContext;
+    itemManagementConfirmContext = null;
+    if (selected.id === 'no') {
+      state.mode = 'itemManageOptions';
+      updateStatus(itemManagementOptions[itemManagementOptionIndex]?.label ?? 'Cancelled.');
+      audio.sfxUiCancel();
+      return;
+    }
+    state.mode = 'normal';
+    if (context.action === 'delete') {
+      signaling.send({ type: 'item_delete', itemId: context.itemId });
+    } else if (context.action === 'transfer' && context.targetId) {
+      signaling.send({ type: 'item_transfer', itemId: context.itemId, targetId: context.targetId });
+    }
+    resetItemManagementState();
   }
 }
 
@@ -3214,6 +3466,9 @@ function setupInputHandlers(): void {
         listItems: (currentCode, currentKey) => handleListItemsModeInput(currentCode, currentKey),
         addItem: (currentCode, currentKey) => handleAddItemModeInput(currentCode, currentKey),
         selectItem: (currentCode, currentKey) => handleSelectItemModeInput(currentCode, currentKey),
+        itemManageOptions: (currentCode, currentKey) => handleItemManageOptionsModeInput(currentCode, currentKey),
+        itemManageTransferUser: (currentCode, currentKey) => handleItemManageTransferUserModeInput(currentCode, currentKey),
+        confirmYesNo: (currentCode, currentKey) => handleConfirmYesNoModeInput(currentCode, currentKey),
         adminMenu: (currentCode, currentKey) => handleAdminMenuModeInput(currentCode, currentKey),
         adminRoleList: (currentCode, currentKey) => handleAdminRoleListModeInput(currentCode, currentKey),
         adminRolePermissionList: (currentCode, currentKey) => handleAdminRolePermissionListModeInput(currentCode, currentKey),
