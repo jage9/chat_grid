@@ -11,7 +11,6 @@ const MIC_INPUT_GAIN_STORAGE_KEY = 'chatGridMicInputGain';
 const MASTER_VOLUME_STORAGE_KEY = 'chatGridMasterVolume';
 const PEER_LISTEN_GAINS_STORAGE_KEY = 'chatGridPeerListenGains';
 const NICKNAME_STORAGE_KEY = 'spatialChatNickname';
-const AUTH_SESSION_TOKEN_STORAGE_KEY = 'chatGridAuthSessionToken';
 const AUTH_USERNAME_STORAGE_KEY = 'chatGridAuthUsername';
 
 type DevicePreference = {
@@ -116,15 +115,17 @@ export class SettingsStore {
   }
 
   loadAuthSessionToken(): string {
-    return localStorage.getItem(AUTH_SESSION_TOKEN_STORAGE_KEY) || '';
+    // Session tokens are intentionally not persisted in browser storage.
+    // Remove any legacy stored token and force fresh auth on reload.
+    localStorage.removeItem('chatGridAuthSessionToken');
+    return '';
   }
 
   saveAuthSessionToken(token: string): void {
-    if (token) {
-      localStorage.setItem(AUTH_SESSION_TOKEN_STORAGE_KEY, token);
-      return;
-    }
-    localStorage.removeItem(AUTH_SESSION_TOKEN_STORAGE_KEY);
+    // Session tokens are intentionally not persisted in browser storage.
+    // Keep behavior explicit: always clear any legacy token slot.
+    void token;
+    localStorage.removeItem('chatGridAuthSessionToken');
   }
 
   loadAuthUsername(): string {
