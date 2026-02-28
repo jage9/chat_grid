@@ -238,9 +238,6 @@ export class ItemEmitRuntime {
       }
       const nextRates = resolveEmitRates(item);
       output.loopDelaySeconds = resolveEmitLoopDelaySeconds(item);
-      if (output.element.paused && output.element.ended) {
-        this.nextEmitStartAtMs.set(itemId, Date.now() + output.loopDelaySeconds * 1000);
-      }
       setElementPreservesPitch(output.element, nextRates.preservePitch);
       const nextPlaybackRate = nextRates.playbackRate;
       if (Math.abs(output.element.playbackRate - nextPlaybackRate) > 0.001) {

@@ -355,7 +355,8 @@ export function createItemPropertyEditor(deps: EditorDeps): {
 
     if (code === 'PageUp' || code === 'PageDown') {
       const length = deps.state.itemPropertyOptionValues.length;
-      const delta = code === 'PageUp' ? -10 : 10;
+      const jump = Math.min(10, Math.max(1, length - 1));
+      const delta = code === 'PageUp' ? -jump : jump;
       const nextIndex = (deps.state.itemPropertyOptionIndex + delta + length * 1000) % length;
       deps.state.itemPropertyOptionIndex = nextIndex;
       deps.updateStatus(deps.state.itemPropertyOptionValues[nextIndex]);
