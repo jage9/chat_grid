@@ -18,7 +18,7 @@ export function findNextIndexByInitial<T>(
   key: string,
   labelFor: (entry: T) => string,
 ): number {
-  if (entries.length === 0 || key.length !== 1 || !/[a-z]/i.test(key)) {
+  if (entries.length === 0 || key.length !== 1 || !/[a-z0-9]/i.test(key)) {
     return -1;
   }
   const target = key.toLowerCase();
