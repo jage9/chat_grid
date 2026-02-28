@@ -2833,7 +2833,7 @@ def run() -> None:
                             return False
 
             def prompt_promote_existing_admin() -> bool:
-                users = auth_service.list_users_for_admin_menu()
+                users = auth_service.list_users_for_admin()
                 if not users:
                     print("No existing users found; create a new admin instead.")
                     return False
@@ -2853,7 +2853,7 @@ def run() -> None:
                     except AuthError as exc:
                         print(f"Could not promote user: {exc}")
 
-            if auth_service.list_users_for_admin_menu():
+            if auth_service.list_users_for_admin():
                 print("No admin account found. Choose bootstrap mode:")
                 print("  1) Promote existing account to admin")
                 print("  2) Create new admin account")
