@@ -1,6 +1,12 @@
 {
   "sections": [
     {
+      "date": "February 28, 2026",
+      "items": [
+        "Added initial delay and loop delay for widgets, letting you do looped audio that has pauses."
+      ]
+    },
+    {
       "date": "February 27, 2026",
       "items": [
         "Added chat actions with /me.",
