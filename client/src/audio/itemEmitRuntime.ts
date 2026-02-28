@@ -20,6 +20,16 @@ type EmitOutput = {
   panner: StereoPannerNode | null;
 };
 
+type EmitResumeState = {
+  soundUrl: string;
+  savedAtMs: number;
+  currentTimeSeconds: number;
+  playbackRate: number;
+  loopDelaySeconds: number;
+  durationSeconds: number | null;
+  wasPlaying: boolean;
+};
+
 type EmitSpatialConfig = {
   range: number;
   directional: boolean;
@@ -75,6 +85,7 @@ function resolveEmitLoopDelaySeconds(item: WorldItem): number {
 
 export class ItemEmitRuntime {
   private readonly outputs = new Map<string, EmitOutput>();
+  private readonly resumeStateByItemId = new Map<string, EmitResumeState>();
   private readonly pendingEmitStarts = new Set<string>();
   private readonly nextEmitStartAtMs = new Map<string, number>();
   private readonly emitStartFailureCount = new Map<string, number>();
@@ -91,6 +102,20 @@ export class ItemEmitRuntime {
     const preserveSchedule = options?.preserveSchedule === true;
     const output = this.outputs.get(itemId);
     if (output) {
+      if (preserveSchedule) {
+        const duration = Number(output.element.duration);
+        this.resumeStateByItemId.set(itemId, {
+          soundUrl: output.soundUrl,
+          savedAtMs: Date.now(),
+          currentTimeSeconds: Number.isFinite(output.element.currentTime) ? Math.max(0, output.element.currentTime) : 0,
+          playbackRate: Number.isFinite(output.element.playbackRate) && output.element.playbackRate > 0 ? output.element.playbackRate : 1,
+          loopDelaySeconds: output.loopDelaySeconds,
+          durationSeconds: Number.isFinite(duration) && duration > 0 ? duration : null,
+          wasPlaying: !output.element.paused,
+        });
+      } else {
+        this.resumeStateByItemId.delete(itemId);
+      }
       output.element.pause();
       output.element.removeEventListener('ended', output.onEnded);
       output.element.src = '';
@@ -162,6 +187,7 @@ export class ItemEmitRuntime {
       validIds.add(item.id);
       const existing = this.outputs.get(item.id);
       if (existing && existing.soundUrl === soundUrl) {
+        this.resumeStateByItemId.delete(item.id);
         continue;
       }
       if (existing) {
@@ -196,6 +222,33 @@ export class ItemEmitRuntime {
         this.nextEmitStartAtMs.set(item.id, Date.now() + delaySeconds * 1000);
       };
       element.addEventListener('ended', onEnded);
+      const resumeState = this.resumeStateByItemId.get(item.id);
+      if (resumeState && resumeState.soundUrl === soundUrl) {
+        const nowMs = Date.now();
+        const elapsedSeconds = Math.max(0, (nowMs - resumeState.savedAtMs) / 1000);
+        const effectiveRate = resumeState.playbackRate > 0 ? resumeState.playbackRate : 1;
+        const durationSeconds = resumeState.durationSeconds;
+        if (durationSeconds && durationSeconds > 0) {
+          const cycleSeconds = durationSeconds + Math.max(0, resumeState.loopDelaySeconds);
+          const progressed = (resumeState.currentTimeSeconds + elapsedSeconds * effectiveRate) % cycleSeconds;
+          if (progressed < durationSeconds) {
+            const targetTime = Math.min(Math.max(0, progressed), Math.max(0, durationSeconds - 0.01));
+            const applySeek = () => {
+              try {
+                element.currentTime = targetTime;
+              } catch {
+                // Ignore seek failures before metadata is fully available.
+              }
+            };
+            applySeek();
+            element.addEventListener('loadedmetadata', applySeek, { once: true });
+            this.nextEmitStartAtMs.delete(item.id);
+          } else {
+            const delayRemainingSeconds = cycleSeconds - progressed;
+            this.nextEmitStartAtMs.set(item.id, nowMs + delayRemainingSeconds * 1000);
+          }
+        }
+      }
       const destination = this.audio.getOutputDestinationNode() ?? audioCtx.destination;
       if (this.audio.supportsStereoPanner()) {
         panner = audioCtx.createStereoPanner();
@@ -216,6 +269,7 @@ export class ItemEmitRuntime {
         gain,
         panner,
       });
+      this.resumeStateByItemId.delete(item.id);
       this.tryStartEmitPlayback(item.id, element);
     }
 
@@ -228,6 +282,11 @@ export class ItemEmitRuntime {
     for (const itemId of Array.from(this.nextEmitStartAtMs.keys())) {
       if (!seenItemIds.has(itemId)) {
         this.nextEmitStartAtMs.delete(itemId);
+      }
+    }
+    for (const itemId of Array.from(this.resumeStateByItemId.keys())) {
+      if (!seenItemIds.has(itemId)) {
+        this.resumeStateByItemId.delete(itemId);
       }
     }
   }
