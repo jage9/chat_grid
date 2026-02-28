@@ -3,6 +3,8 @@
     {
       "date": "February 27, 2026",
       "items": [
+        "Added chat actions with /me.",
+        "Added /version and /up commands for server status.",
         "Added user roles/permissions system.",
         "Clock item type now is an actual talking clock with optional alarm and top of hour announcement."
       ]
