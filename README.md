@@ -11,7 +11,7 @@ Chat Grid is designed to be run on a secure server with users connecting via a w
 ```bash
 cd server
 cp config.example.toml config.toml
-uv run python main.py
+uv run python main.py --allow-insecure-ws
 ```
 
 2) Start client
@@ -32,6 +32,7 @@ Notes:
 Common server overrides:
 - `uv run python main.py --config /path/to/config.toml`
 - `uv run python main.py --host 0.0.0.0 --port 9000`
+- `uv run python main.py --allow-insecure-ws` (local/dev without TLS)
 - `uv run python main.py --ssl-cert /path/fullchain.pem --ssl-key /path/privkey.pem`
 - `uv run python main.py --bootstrap-admin` (one-time admin creation)
 

@@ -16,6 +16,7 @@ Key options:
 - `tls.cert_file`, `tls.key_file`
 
 If `network.allow_insecure_ws = false`, TLS cert/key are required and server runs as `wss://`.
+For local/dev without TLS, either set `network.allow_insecure_ws = true` or pass `--allow-insecure-ws`.
 
 ## Run
 
@@ -31,5 +32,6 @@ python main.py --config config.toml
 
 ```bash
 python main.py --config config.toml --host 127.0.0.1 --port 8765
+python main.py --config config.toml --allow-insecure-ws
 python main.py --config config.toml --ssl-cert /path/cert.pem --ssl-key /path/key.pem
 ```

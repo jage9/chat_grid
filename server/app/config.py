@@ -19,7 +19,7 @@ class NetworkConfigSection(BaseModel):
     """Network transport and safety limits."""
 
     max_message_bytes: int = Field(default=2_000_000, gt=0)
-    allow_insecure_ws: bool = True
+    allow_insecure_ws: bool = False
 
 
 class TlsConfigSection(BaseModel):

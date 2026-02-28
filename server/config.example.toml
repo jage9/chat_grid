@@ -7,8 +7,8 @@ port = 8765
 [network]
 # Maximum inbound websocket message size in bytes.
 max_message_bytes = 2000000
-# If false, TLS cert and key are required and server runs as wss:// only.
-allow_insecure_ws = true
+# Secure-by-default: TLS is required unless you explicitly set this to true for local/dev.
+allow_insecure_ws = false
 
 [tls]
 # Required when allow_insecure_ws = false.
