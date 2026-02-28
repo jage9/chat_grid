@@ -53,6 +53,10 @@ def _load_item_type_plugins() -> list[ItemTypePlugin]:
             continue
         if entry.name.startswith("__"):
             continue
+        plugin_file = entry / "plugin.py"
+        if not plugin_file.exists():
+            # Ignore stale/partial directories (for example, leftover cache folders).
+            continue
         plugin_module = import_module(f"{__package__}.types.{entry.name}.plugin")
         raw_plugin = getattr(plugin_module, "ITEM_TYPE_PLUGIN", None)
         if not isinstance(raw_plugin, dict):
