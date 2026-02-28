@@ -113,6 +113,11 @@ GLOBAL_ITEM_PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "tooltip": "Global emitted sound tempo percent. 50 is normal.",
         "range": {"min": 0, "max": 100, "step": 0.1},
     },
+    "emitInitialDelay": {
+        "valueType": "number",
+        "tooltip": "Delay in seconds before emitted audio starts after this sound is enabled.",
+        "range": {"min": 0, "max": 300, "step": 0.1},
+    },
     "emitLoopDelay": {
         "valueType": "number",
         "tooltip": "Delay in seconds between each emitted playback.",
@@ -159,5 +164,6 @@ def get_item_global_properties(item_type: ItemType) -> dict[str, str | int | boo
         "directional": bool(definition.directional),
         "emitSoundSpeed": 50,
         "emitSoundTempo": 50,
+        "emitInitialDelay": 0,
         "emitLoopDelay": 0,
     }

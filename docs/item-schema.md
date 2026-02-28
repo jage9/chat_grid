@@ -161,6 +161,7 @@
   "emitVolume": 100,
   "emitSoundSpeed": 50,
   "emitSoundTempo": 50,
+  "emitInitialDelay": 0,
   "emitLoopDelay": 0,
   "emitEffect": "off",
   "emitEffectValue": 50,
@@ -177,6 +178,7 @@
 - `emitVolume`: integer, range `0-100`, default `100`.
 - `emitSoundSpeed`: integer, range `0-100`, default `50`; controls emitted sound speed/pitch (`0=0.5x`, `50=1.0x`, `100=2.0x`).
 - `emitSoundTempo`: integer, range `0-100`, default `50`; controls emitted sound tempo (`0=0.5x`, `50=1.0x`, `100=2.0x`).
+- `emitInitialDelay`: number, range `0-300`, precision `0.1`, default `0`; delay in seconds before emitted audio starts after enable.
 - `emitLoopDelay`: number, range `0-300`, precision `0.1`, default `0`; delay in seconds between each emitted playback.
 - `emitEffect`: one of `reverb | echo | flanger | high_pass | low_pass | off`, default `off`.
 - `emitEffectValue`: number, range `0-100`, precision `0.1`, default `50`.

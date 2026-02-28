@@ -57,6 +57,14 @@ def validate_update(item: WorldItem, next_params: dict) -> dict:
     next_params["emitSoundTempo"] = round(emit_tempo, 1)
 
     try:
+        emit_initial_delay = float(next_params.get("emitInitialDelay", item.params.get("emitInitialDelay", 0)))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("emitInitialDelay must be a number between 0 and 300.") from exc
+    if not (0 <= emit_initial_delay <= 300):
+        raise ValueError("emitInitialDelay must be between 0 and 300.")
+    next_params["emitInitialDelay"] = round(emit_initial_delay, 1)
+
+    try:
         emit_loop_delay = float(next_params.get("emitLoopDelay", item.params.get("emitLoopDelay", 0)))
     except (TypeError, ValueError) as exc:
         raise ValueError("emitLoopDelay must be a number between 0 and 300.") from exc

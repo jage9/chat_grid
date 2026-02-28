@@ -15,6 +15,7 @@ type EmitOutput = {
   effectRuntime: EffectRuntime | null;
   effect: EffectId;
   effectValue: number;
+  initialDelaySeconds: number;
   loopDelaySeconds: number;
   gain: GainNode;
   panner: StereoPannerNode | null;
@@ -79,6 +80,14 @@ function resolveEmitRates(item: WorldItem): { playbackRate: number; preservePitc
 function resolveEmitLoopDelaySeconds(item: WorldItem): number {
   const globals = getItemTypeGlobalProperties(item.type);
   const delaySeconds = Number(item.params.emitLoopDelay ?? globals.emitLoopDelay ?? 0);
+  const clamped = Number.isFinite(delaySeconds) ? Math.max(0, Math.min(300, delaySeconds)) : 0;
+  return Math.round(clamped * 10) / 10;
+}
+
+/** Resolves the optional emit initial delay in seconds from item params. */
+function resolveEmitInitialDelaySeconds(item: WorldItem): number {
+  const globals = getItemTypeGlobalProperties(item.type);
+  const delaySeconds = Number(item.params.emitInitialDelay ?? globals.emitInitialDelay ?? 0);
   const clamped = Number.isFinite(delaySeconds) ? Math.max(0, Math.min(300, delaySeconds)) : 0;
   return Math.round(clamped * 10) / 10;
 }
@@ -216,6 +225,7 @@ export class ItemEmitRuntime {
       const initialRates = resolveEmitRates(item);
       setElementPreservesPitch(element, initialRates.preservePitch);
       element.playbackRate = initialRates.playbackRate;
+      const initialDelaySeconds = resolveEmitInitialDelaySeconds(item);
       const loopDelaySeconds = resolveEmitLoopDelaySeconds(item);
       const onEnded = () => {
         const delaySeconds = this.outputs.get(item.id)?.loopDelaySeconds ?? 0;
@@ -314,10 +324,14 @@ export class ItemEmitRuntime {
         effectRuntime,
         effect,
         effectValue,
+        initialDelaySeconds,
         loopDelaySeconds,
         gain,
         panner,
       });
+      if (!resumeState && !this.nextEmitStartAtMs.has(item.id) && initialDelaySeconds > 0) {
+        this.nextEmitStartAtMs.set(item.id, Date.now() + initialDelaySeconds * 1000);
+      }
       this.resumeStateByItemId.delete(item.id);
       this.tryStartEmitPlayback(item.id, element);
     }
@@ -361,6 +375,7 @@ export class ItemEmitRuntime {
         output.effectValue = effectValue;
       }
       const nextRates = resolveEmitRates(item);
+      output.initialDelaySeconds = resolveEmitInitialDelaySeconds(item);
       output.loopDelaySeconds = resolveEmitLoopDelaySeconds(item);
       setElementPreservesPitch(output.element, nextRates.preservePitch);
       const nextPlaybackRate = nextRates.playbackRate;
