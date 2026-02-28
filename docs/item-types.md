@@ -154,6 +154,7 @@ This is behavior-focused documentation for item types and their defaults.
   - `directional=false`
   - `emitSoundSpeed=50`
   - `emitSoundTempo=50`
+  - `emitLoopDelay=0`
 
 ### Use
 - `use` toggles `enabled` on/off and plays `useSound` when configured.
