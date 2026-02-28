@@ -2796,34 +2796,83 @@ def run() -> None:
                 "Password rules: "
                 f"{auth_service.password_min_length}-{auth_service.password_max_length} chars."
             )
-            while True:
-                username = input("Admin username: ").strip()
-                normalized_username = auth_service._normalize_username(username)
-                try:
-                    auth_service._validate_username(normalized_username)
-                except AuthError as exc:
-                    print(f"Invalid username: {exc}")
-                    continue
+            if auth_service.has_admin():
+                print("An admin account already exists.")
+                return
 
-                password = getpass("Admin password: ")
-                try:
-                    auth_service._validate_password(password)
-                except AuthError as exc:
-                    print(f"Invalid password: {exc}")
-                    continue
+            def prompt_create_admin() -> bool:
+                while True:
+                    username = input("Admin username: ").strip()
+                    normalized_username = auth_service._normalize_username(username)
+                    try:
+                        auth_service._validate_username(normalized_username)
+                    except AuthError as exc:
+                        print(f"Invalid username: {exc}")
+                        continue
 
-                password_confirm = getpass("Re-enter admin password: ")
-                if password != password_confirm:
-                    print("Passwords do not match.")
-                    continue
+                    password = getpass("Admin password: ")
+                    try:
+                        auth_service._validate_password(password)
+                    except AuthError as exc:
+                        print(f"Invalid password: {exc}")
+                        continue
 
-                email = input("Admin email (optional): ").strip() or None
-                try:
-                    created = auth_service.bootstrap_admin(normalized_username, password, email=email)
-                    print(f"Admin created: {created.username}")
-                    break
-                except AuthError as exc:
-                    print(f"Could not create admin: {exc}")
+                    password_confirm = getpass("Re-enter admin password: ")
+                    if password != password_confirm:
+                        print("Passwords do not match.")
+                        continue
+
+                    email = input("Admin email (optional): ").strip() or None
+                    try:
+                        created = auth_service.bootstrap_admin(normalized_username, password, email=email)
+                        print(f"Admin created: {created.username}")
+                        return True
+                    except AuthError as exc:
+                        print(f"Could not create admin: {exc}")
+                        if auth_service.has_admin():
+                            return False
+
+            def prompt_promote_existing_admin() -> bool:
+                users = auth_service.list_users_for_admin_menu()
+                if not users:
+                    print("No existing users found; create a new admin instead.")
+                    return False
+                print("Existing users:")
+                for user in users:
+                    print(f"  - {user['username']} ({user['role']}, {user['status']})")
+                while True:
+                    username = input("Existing username to promote: ").strip()
+                    if not username:
+                        print("Username is required.")
+                        continue
+                    try:
+                        normalized = auth_service._normalize_username(username)
+                        auth_service.set_user_role(normalized, "admin")
+                        print(f"Admin promoted: {normalized}")
+                        return True
+                    except AuthError as exc:
+                        print(f"Could not promote user: {exc}")
+
+            if auth_service.list_users_for_admin_menu():
+                print("No admin account found. Choose bootstrap mode:")
+                print("  1) Promote existing account to admin")
+                print("  2) Create new admin account")
+                while True:
+                    choice = input("Select [1/2]: ").strip()
+                    if choice == "1":
+                        if prompt_promote_existing_admin():
+                            break
+                        print("Falling back to new admin creation.")
+                        if prompt_create_admin():
+                            break
+                        continue
+                    if choice == "2":
+                        if prompt_create_admin():
+                            break
+                        continue
+                    print("Please select 1 or 2.")
+            else:
+                prompt_create_admin()
         finally:
             auth_service.close()
         return
