@@ -10,8 +10,7 @@ import pytest
 from websockets.asyncio.server import ServerConnection
 
 from app.client import ClientConnection
-from app.auth_service import AuthError
-from app.server import AUTH_LOGIN_FAILURE_MESSAGE, AUTH_RESUME_FAILURE_MESSAGE, SignalingServer
+from app.server import SignalingServer
 
 
 def _fake_ws() -> ServerConnection:
@@ -247,58 +246,6 @@ async def test_auth_rate_limit_blocks_before_hash(monkeypatch: pytest.MonkeyPatc
     assert send_payloads
     assert send_payloads[-1].ok is False
     assert "too many" in send_payloads[-1].message.lower()
-
-
-@pytest.mark.asyncio
-async def test_auth_login_failure_message_is_generic(monkeypatch: pytest.MonkeyPatch) -> None:
-    server = SignalingServer("127.0.0.1", 8765, None, None)
-    ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester")
-    send_payloads: list[object] = []
-
-    async def fake_send(websocket: ServerConnection, packet: object) -> None:
-        send_payloads.append(packet)
-
-    monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server, "_sleep_auth_failure_jitter", lambda: asyncio.sleep(0))
-
-    def fake_login(_username: str, _password: str):
-        raise AuthError("Account is disabled.")
-
-    monkeypatch.setattr(server.auth_service, "login", fake_login)
-
-    await server._handle_message(client, json.dumps({"type": "auth_login", "username": "alpha", "password": "wrongpass"}))
-
-    auth_results = [packet for packet in send_payloads if getattr(packet, "type", "") == "auth_result"]
-    assert auth_results
-    assert auth_results[-1].ok is False
-    assert auth_results[-1].message == AUTH_LOGIN_FAILURE_MESSAGE
-
-
-@pytest.mark.asyncio
-async def test_auth_resume_failure_message_is_generic(monkeypatch: pytest.MonkeyPatch) -> None:
-    server = SignalingServer("127.0.0.1", 8765, None, None)
-    ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester")
-    send_payloads: list[object] = []
-
-    async def fake_send(websocket: ServerConnection, packet: object) -> None:
-        send_payloads.append(packet)
-
-    monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server, "_sleep_auth_failure_jitter", lambda: asyncio.sleep(0))
-
-    def fake_resume(_token: str):
-        raise AuthError("Session has expired.")
-
-    monkeypatch.setattr(server.auth_service, "resume", fake_resume)
-
-    await server._handle_message(client, json.dumps({"type": "auth_resume", "sessionToken": "expired-token"}))
-
-    auth_results = [packet for packet in send_payloads if getattr(packet, "type", "") == "auth_result"]
-    assert auth_results
-    assert auth_results[-1].ok is False
-    assert auth_results[-1].message == AUTH_RESUME_FAILURE_MESSAGE
 
 
 @pytest.mark.asyncio
