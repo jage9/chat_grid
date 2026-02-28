@@ -87,20 +87,24 @@ export class ItemEmitRuntime {
     private readonly getSpatialConfig: (item: WorldItem) => EmitSpatialConfig,
   ) {}
 
-  cleanup(itemId: string): void {
+  cleanup(itemId: string, options?: { preserveSchedule?: boolean }): void {
+    const preserveSchedule = options?.preserveSchedule === true;
     const output = this.outputs.get(itemId);
-    if (!output) return;
-    output.element.pause();
-    output.element.removeEventListener('ended', output.onEnded);
-    output.element.src = '';
-    output.source.disconnect();
-    output.effectInput.disconnect();
-    disconnectEffectRuntime(output.effectRuntime);
-    output.gain.disconnect();
-    output.panner?.disconnect();
-    this.outputs.delete(itemId);
+    if (output) {
+      output.element.pause();
+      output.element.removeEventListener('ended', output.onEnded);
+      output.element.src = '';
+      output.source.disconnect();
+      output.effectInput.disconnect();
+      disconnectEffectRuntime(output.effectRuntime);
+      output.gain.disconnect();
+      output.panner?.disconnect();
+      this.outputs.delete(itemId);
+    }
     this.pendingEmitStarts.delete(itemId);
-    this.nextEmitStartAtMs.delete(itemId);
+    if (!preserveSchedule) {
+      this.nextEmitStartAtMs.delete(itemId);
+    }
     this.emitStartFailureCount.delete(itemId);
   }
 
@@ -139,14 +143,20 @@ export class ItemEmitRuntime {
     }
     const listeners = this.listenerPositions;
     const validIds = new Set<string>();
+    const seenItemIds = new Set<string>();
     let audioCtx = this.audio.context;
 
     for (const item of items) {
+      seenItemIds.add(item.id);
       const emitSound = String(item.params.emitSound ?? item.emitSound ?? '').trim();
       const enabled = item.params.enabled !== false;
       const soundUrl = enabled ? this.resolveSoundUrl(emitSound) : '';
-      if (!soundUrl || !this.shouldKeepRuntime(item, listeners, this.outputs.has(item.id))) {
+      if (!soundUrl) {
         this.cleanup(item.id);
+        continue;
+      }
+      if (!this.shouldKeepRuntime(item, listeners, this.outputs.has(item.id))) {
+        this.cleanup(item.id, { preserveSchedule: true });
         continue;
       }
       validIds.add(item.id);
@@ -212,6 +222,12 @@ export class ItemEmitRuntime {
     for (const itemId of Array.from(this.outputs.keys())) {
       if (!validIds.has(itemId)) {
         this.cleanup(itemId);
+      }
+    }
+
+    for (const itemId of Array.from(this.nextEmitStartAtMs.keys())) {
+      if (!seenItemIds.has(itemId)) {
+        this.nextEmitStartAtMs.delete(itemId);
       }
     }
   }
