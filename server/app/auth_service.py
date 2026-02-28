@@ -307,6 +307,8 @@ class AuthService:
         """Replace one role's permission assignment with validated keys."""
 
         normalized_role = self._normalize_role_name(role_name)
+        if normalized_role == "admin":
+            raise AuthError("Admin role permissions are locked on.")
         role_row = self._db_fetchone("SELECT id, name FROM roles WHERE name = ?", (normalized_role,))
         if role_row is None:
             raise AuthError("Role not found.")

@@ -2825,6 +2825,11 @@ function handleAdminRolePermissionListModeInput(code: string, key: string): void
       audio.sfxUiBlip();
       return;
     }
+    if (role.name === 'admin') {
+      updateStatus('Admin role permissions are locked on.');
+      audio.sfxUiCancel();
+      return;
+    }
     const nextPermissions = new Set(role.permissions);
     if (nextPermissions.has(value)) {
       nextPermissions.delete(value);
