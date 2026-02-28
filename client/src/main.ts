@@ -1551,7 +1551,7 @@ async function handleAuthResult(message: Extract<IncomingMessage, { type: 'auth_
   dom.authPassword.value = '';
   dom.registerPassword.value = '';
   dom.registerPasswordConfirm.value = '';
-  playSample(SYSTEM_SOUND_URLS.logon, 1);
+  void audio.playSample(SYSTEM_SOUND_URLS.logon, 1);
   setConnectionStatus('Authenticated. Joining world...');
 }
 
