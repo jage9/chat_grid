@@ -111,6 +111,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 
 - Server is authoritative for all action validation and normalization.
 - Server is authoritative for movement acceptance (bounds + rate/delta checks).
+- Server enforces websocket Origin allowlist at handshake (`network.allowed_origins`).
 - Server persists account state (last nickname + last position) and restores spawn from that state on auth login/resume.
 - Server also supports websocket handshake cookie resume:
   - reads `chgrid_session_token` from websocket `Cookie` header

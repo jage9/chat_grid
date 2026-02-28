@@ -9,6 +9,10 @@ port = 8765
 max_message_bytes = 2000000
 # Secure-by-default: TLS is required unless you explicitly set this to true for local/dev.
 allow_insecure_ws = false
+# Allowed websocket request Origin values.
+# Production: list your deployed https web origins explicitly.
+# Local/dev: when allow_insecure_ws=true and this list is empty, localhost defaults are used.
+allowed_origins = ["https://bestmidi.com", "https://www.bestmidi.com"]
 
 [tls]
 # Required when allow_insecure_ws = false.

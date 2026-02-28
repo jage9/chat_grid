@@ -13,10 +13,13 @@ Key options:
 - `server.bind_ip`, `server.port`
 - `network.max_message_bytes`
 - `network.allow_insecure_ws`
+- `network.allowed_origins`
 - `tls.cert_file`, `tls.key_file`
 
 If `network.allow_insecure_ws = false`, TLS cert/key are required and server runs as `wss://`.
 For local/dev without TLS, either set `network.allow_insecure_ws = true` or pass `--allow-insecure-ws`.
+When insecure ws is disabled, `network.allowed_origins` must list your deployed `https://` origins.
+When insecure ws is enabled and `network.allowed_origins` is empty, localhost dev origins are allowed automatically.
 
 ## Run
 

@@ -20,6 +20,7 @@ class NetworkConfigSection(BaseModel):
 
     max_message_bytes: int = Field(default=2_000_000, gt=0)
     allow_insecure_ws: bool = False
+    allowed_origins: list[str] = Field(default_factory=list)
 
 
 class TlsConfigSection(BaseModel):
