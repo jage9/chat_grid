@@ -91,7 +91,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       deps.sfxUiBlip();
       return;
     }
-    if (code === 'ArrowLeft' || code === 'ArrowRight') {
+    if (code === 'ArrowLeft' || code === 'ArrowRight' || code === 'PageUp' || code === 'PageDown') {
       const selectedKey = deps.state.itemPropertyKeys[deps.state.itemPropertyIndex];
       if (!deps.isItemPropertyEditable(item, selectedKey)) {
         deps.updateStatus(`${deps.itemPropertyLabel(selectedKey)} is not editable.`);
@@ -105,7 +105,15 @@ export function createItemPropertyEditor(deps: EditorDeps): {
           0,
           options.findIndex((option) => option.toLowerCase() === currentRaw),
         );
-        const delta = code === 'ArrowRight' ? 1 : -1;
+        const pageJump = Math.min(10, Math.max(1, options.length - 1));
+        const delta =
+          code === 'ArrowRight'
+            ? 1
+            : code === 'ArrowLeft'
+              ? -1
+              : code === 'PageDown'
+                ? pageJump
+                : -pageJump;
         const nextIndex = (currentIndex + delta + options.length) % options.length;
         const nextValue = options[nextIndex];
         deps.suppressItemPropertyEchoMs(600);
@@ -137,7 +145,8 @@ export function createItemPropertyEditor(deps: EditorDeps): {
           : Number.isFinite(min)
             ? min
             : 0;
-        const delta = code === 'ArrowRight' ? step : -step;
+        const multiplier = code === 'PageUp' || code === 'PageDown' ? 10 : 1;
+        const delta = (code === 'ArrowRight' || code === 'PageUp' ? step : -step) * multiplier;
         const anchor = Number.isFinite(min) ? min : 0;
         const attempted = snapNumberToStep(currentValue + delta, step, anchor);
         let nextValue = attempted;

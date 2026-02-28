@@ -74,6 +74,7 @@ This document is the authoritative keymap for the client.
 Applies to effect select, user/item list modes, item selection, item property list, and property option select.
 
 - `ArrowUp` / `ArrowDown`: Move selection
+- `PageUp` / `PageDown` in item property list: Jump 10 values for left/right-editable option fields
 - `PageUp` / `PageDown` in item property option select: Jump 10 options backward/forward
 - `ArrowLeft` / `ArrowRight` in user list: Lower/raise selected user listen volume (`0.5..4.0`)
 - `Enter`: Confirm selection
