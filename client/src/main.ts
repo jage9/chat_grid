@@ -883,6 +883,9 @@ function classifySystemMessageSound(message: string): keyof typeof SYSTEM_SOUND_
   if (normalized.includes(' is now known as ') || normalized.startsWith('you are now known as ')) {
     return 'notify';
   }
+  if (normalized.startsWith('server rebooting in ') || normalized === 'server reboot already scheduled.') {
+    return 'notify';
+  }
   return null;
 }
 
