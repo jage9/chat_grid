@@ -393,6 +393,63 @@ async def test_item_transfer_updates_item_owner(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.asyncio
+async def test_item_transfer_allows_self_target_for_transfer_any(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    owner_ws = _fake_ws()
+    actor_ws = _fake_ws()
+    owner = ClientConnection(
+        websocket=owner_ws,
+        id="u1",
+        nickname="owner",
+        authenticated=True,
+        user_id="1",
+        username="owner_user",
+        permissions=set(),
+        x=5,
+        y=6,
+    )
+    actor = ClientConnection(
+        websocket=actor_ws,
+        id="u3",
+        nickname="actor",
+        authenticated=True,
+        user_id="3",
+        username="actor_user",
+        permissions={"item.transfer.any"},
+        x=5,
+        y=6,
+    )
+    server.clients[owner_ws] = owner
+    server.clients[actor_ws] = actor
+    item = server.item_service.default_item(owner, "dice")
+    item.x = actor.x
+    item.y = actor.y
+    server.item_service.add_item(item)
+
+    send_payloads: list[object] = []
+    broadcasted_items: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast_item(broadcast_item: object) -> None:
+        broadcasted_items.append(broadcast_item)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+
+    await server._handle_message(actor, json.dumps({"type": "item_transfer", "itemId": item.id, "targetId": actor.id}))
+
+    assert item.createdBy == actor.user_id
+    assert item.createdByName == actor.username
+    assert broadcasted_items
+    result = send_payloads[-1]
+    assert result.type == "item_action_result"
+    assert result.ok is True
+    assert result.action == "transfer"
+
+
+@pytest.mark.asyncio
 async def test_item_delete_sends_others_notification(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     owner_ws = _fake_ws()

@@ -2506,9 +2506,6 @@ class SignalingServer:
             if not target or not target.authenticated or not target.user_id:
                 await self._send_item_result(client, False, "transfer", "Target user is not available.", item.id)
                 return
-            if target.id == client.id:
-                await self._send_item_result(client, False, "transfer", "Cannot transfer an item to yourself.", item.id)
-                return
             if item.createdBy == target.user_id:
                 await self._send_item_result(client, False, "transfer", "Item already belongs to that user.", item.id)
                 return
