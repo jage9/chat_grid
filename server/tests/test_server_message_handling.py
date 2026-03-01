@@ -361,6 +361,7 @@ async def test_item_transfer_updates_item_owner(monkeypatch: pytest.MonkeyPatch)
 
     send_payloads: list[object] = []
     broadcasted_items: list[object] = []
+    broadcast_payloads: list[object] = []
 
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
         send_payloads.append(packet)
@@ -368,8 +369,12 @@ async def test_item_transfer_updates_item_owner(monkeypatch: pytest.MonkeyPatch)
     async def fake_broadcast_item(broadcast_item: object) -> None:
         broadcasted_items.append(broadcast_item)
 
+    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+        broadcast_payloads.append(packet)
+
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
     await server._handle_message(owner, json.dumps({"type": "item_transfer", "itemId": item.id, "targetId": target.id}))
 
@@ -381,6 +386,67 @@ async def test_item_transfer_updates_item_owner(monkeypatch: pytest.MonkeyPatch)
     assert result.type == "item_action_result"
     assert result.ok is True
     assert result.action == "transfer"
+    assert "you transferred" in result.message.lower()
+    assert broadcast_payloads
+    assert getattr(broadcast_payloads[-1], "type", "") == "chat_message"
+    assert "owner transferred" in getattr(broadcast_payloads[-1], "message", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_item_delete_sends_others_notification(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    owner_ws = _fake_ws()
+    watcher_ws = _fake_ws()
+    owner = ClientConnection(
+        websocket=owner_ws,
+        id="u1",
+        nickname="owner",
+        authenticated=True,
+        user_id="1",
+        username="owner_user",
+        permissions={"item.delete.own"},
+        x=5,
+        y=6,
+    )
+    watcher = ClientConnection(
+        websocket=watcher_ws,
+        id="u2",
+        nickname="watcher",
+        authenticated=True,
+        user_id="2",
+        username="watcher_user",
+        permissions=set(),
+        x=5,
+        y=6,
+    )
+    server.clients[owner_ws] = owner
+    server.clients[watcher_ws] = watcher
+    item = server.item_service.default_item(owner, "dice")
+    item.x = owner.x
+    item.y = owner.y
+    server.item_service.add_item(item)
+
+    send_payloads: list[object] = []
+    broadcast_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast(packet: object, exclude: ServerConnection | None = None) -> None:
+        broadcast_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+
+    await server._handle_message(owner, json.dumps({"type": "item_delete", "itemId": item.id}))
+
+    result_packets = [packet for packet in send_payloads if getattr(packet, "type", "") == "item_action_result"]
+    assert result_packets
+    assert result_packets[-1].ok is True
+    assert "you deleted" in result_packets[-1].message.lower()
+    chat_packets = [packet for packet in broadcast_payloads if getattr(packet, "type", "") == "chat_message"]
+    assert chat_packets
+    assert "owner deleted" in getattr(chat_packets[-1], "message", "").lower()
 
 
 @pytest.mark.asyncio

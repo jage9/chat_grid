@@ -2474,7 +2474,16 @@ class SignalingServer:
             self.item_last_use_ms.pop(item.id, None)
             await self._broadcast(ItemRemovePacket(type="item_remove", itemId=item.id))
             self._request_state_save()
-            await self._send_item_result(client, True, "delete", f"Deleted {item.title}.", item.id)
+            item_text = f"{item.title} ({self._item_type_label(item)})"
+            await self._broadcast(
+                BroadcastChatMessagePacket(
+                    type="chat_message",
+                    message=f"{client.nickname} deleted {item_text}.",
+                    system=True,
+                ),
+                exclude=client.websocket,
+            )
+            await self._send_item_result(client, True, "delete", f"You deleted {item_text}.", item.id)
             return
 
         if isinstance(packet, ItemTransferPacket):
@@ -2512,7 +2521,22 @@ class SignalingServer:
             item.version += 1
             await self._broadcast_item(item)
             self._request_state_save()
-            await self._send_item_result(client, True, "transfer", f"Transferred {item.title} to {target.nickname}.", item.id)
+            item_text = f"{item.title} ({self._item_type_label(item)})"
+            await self._broadcast(
+                BroadcastChatMessagePacket(
+                    type="chat_message",
+                    message=f"{client.nickname} transferred {item_text} to {target.nickname}.",
+                    system=True,
+                ),
+                exclude=client.websocket,
+            )
+            await self._send_item_result(
+                client,
+                True,
+                "transfer",
+                f"You transferred {item_text} to {target.nickname}.",
+                item.id,
+            )
             return
 
         if isinstance(packet, ItemUsePacket):
