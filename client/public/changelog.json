@@ -3,6 +3,7 @@
     {
       "date": "February 28, 2026",
       "items": [
+        "Added Item Management menu with z, to transfer items or delete them. Shift+D is gone now.",
         "Added initial delay and loop delay for widgets, letting you do looped audio that has pauses."
       ]
     },

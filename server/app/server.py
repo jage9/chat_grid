@@ -2094,6 +2094,13 @@ class SignalingServer:
             await self._activate_authenticated_client(client)
             return
 
+        if isinstance(packet, PingPacket):
+            await self._send(
+                client.websocket,
+                PongPacket(type="pong", clientSentAt=packet.clientSentAt),
+            )
+            return
+
         if not client.world_ready:
             PACKET_LOGGER.info("ignoring pre-ready packet id=%s type=%s", client.id, packet.type)
             return
@@ -2329,13 +2336,6 @@ class SignalingServer:
                     senderNickname=client.nickname,
                     system=False,
                 )
-            )
-            return
-
-        if isinstance(packet, PingPacket):
-            await self._send(
-                client.websocket,
-                PongPacket(type="pong", clientSentAt=packet.clientSentAt),
             )
             return
 

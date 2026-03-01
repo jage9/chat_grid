@@ -315,6 +315,34 @@ async def test_auth_login_defers_activation_until_welcome_ready(monkeypatch: pyt
 
 
 @pytest.mark.asyncio
+async def test_ping_works_before_welcome_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    username = f"ping_{uuid.uuid4().hex[:8]}"
+    server.auth_service.register(username, "password99")
+    ws = _fake_ws()
+    client = ClientConnection(websocket=ws, id="u1", nickname="tester")
+
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "auth_login", "username": username, "password": "password99"}),
+    )
+    assert client.world_ready is False
+
+    await server._handle_message(client, json.dumps({"type": "ping", "clientSentAt": -1}))
+
+    pong_packets = [packet for packet in send_payloads if getattr(packet, "type", "") == "pong"]
+    assert pong_packets
+    assert pong_packets[-1].clientSentAt == -1
+
+
+@pytest.mark.asyncio
 async def test_auth_resume_failure_message_is_generic(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
