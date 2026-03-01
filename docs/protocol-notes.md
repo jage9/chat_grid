@@ -28,7 +28,8 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `chat_message`: player chat.
 - `ping`: latency measurement.
 - `item_add`, `item_pickup`, `item_drop`, `item_delete`, `item_use`, `item_update`: item actions.
-- `item_transfer`: transfer item ownership to another connected user.
+- `item_transfer_targets`: request transfer target accounts for one item (includes online + offline active users, excluding current owner).
+- `item_transfer`: transfer item ownership to another account (supports `targetUserId`; `targetId` remains accepted for compatibility).
 - `item_secondary_use`: trigger type-specific secondary action when implemented.
 - `item_piano_note`: realtime piano note on/off for active piano use mode.
 - `item_piano_recording`: piano record/playback control (`toggle_record`, `playback`, `stop_playback`).
@@ -52,6 +53,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_upsert`: full item replacement after mutation.
 - `item_remove`: item deletion.
 - `item_action_result`: action success/failure and user-facing message.
+- `item_transfer_targets`: transfer target account list for one item.
 - `item_use_sound`: spatial one-shot sound on successful item use (if `useSound` configured).
 - `item_clock_announce`: ordered list of clock speech samples to play sequentially as spatial audio.
 - `item_piano_note`: broadcast piano note on/off with resolved instrument/envelope/spatial params.
@@ -64,6 +66,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_action_result` messages are intended for direct screen-reader/user status feedback.
   - `action` includes: `add`, `pickup`, `drop`, `delete`, `transfer`, `use`, `secondary_use`, `update`
 - Successful `item_pickup` and `item_drop` also emit system chat lines to other users in the room.
+- Item transfer ownership is account-based; target accounts do not need to be currently connected.
 - Piano runtime control no longer depends on parsing `item_action_result.message` text.
 - `item_piano_status` carries machine-readable piano events (`use_mode_entered`, record/playback transitions).
 - `item_use_sound` contains absolute item world coordinates (`x`, `y`) and sound path.

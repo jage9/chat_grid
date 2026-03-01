@@ -224,7 +224,13 @@ type ItemManagementConfirmContext = {
   itemId: string;
   action: ItemManagementAction;
   prompt: string;
-  targetId?: string;
+  targetUserId?: string;
+};
+
+type ItemTransferTarget = {
+  userId: string;
+  username: string;
+  online: boolean;
 };
 
 /** Builds linearized help-view lines from sectioned help content. */
@@ -341,8 +347,8 @@ let adminDeleteConfirmIndex = 0;
 let itemManagementSelectedItemId: string | null = null;
 let itemManagementOptions: ItemManagementOption[] = [];
 let itemManagementOptionIndex = 0;
-let itemManagementTargetUserIds: string[] = [];
 let itemManagementTargetUserIndex = 0;
+let itemManagementTransferTargets: ItemTransferTarget[] = [];
 let itemManagementConfirmIndex = 0;
 let itemManagementConfirmContext: ItemManagementConfirmContext | null = null;
 let activeTeleport:
@@ -1066,10 +1072,9 @@ function itemManagementOptionsFor(item: WorldItem): ItemManagementOption[] {
   return options;
 }
 
-/** Resolves transfer-target label for either local player id or a remote peer id. */
-function transferTargetLabel(userPeerId: string): string {
-  if (userPeerId === state.player.id) return state.player.nickname || 'Unknown user';
-  return state.peers.get(userPeerId)?.nickname ?? 'Unknown user';
+/** Resolves spoken label for one transfer target entry. */
+function transferTargetLabel(target: ItemTransferTarget): string {
+  return target.online ? `${target.username}, online` : `${target.username}, offline`;
 }
 
 /** Opens item-management options for one selected item. */
@@ -1102,7 +1107,7 @@ function resetItemManagementState(): void {
   itemManagementSelectedItemId = null;
   itemManagementOptions = [];
   itemManagementOptionIndex = 0;
-  itemManagementTargetUserIds = [];
+  itemManagementTransferTargets = [];
   itemManagementTargetUserIndex = 0;
   itemManagementConfirmIndex = 0;
   itemManagementConfirmContext = null;
@@ -1786,6 +1791,24 @@ function handleAdminUsersList(message: Extract<IncomingMessage, { type: 'admin_u
   audio.sfxUiBlip();
 }
 
+/** Handles server transfer-target list response for item-management transfer flow. */
+function handleItemTransferTargets(message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>): void {
+  if (itemManagementSelectedItemId !== message.itemId) return;
+  itemManagementTransferTargets = [...message.targets].sort((a, b) =>
+    a.username.localeCompare(b.username, undefined, { sensitivity: 'base' }),
+  );
+  if (itemManagementTransferTargets.length === 0) {
+    state.mode = 'itemManageOptions';
+    updateStatus('No users available to transfer to.');
+    audio.sfxUiCancel();
+    return;
+  }
+  itemManagementTargetUserIndex = 0;
+  state.mode = 'itemManageTransferUser';
+  updateStatus(transferTargetLabel(itemManagementTransferTargets[0]));
+  audio.sfxUiBlip();
+}
+
 /** Handles structured admin action result packets. */
 function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admin_action_result' }>): void {
   if (message.action === 'role_update_permissions') {
@@ -2009,6 +2032,7 @@ const onAppMessage = createOnMessageHandler({
   handleAdminRolesList,
   handleAdminUsersList,
   handleAdminActionResult,
+  handleItemTransferTargets,
   isPeerNegotiationReady: () => peerNegotiationReady,
   enqueuePendingSignal: (message) => {
     pendingSignalMessages.push(message);
@@ -2900,33 +2924,10 @@ function handleItemManageOptionsModeInput(code: string, key: string): void {
       });
       return;
     }
-    const ownerUserId = item.createdBy.trim();
-    const targetIds = [
-      ...(state.player.id ? [state.player.id] : []),
-      ...Array.from(state.peers.values()).map((peer) => peer.id),
-    ]
-      .filter((peerId, index, arr) => arr.indexOf(peerId) === index)
-      .filter((peerId) => {
-        if (!ownerUserId) return true;
-        if (peerId === state.player.id) return authUserId !== ownerUserId;
-        const peer = state.peers.get(peerId);
-        return (peer?.userId ?? '') !== ownerUserId;
-      })
-      .sort((a, b) => {
-        const left = transferTargetLabel(a);
-        const right = transferTargetLabel(b);
-        return left.localeCompare(right, undefined, { sensitivity: 'base' });
-      });
-    if (targetIds.length === 0) {
-      updateStatus('No users available to transfer to.');
-      audio.sfxUiCancel();
-      return;
-    }
-    itemManagementTargetUserIds = targetIds;
+    itemManagementTransferTargets = [];
     itemManagementTargetUserIndex = 0;
-    state.mode = 'itemManageTransferUser';
-    const firstLabel = transferTargetLabel(itemManagementTargetUserIds[0]);
-    updateStatus(firstLabel);
+    signaling.send({ type: 'item_transfer_targets', itemId: item.id });
+    updateStatus('Loading users...');
     audio.sfxUiBlip();
     return;
   }
@@ -2940,34 +2941,37 @@ function handleItemManageOptionsModeInput(code: string, key: string): void {
 
 /** Handles target-user selection for item transfer action. */
 function handleItemManageTransferUserModeInput(code: string, key: string): void {
-  if (!itemManagementSelectedItemId || itemManagementTargetUserIds.length === 0) {
+  if (!itemManagementSelectedItemId || itemManagementTransferTargets.length === 0) {
     state.mode = 'itemManageOptions';
     return;
   }
-  const control = handleListControlKey(code, key, itemManagementTargetUserIds, itemManagementTargetUserIndex, (userId) => {
-    return transferTargetLabel(userId);
-  });
+  const control = handleListControlKey(
+    code,
+    key,
+    itemManagementTransferTargets,
+    itemManagementTargetUserIndex,
+    (target) => transferTargetLabel(target),
+  );
   if (control.type === 'move') {
     itemManagementTargetUserIndex = control.index;
-    const label = transferTargetLabel(itemManagementTargetUserIds[itemManagementTargetUserIndex]);
+    const label = transferTargetLabel(itemManagementTransferTargets[itemManagementTargetUserIndex]);
     updateStatus(label);
     audio.sfxUiBlip();
     return;
   }
   if (control.type === 'select') {
     const item = state.items.get(itemManagementSelectedItemId);
-    const targetId = itemManagementTargetUserIds[itemManagementTargetUserIndex];
-    if (!item || !targetId) {
+    const target = itemManagementTransferTargets[itemManagementTargetUserIndex];
+    if (!item || !target) {
       state.mode = 'itemManageOptions';
       audio.sfxUiCancel();
       return;
     }
-    const targetLabel = transferTargetLabel(targetId);
     openItemManagementConfirm({
       itemId: item.id,
       action: 'transfer',
-      prompt: `Transfer ${itemLabel(item)} to ${targetLabel}?`,
-      targetId,
+      prompt: `Transfer ${itemLabel(item)} to ${target.username}?`,
+      targetUserId: target.userId,
     });
     return;
   }
@@ -3012,8 +3016,8 @@ function handleConfirmYesNoModeInput(code: string, key: string): void {
     state.mode = 'normal';
     if (context.action === 'delete') {
       signaling.send({ type: 'item_delete', itemId: context.itemId });
-    } else if (context.action === 'transfer' && context.targetId) {
-      signaling.send({ type: 'item_transfer', itemId: context.itemId, targetId: context.targetId });
+    } else if (context.action === 'transfer' && context.targetUserId) {
+      signaling.send({ type: 'item_transfer', itemId: context.itemId, targetUserId: context.targetUserId });
     }
     resetItemManagementState();
   }
@@ -3331,6 +3335,8 @@ function handleAdminUserDeleteConfirmModeInput(code: string, key: string): void 
       audio.sfxUiCancel();
       return;
     }
+    state.mode = 'adminUserList';
+    updateStatus(`Deleting account ${adminSelectedUsername}...`);
     adminPendingUserMutation = { action: 'delete_account', username: adminSelectedUsername };
     signaling.send({ type: 'admin_user_delete', username: adminSelectedUsername });
   }

@@ -221,6 +221,18 @@ export const itemActionResultSchema = z.object({
   itemId: z.string().optional(),
 });
 
+export const itemTransferTargetsSchema = z.object({
+  type: z.literal('item_transfer_targets'),
+  itemId: z.string(),
+  targets: z.array(
+    z.object({
+      userId: z.string(),
+      username: z.string(),
+      online: z.boolean(),
+    }),
+  ),
+});
+
 export const itemUseSoundSchema = z.object({
   type: z.literal('item_use_sound'),
   itemId: z.string(),
@@ -337,6 +349,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   itemUpsertSchema,
   itemRemoveSchema,
   itemActionResultSchema,
+  itemTransferTargetsSchema,
   itemUseSoundSchema,
   itemClockAnnounceSchema,
   itemPianoNoteSchema,
@@ -373,7 +386,8 @@ export type OutgoingMessage =
   | { type: 'item_pickup'; itemId: string }
   | { type: 'item_drop'; itemId: string; x: number; y: number }
   | { type: 'item_delete'; itemId: string }
-  | { type: 'item_transfer'; itemId: string; targetId: string }
+  | { type: 'item_transfer_targets'; itemId: string }
+  | { type: 'item_transfer'; itemId: string; targetId?: string; targetUserId?: string }
   | { type: 'item_use'; itemId: string }
   | { type: 'item_secondary_use'; itemId: string }
   | { type: 'item_piano_note'; itemId: string; keyId: string; midi: number; on: boolean }
@@ -387,6 +401,7 @@ export type OutgoingMessage =
 
 export type RemoteUser = {
   id: string;
+  userId?: string | null;
   nickname: string;
   x: number;
   y: number;

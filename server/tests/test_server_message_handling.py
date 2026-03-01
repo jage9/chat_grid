@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from time import monotonic
 from typing import cast
 import uuid
@@ -447,6 +448,135 @@ async def test_item_transfer_allows_self_target_for_transfer_any(monkeypatch: py
     assert result.type == "item_action_result"
     assert result.ok is True
     assert result.action == "transfer"
+
+
+@pytest.mark.asyncio
+async def test_item_transfer_accepts_offline_target_user_id(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, auth_db_path=tmp_path / "auth.db", grid_size=41)
+    owner_session = server.auth_service.register("owner_test", "password99")
+    actor_session = server.auth_service.register("actor_test", "password99")
+    offline_session = server.auth_service.register("offline_test", "password99")
+    owner_ws = _fake_ws()
+    actor_ws = _fake_ws()
+    owner = ClientConnection(
+        websocket=owner_ws,
+        id="u1",
+        nickname="owner",
+        authenticated=True,
+        user_id=owner_session.user.id,
+        username=owner_session.user.username,
+        permissions=set(),
+        x=5,
+        y=6,
+    )
+    actor = ClientConnection(
+        websocket=actor_ws,
+        id="u3",
+        nickname="actor",
+        authenticated=True,
+        user_id=actor_session.user.id,
+        username=actor_session.user.username,
+        permissions={"item.transfer.any"},
+        x=5,
+        y=6,
+    )
+    server.clients[owner_ws] = owner
+    server.clients[actor_ws] = actor
+    item = server.item_service.default_item(owner, "dice")
+    item.x = actor.x
+    item.y = actor.y
+    server.item_service.add_item(item)
+
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+
+    await server._handle_message(
+        actor,
+        json.dumps({"type": "item_transfer", "itemId": item.id, "targetUserId": offline_session.user.id}),
+    )
+
+    assert item.createdBy == offline_session.user.id
+    assert item.createdByName == offline_session.user.username
+    result = send_payloads[-1]
+    assert result.type == "item_action_result"
+    assert result.ok is True
+    assert result.action == "transfer"
+
+
+@pytest.mark.asyncio
+async def test_item_transfer_targets_lists_online_and_offline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, auth_db_path=tmp_path / "auth.db", grid_size=41)
+    owner_session = server.auth_service.register("owner_menu", "password99")
+    actor_session = server.auth_service.register("actor_menu", "password99")
+    online_session = server.auth_service.register("online_menu", "password99")
+    offline_session = server.auth_service.register("offline_menu", "password99")
+    owner_ws = _fake_ws()
+    actor_ws = _fake_ws()
+    online_ws = _fake_ws()
+    owner = ClientConnection(
+        websocket=owner_ws,
+        id="u1",
+        nickname="owner",
+        authenticated=True,
+        user_id=owner_session.user.id,
+        username=owner_session.user.username,
+        permissions=set(),
+        x=5,
+        y=6,
+    )
+    actor = ClientConnection(
+        websocket=actor_ws,
+        id="u3",
+        nickname="actor",
+        authenticated=True,
+        user_id=actor_session.user.id,
+        username=actor_session.user.username,
+        permissions={"item.transfer.any"},
+        x=5,
+        y=6,
+    )
+    online = ClientConnection(
+        websocket=online_ws,
+        id="u4",
+        nickname="online",
+        authenticated=True,
+        user_id=online_session.user.id,
+        username=online_session.user.username,
+        permissions=set(),
+        x=10,
+        y=10,
+    )
+    server.clients[owner_ws] = owner
+    server.clients[actor_ws] = actor
+    server.clients[online_ws] = online
+    item = server.item_service.default_item(owner, "dice")
+    item.x = actor.x
+    item.y = actor.y
+    server.item_service.add_item(item)
+
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+
+    await server._handle_message(actor, json.dumps({"type": "item_transfer_targets", "itemId": item.id}))
+
+    assert send_payloads
+    result = send_payloads[-1]
+    assert result.type == "item_transfer_targets"
+    usernames = {entry.username for entry in result.targets}
+    assert owner_session.user.username not in usernames
+    assert online_session.user.username in usernames
+    assert offline_session.user.username in usernames
+    by_username = {entry.username: entry for entry in result.targets}
+    assert by_username[online_session.user.username].online is True
+    assert by_username[offline_session.user.username].online is False
 
 
 @pytest.mark.asyncio

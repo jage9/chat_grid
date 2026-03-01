@@ -88,6 +88,8 @@ from .models import (
     ItemRemovePacket,
     ItemSecondaryUsePacket,
     ItemTransferPacket,
+    ItemTransferTargetsPacket,
+    ItemTransferTargetsResultPacket,
     ItemUpdatePacket,
     ItemUpsertPacket,
     ItemUsePacket,
@@ -2486,6 +2488,47 @@ class SignalingServer:
             await self._send_item_result(client, True, "delete", f"You deleted {item_text}.", item.id)
             return
 
+        if isinstance(packet, ItemTransferTargetsPacket):
+            item = self.items.get(packet.itemId)
+            if not item:
+                await self._send_item_result(client, False, "transfer", "Item not found.")
+                return
+            if item.carrierId:
+                await self._send_item_result(client, False, "transfer", "Item cannot be transferred while carried.", item.id)
+                return
+            if item.x != client.x or item.y != client.y:
+                await self._send_item_result(client, False, "transfer", "Item is not on your square.", item.id)
+                return
+            can_transfer_any = self._client_has_permission(client, "item.transfer.any")
+            can_transfer_own = self._client_has_permission(client, "item.transfer.own") and self._owns_item(client, item)
+            if not can_transfer_any and not can_transfer_own:
+                await self._send_item_result(client, False, "transfer", "Not authorized to transfer this item.", item.id)
+                return
+            users = self.auth_service.list_users_for_admin()
+            connected_user_ids = {
+                other.user_id
+                for other in self.clients.values()
+                if other.authenticated and other.user_id
+            }
+            targets = [
+                {
+                    "userId": str(entry["id"]),
+                    "username": str(entry["username"]),
+                    "online": str(entry.get("id")) in connected_user_ids,
+                }
+                for entry in users
+                if str(entry.get("status")) == "active" and str(entry["id"]) != item.createdBy
+            ]
+            await self._send(
+                client.websocket,
+                ItemTransferTargetsResultPacket(
+                    type="item_transfer_targets",
+                    itemId=item.id,
+                    targets=targets,
+                ),
+            )
+            return
+
         if isinstance(packet, ItemTransferPacket):
             item = self.items.get(packet.itemId)
             if not item:
@@ -2502,15 +2545,34 @@ class SignalingServer:
             if not can_transfer_any and not can_transfer_own:
                 await self._send_item_result(client, False, "transfer", "Not authorized to transfer this item.", item.id)
                 return
-            target = self._get_client_by_id(packet.targetId)
-            if not target or not target.authenticated or not target.user_id:
+            target_user_id = str(packet.targetUserId or "").strip()
+            if not target_user_id and packet.targetId:
+                target = self._get_client_by_id(packet.targetId)
+                if target and target.authenticated and target.user_id:
+                    target_user_id = target.user_id
+            if not target_user_id:
                 await self._send_item_result(client, False, "transfer", "Target user is not available.", item.id)
                 return
-            if item.createdBy == target.user_id:
+            if item.createdBy == target_user_id:
                 await self._send_item_result(client, False, "transfer", "Item already belongs to that user.", item.id)
                 return
-            item.createdBy = target.user_id
-            item.createdByName = target.username or target.nickname
+            target = next(
+                (
+                    other
+                    for other in self.clients.values()
+                    if other.authenticated and other.user_id == target_user_id
+                ),
+                None,
+            )
+            target_username = (
+                target.username
+                if target and target.username
+                else target.nickname
+                if target
+                else self.auth_service.get_username_by_id(target_user_id) or target_user_id
+            )
+            item.createdBy = target_user_id
+            item.createdByName = target_username
             item.updatedAt = self.item_service.now_ms()
             actor_id, actor_name = self._item_updated_actor(client)
             item.updatedBy = actor_id
@@ -2522,7 +2584,7 @@ class SignalingServer:
             await self._broadcast(
                 BroadcastChatMessagePacket(
                     type="chat_message",
-                    message=f"{client.nickname} transferred {item_text} to {target.nickname}.",
+                    message=f"{client.nickname} transferred {item_text} to {target_username}.",
                     system=True,
                 ),
                 exclude=client.websocket,
@@ -2531,7 +2593,7 @@ class SignalingServer:
                 client,
                 True,
                 "transfer",
-                f"You transferred {item_text} to {target.nickname}.",
+                f"You transferred {item_text} to {target_username}.",
                 item.id,
             )
             return

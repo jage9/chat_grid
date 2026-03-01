@@ -15,7 +15,7 @@ type MessageHandlerDeps = {
     addItemTypeIndex: number;
     player: { id: string | null; nickname: string; x: number; y: number };
     running: boolean;
-    peers: Map<string, { id: string; nickname: string; x: number; y: number }>;
+    peers: Map<string, { id: string; userId?: string | null; nickname: string; x: number; y: number }>;
     items: Map<string, WorldItem>;
     mode: string;
     selectedItemId: string | null;
@@ -77,6 +77,7 @@ type MessageHandlerDeps = {
   handleAdminRolesList: (message: Extract<IncomingMessage, { type: 'admin_roles_list' }>) => void;
   handleAdminUsersList: (message: Extract<IncomingMessage, { type: 'admin_users_list' }>) => void;
   handleAdminActionResult: (message: Extract<IncomingMessage, { type: 'admin_action_result' }>) => void;
+  handleItemTransferTargets: (message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>) => void;
   isPeerNegotiationReady: () => boolean;
   enqueuePendingSignal: (message: Extract<IncomingMessage, { type: 'signal' }>) => void;
 };
@@ -105,6 +106,9 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         break;
       case 'admin_action_result':
         deps.handleAdminActionResult(message);
+        break;
+      case 'item_transfer_targets':
+        deps.handleItemTransferTargets(message);
         break;
 
       case 'welcome':

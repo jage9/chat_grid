@@ -241,6 +241,18 @@ class AuthService:
 
         return permission_key in self.get_user_permissions(user_id)
 
+    def get_username_by_id(self, user_id: str) -> str | None:
+        """Return username for one numeric user id, or None when not found."""
+
+        try:
+            user_id_value = int(user_id)
+        except (TypeError, ValueError):
+            return None
+        row = self._db_fetchone("SELECT username FROM users WHERE id = ?", (user_id_value,))
+        if row is None:
+            return None
+        return str(row["username"])
+
     def list_roles_with_counts(self) -> list[dict[str, object]]:
         """Return all roles with permission sets and assigned-user counts."""
 

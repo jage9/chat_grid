@@ -140,7 +140,13 @@ class ItemDeletePacket(BasePacket):
 class ItemTransferPacket(BasePacket):
     type: Literal["item_transfer"]
     itemId: str
-    targetId: str
+    targetId: str | None = None
+    targetUserId: str | None = None
+
+
+class ItemTransferTargetsPacket(BasePacket):
+    type: Literal["item_transfer_targets"]
+    itemId: str
 
 
 class ItemUsePacket(BasePacket):
@@ -199,6 +205,7 @@ ClientPacket = (
     | ItemDropPacket
     | ItemDeletePacket
     | ItemTransferPacket
+    | ItemTransferTargetsPacket
     | ItemUsePacket
     | ItemSecondaryUsePacket
     | ItemPianoNotePacket
@@ -365,6 +372,18 @@ class ItemActionResultPacket(BasePacket):
     action: Literal["add", "pickup", "drop", "delete", "transfer", "use", "secondary_use", "update"]
     message: str
     itemId: str | None = None
+
+
+class ItemTransferTargetSummary(BaseModel):
+    userId: str
+    username: str
+    online: bool
+
+
+class ItemTransferTargetsResultPacket(BasePacket):
+    type: Literal["item_transfer_targets"]
+    itemId: str
+    targets: list[ItemTransferTargetSummary]
 
 
 class ItemUseSoundPacket(BasePacket):
