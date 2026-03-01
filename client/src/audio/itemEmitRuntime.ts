@@ -227,6 +227,7 @@ export class ItemEmitRuntime {
       element.playbackRate = initialRates.playbackRate;
       const initialDelaySeconds = resolveEmitInitialDelaySeconds(item);
       const loopDelaySeconds = resolveEmitLoopDelaySeconds(item);
+      element.loop = loopDelaySeconds <= 0;
       const resumeState = this.resumeStateByItemId.get(item.id);
       const matchingResumeState = resumeState && resumeState.soundUrl === soundUrl ? resumeState : null;
       const onEnded = () => {
@@ -387,7 +388,17 @@ export class ItemEmitRuntime {
       }
       const nextRates = resolveEmitRates(item);
       output.initialDelaySeconds = resolveEmitInitialDelaySeconds(item);
-      output.loopDelaySeconds = resolveEmitLoopDelaySeconds(item);
+      const nextLoopDelaySeconds = resolveEmitLoopDelaySeconds(item);
+      output.loopDelaySeconds = nextLoopDelaySeconds;
+      const shouldLoop = nextLoopDelaySeconds <= 0;
+      if (output.element.loop !== shouldLoop) {
+        output.element.loop = shouldLoop;
+        if (shouldLoop) {
+          // Returning to native loop mode should clear delayed restart scheduling.
+          this.nextEmitStartAtMs.delete(itemId);
+          this.tryStartEmitPlayback(itemId, output.element);
+        }
+      }
       setElementPreservesPitch(output.element, nextRates.preservePitch);
       const nextPlaybackRate = nextRates.playbackRate;
       if (Math.abs(output.element.playbackRate - nextPlaybackRate) > 0.001) {
