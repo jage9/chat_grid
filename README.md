@@ -46,6 +46,7 @@ Summary:
 2. Build client and publish `client/dist/` to your web root/subdirectory.
 3. Configure server `config.toml` and run it via `systemd`.
 4. Add Apache `/ws` websocket proxy from `deploy/apache/chgrid-vhost-snippet.conf`.
+   Include `/auth/session/*` proxy routes from the same snippet so login cookies can be set/cleared reliably.
 
 ## Key Paths
 

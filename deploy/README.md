@@ -68,12 +68,22 @@ cd "$REPO_ROOT"
 ./deploy/scripts/install_apache.sh "$REPO_ROOT" /path/to/apache/include/chgrid.conf
 ```
 
-Expected proxy endpoint:
+Expected proxy endpoints:
 
 ```apache
 ProxyPass        /ws  ws://127.0.0.1:8765
 ProxyPassReverse /ws  ws://127.0.0.1:8765
+ProxyPass        /auth/session/  http://127.0.0.1:8765/auth/session/
+ProxyPassReverse /auth/session/  http://127.0.0.1:8765/auth/session/
 ```
+
+What each route does:
+- `/ws`: websocket signaling (presence, movement, item actions, chat, voice signaling).
+- `/auth/session/set`: called by client after successful login to set `HttpOnly` session cookie.
+- `/auth/session/clear`: called by client on logout/session-reset to clear `HttpOnly` session cookie.
+
+Important:
+- Keep `/auth/session/*` at domain root even when the app is served from a subpath like `/chgrid`.
 
 After Apache changes, reload Apache using your host's command.
 
