@@ -124,7 +124,7 @@ Applies to effect select, user/item list modes, item selection, item property li
 - `A S D F G H J K L ; '`: Play white keys (C major from C4 upward)
 - `W E T Y U O P ]`: Play sharps
 - Multiple keys can be held/played at once
-- Shifted note keys are ignored; `Shift+K` opens the command palette instead
+- Shifted note keys are ignored
 - `?`: Open piano-mode help viewer
 - `-` / `=`: Shift octave down/up
 - `Z`: Start, pause, or resume recording on this piano (max 30s recorded time)

@@ -114,6 +114,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - `commandMetadata.mainModeActions`: server-authored labels/tooltips for server-backed main-mode commands used by the client command palette
   - `itemManagement.actions`: server-authored labels/tooltips and permission-key metadata for item-management actions (`transfer`, `delete`)
   - `adminMenu.actions`: server-authored admin root menu labels/tooltips/ordering for the authenticated user
+- Maintainer note: the current server-owned command/menu metadata definitions live in `server/app/ui_metadata.py`.
 - Client item UI requires this metadata from the server; there is no fallback item definition map.
 - Client property help/type rendering is metadata-driven; it does not infer fallback types/tooltips from hardcoded key heuristics.
 - `visibleWhen` supports equality checks and string negation via `!` prefix (example: `{"mediaEffect": "!off"}`).
