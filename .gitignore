@@ -1,4 +1,5 @@
 # Local config/state
+server/.env
 server/config.toml
 server/runtime/
 

@@ -128,7 +128,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - accepts browser sockets only when websocket `Origin` matches `CHGRID_HOST_ORIGIN`
   - reads `chgrid_session_token` from websocket `Cookie` header
   - attempts resume before sending `auth_required`
-  - exposes `GET /auth/session/clear` to expire the `HttpOnly` cookie (`X-Chgrid-Auth-Client: 1` required)
+  - exposes `GET /auth/session/clear` to expire the `HttpOnly` cookie (`X-Chgrid-Auth-Client: 1` and matching `Origin` required)
 - Server applies auth hardening before accepting login/register/resume:
   - login/register PBKDF2 work runs off the event loop in bounded worker concurrency
   - repeated auth failures are rate-limited by IP and IP+identity windows

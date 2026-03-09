@@ -11,6 +11,8 @@ Chat Grid is designed to be run on a secure server with users connecting via a w
 ```bash
 cd server
 cp config.example.toml config.toml
+cp .env.sample .env
+# for local dev set CHGRID_HOST_ORIGIN=http://localhost:5173 in .env
 uv run python main.py --allow-insecure-ws
 ```
 
@@ -27,7 +29,8 @@ Notes:
 - Server defaults to `config.toml` when present.
 - Server bind/port defaults are `127.0.0.1:8765` unless changed in config or CLI flags.
 - Client dev defaults to Vite local host/port (`localhost:5173`) unless flags override.
-- Auth requires `CHGRID_AUTH_SECRET` in server environment; `deploy/scripts/install_server.sh` creates `server/.env` with this value automatically if missing.
+- Server runtime env lives in `server/.env`; `server/.env.sample` shows the required variables.
+- `deploy/scripts/install_server.sh` creates `server/.env` with `CHGRID_AUTH_SECRET` automatically if missing.
 
 Common server overrides:
 - `uv run python main.py --config /path/to/config.toml`

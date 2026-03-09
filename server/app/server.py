@@ -288,6 +288,20 @@ class SignalingServer:
         secure = "; Secure" if self._session_cookie_secure(request) else ""
         return f"{AUTH_SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{secure}"
 
+    def _origin_allowed(self, request: HttpRequest) -> bool:
+        """Return whether one auth helper HTTP request comes from the configured app origin."""
+
+        if not self.host_origin:
+            return False
+        raw_origin = str(request.headers.get("Origin", "")).strip()
+        if not raw_origin:
+            return False
+        try:
+            origin = normalize_origin(raw_origin)
+        except ValueError:
+            return False
+        return origin == self.host_origin
+
     @staticmethod
     def _cookie_value(cookie_header: str, name: str) -> str:
         """Extract one cookie value by name from a Cookie header."""
@@ -311,6 +325,8 @@ class SignalingServer:
         client_header = str(request.headers.get(AUTH_SESSION_COOKIE_CLIENT_HEADER, "")).strip()
         if client_header != "1":
             return HttpResponse(400, "Bad Request", headers, b"missing client header")
+        if not self._origin_allowed(request):
+            return HttpResponse(403, "Forbidden", headers, b"origin not allowed")
 
         if path == AUTH_SESSION_COOKIE_CHECK_PATH:
             cookie_header = str(request.headers.get("Cookie", "")).strip()
