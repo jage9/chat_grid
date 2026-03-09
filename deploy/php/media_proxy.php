@@ -147,6 +147,24 @@ function normalize_origin($value)
     return $scheme . '://' . $host . $port;
 }
 
+function load_proxy_host_origin()
+{
+    $fromEnv = normalize_origin(getenv('CHGRID_HOST_ORIGIN'));
+    if ($fromEnv !== '') {
+        return $fromEnv;
+    }
+
+    $configPath = __DIR__ . '/media_proxy.config.php';
+    if (!is_file($configPath)) {
+        return '';
+    }
+    $config = require $configPath;
+    if (!is_array($config) || !isset($config['host_origin'])) {
+        return '';
+    }
+    return normalize_origin($config['host_origin']);
+}
+
 function host_matches_suffix($host, $suffix)
 {
     if ($suffix === '') {
@@ -412,7 +430,7 @@ function resolve_safe_redirect_chain($initialUrl, $allowlistSuffixes, $requestHe
 // Optional allowlist env var: CHGRID_MEDIA_PROXY_ALLOWLIST=dropbox.com,example.com
 $allowlistEnv = getenv('CHGRID_MEDIA_PROXY_ALLOWLIST');
 $allowlistSuffixes = parse_allowlist_suffixes($allowlistEnv);
-$allowedOrigin = normalize_origin(getenv('CHGRID_HOST_ORIGIN'));
+$allowedOrigin = load_proxy_host_origin();
 if ($allowedOrigin === '') {
     send_text(500, 'CHGRID_HOST_ORIGIN is required');
 }

@@ -110,11 +110,9 @@ ProxyPassReverse /listen/8000/  http://127.0.0.1:8000/
 
 `deploy/php/media_proxy.php` is copied into your publish directory by `deploy_client.sh`.
 
-The proxy also requires the same `CHGRID_HOST_ORIGIN` value in the PHP/Apache environment so only your own site origin can read from it. For Apache, one simple option is:
+When `server/.env` contains `CHGRID_HOST_ORIGIN`, `deploy_client.sh` also generates `media_proxy.config.php` in the publish directory so the proxy can enforce the same origin without extra Apache-specific config.
 
-```apache
-SetEnv CHGRID_HOST_ORIGIN https://example.com
-```
+If you deploy the PHP proxy some other way, you can still provide `CHGRID_HOST_ORIGIN` directly through your PHP/web-server environment.
 
 Use:
 

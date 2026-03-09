@@ -7,6 +7,7 @@ PUBLISH_DIR="${2:-$REPO_ROOT/deploy/publish/chgrid}"
 BASE_PATH="${3:-/chgrid/}"
 CLIENT_DIR="$REPO_ROOT/client"
 PHP_PROXY_DIR="$REPO_ROOT/deploy/php"
+SERVER_ENV_FILE="$REPO_ROOT/server/.env"
 PUBLIC_HTACCESS_SRC="$REPO_ROOT/deploy/apache/chgrid-public-htaccess"
 
 if [[ ! -d "$CLIENT_DIR" ]]; then
@@ -28,6 +29,26 @@ rsync -a --delete dist/ "$PUBLISH_DIR/"
 
 if [[ -d "$PHP_PROXY_DIR" ]]; then
   rsync -a "$PHP_PROXY_DIR/" "$PUBLISH_DIR/"
+fi
+
+if [[ -f "$SERVER_ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$SERVER_ENV_FILE"
+  set +a
+fi
+
+if [[ -n "${CHGRID_HOST_ORIGIN:-}" ]]; then
+  escaped_host_origin=${CHGRID_HOST_ORIGIN//\\/\\\\}
+  escaped_host_origin=${escaped_host_origin//\'/\\\'}
+  cat > "$PUBLISH_DIR/media_proxy.config.php" <<EOF
+<?php
+return array(
+    'host_origin' => '$escaped_host_origin',
+);
+EOF
+else
+  rm -f "$PUBLISH_DIR/media_proxy.config.php"
 fi
 
 if [[ -f "$PUBLIC_HTACCESS_SRC" ]]; then
