@@ -24,6 +24,21 @@ def _packet_types(payloads: list[object]) -> list[str]:
     return [getattr(packet, "type", "") for packet in payloads]
 
 
+def _activate_client(
+    client: ClientConnection,
+    *,
+    user_id: str | None = None,
+    username: str | None = None,
+    permissions: set[str] | None = None,
+) -> ClientConnection:
+    client.authenticated = True
+    client.user_id = user_id or client.user_id or client.id
+    client.username = username or client.username or client.nickname
+    client.permissions = set(permissions or client.permissions or set())
+    client.world_ready = True
+    return client
+
+
 def test_client_ip_prefers_forwarded_for_from_loopback_proxy() -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = cast(
@@ -146,7 +161,10 @@ async def test_radio_metadata_refresh_skips_when_no_listener_in_range(monkeypatc
 async def test_item_secondary_use_radio_reports_now_playing(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5)
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5),
+        permissions={"item.use"},
+    )
     server.clients[ws] = client
 
     radio = server.item_service.default_item(client, "radio_station")
@@ -183,7 +201,10 @@ async def test_item_secondary_use_radio_reports_now_playing(monkeypatch: pytest.
 async def test_item_secondary_use_missing_handler_returns_message(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5)
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5),
+        permissions={"item.use"},
+    )
     server.clients[ws] = client
 
     dice = server.item_service.default_item(client, "dice")
@@ -410,7 +431,10 @@ async def test_auth_resume_failure_message_is_generic(monkeypatch: pytest.Monkey
 async def test_item_drop_rejects_out_of_bounds(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6),
+        permissions={"item.pickup_drop.any"},
+    )
     server.clients[ws] = client
     item = server.item_service.default_item(client, "dice")
     item.carrierId = client.id
@@ -446,6 +470,7 @@ async def test_item_transfer_updates_item_owner(monkeypatch: pytest.MonkeyPatch)
         x=5,
         y=6,
     )
+    _activate_client(owner)
     target = ClientConnection(
         websocket=target_ws,
         id="u2",
@@ -457,6 +482,7 @@ async def test_item_transfer_updates_item_owner(monkeypatch: pytest.MonkeyPatch)
         x=10,
         y=10,
     )
+    _activate_client(target)
     server.clients[owner_ws] = owner
     server.clients[target_ws] = target
     item = server.item_service.default_item(owner, "dice")
@@ -516,6 +542,7 @@ async def test_item_transfer_allows_self_target_for_transfer_any(monkeypatch: py
         x=5,
         y=6,
     )
+    _activate_client(owner)
     actor = ClientConnection(
         websocket=actor_ws,
         id="u3",
@@ -527,6 +554,7 @@ async def test_item_transfer_allows_self_target_for_transfer_any(monkeypatch: py
         x=5,
         y=6,
     )
+    _activate_client(actor)
     server.clients[owner_ws] = owner
     server.clients[actor_ws] = actor
     item = server.item_service.default_item(owner, "dice")
@@ -579,6 +607,7 @@ async def test_item_transfer_accepts_offline_target_user_id(monkeypatch: pytest.
         x=5,
         y=6,
     )
+    _activate_client(owner)
     actor = ClientConnection(
         websocket=actor_ws,
         id="u3",
@@ -590,6 +619,7 @@ async def test_item_transfer_accepts_offline_target_user_id(monkeypatch: pytest.
         x=5,
         y=6,
     )
+    _activate_client(actor)
     server.clients[owner_ws] = owner
     server.clients[actor_ws] = actor
     item = server.item_service.default_item(owner, "dice")
@@ -638,6 +668,7 @@ async def test_item_transfer_targets_lists_online_and_offline(monkeypatch: pytes
         x=5,
         y=6,
     )
+    _activate_client(owner)
     actor = ClientConnection(
         websocket=actor_ws,
         id="u3",
@@ -649,6 +680,7 @@ async def test_item_transfer_targets_lists_online_and_offline(monkeypatch: pytes
         x=5,
         y=6,
     )
+    _activate_client(actor)
     online = ClientConnection(
         websocket=online_ws,
         id="u4",
@@ -660,6 +692,7 @@ async def test_item_transfer_targets_lists_online_and_offline(monkeypatch: pytes
         x=10,
         y=10,
     )
+    _activate_client(online)
     server.clients[owner_ws] = owner
     server.clients[actor_ws] = actor
     server.clients[online_ws] = online
@@ -705,6 +738,7 @@ async def test_item_delete_sends_others_notification(monkeypatch: pytest.MonkeyP
         x=5,
         y=6,
     )
+    _activate_client(owner)
     watcher = ClientConnection(
         websocket=watcher_ws,
         id="u2",
@@ -716,6 +750,7 @@ async def test_item_delete_sends_others_notification(monkeypatch: pytest.MonkeyP
         x=5,
         y=6,
     )
+    _activate_client(watcher)
     server.clients[owner_ws] = owner
     server.clients[watcher_ws] = watcher
     item = server.item_service.default_item(owner, "dice")
@@ -762,6 +797,7 @@ async def test_item_transfer_rejects_when_not_authorized(monkeypatch: pytest.Mon
         x=5,
         y=6,
     )
+    _activate_client(owner)
     target = ClientConnection(
         websocket=target_ws,
         id="u2",
@@ -773,6 +809,7 @@ async def test_item_transfer_rejects_when_not_authorized(monkeypatch: pytest.Mon
         x=10,
         y=10,
     )
+    _activate_client(target)
     server.clients[owner_ws] = owner
     server.clients[target_ws] = target
     item = server.item_service.default_item(owner, "dice")
@@ -814,6 +851,7 @@ async def test_admin_user_delete_requires_permission(monkeypatch: pytest.MonkeyP
         username="tester",
         permissions={"user.ban_unban"},
     )
+    _activate_client(client)
     server.clients[ws] = client
 
     send_payloads: list[object] = []
@@ -846,6 +884,7 @@ async def test_admin_user_delete_calls_auth_service(monkeypatch: pytest.MonkeyPa
         username="tester",
         permissions={"account.delete.any"},
     )
+    _activate_client(client)
     server.clients[ws] = client
 
     send_payloads: list[object] = []
@@ -901,7 +940,10 @@ async def test_broadcast_fanout_is_concurrent(monkeypatch: pytest.MonkeyPatch) -
 async def test_item_add_rejects_unknown_type(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6),
+        permissions={"item.create"},
+    )
     server.clients[ws] = client
 
     send_payloads: list[object] = []
@@ -924,7 +966,7 @@ async def test_update_position_enforces_cumulative_budget_per_tick(monkeypatch: 
     server.movement_tick_ms = 100
     server.movement_max_steps_per_tick = 2
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5)
+    client = _activate_client(ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5))
     server.clients[ws] = client
 
     fixed_now = 10_000
@@ -953,7 +995,7 @@ async def test_update_position_enforces_cumulative_budget_per_tick(monkeypatch: 
 async def test_teleport_complete_broadcasts_spatial_event(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=12, y=13)
+    client = _activate_client(ClientConnection(websocket=ws, id="u1", nickname="tester", x=12, y=13))
     server.clients[ws] = client
 
     broadcast_payloads: list[object] = []
@@ -984,7 +1026,7 @@ async def test_teleport_complete_broadcasts_spatial_event(monkeypatch: pytest.Mo
 async def test_update_position_rate_reject_sends_self_correction(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5)
+    client = _activate_client(ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5))
     server.clients[ws] = client
     server.movement_tick_ms = 100
     server.movement_max_steps_per_tick = 1
@@ -1020,7 +1062,10 @@ async def test_update_position_rate_reject_sends_self_correction(monkeypatch: py
 async def test_chat_me_command_broadcasts_action(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="Tester")
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="Tester"),
+        permissions={"chat.send"},
+    )
     server.clients[ws] = client
 
     broadcast_payloads: list[object] = []
@@ -1050,7 +1095,10 @@ async def test_chat_me_command_broadcasts_action(monkeypatch: pytest.MonkeyPatch
 async def test_chat_up_command_sends_sender_only(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="Tester")
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="Tester"),
+        permissions={"chat.send"},
+    )
     server.clients[ws] = client
 
     broadcast_payloads: list[object] = []
@@ -1080,7 +1128,10 @@ async def test_chat_up_command_sends_sender_only(monkeypatch: pytest.MonkeyPatch
 async def test_chat_command_requires_leading_slash(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="Tester")
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="Tester"),
+        permissions={"chat.send"},
+    )
     server.clients[ws] = client
 
     broadcast_payloads: list[object] = []
@@ -1104,7 +1155,10 @@ async def test_chat_command_requires_leading_slash(monkeypatch: pytest.MonkeyPat
 async def test_chat_version_command_is_sender_only(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="Tester")
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="Tester"),
+        permissions={"chat.send"},
+    )
     server.clients[ws] = client
     server.server_version = "2026.02.27 R293"
 
@@ -1135,6 +1189,7 @@ async def test_chat_reboot_requires_permission(monkeypatch: pytest.MonkeyPatch) 
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
     client = ClientConnection(websocket=ws, id="u1", nickname="Tester", authenticated=True, user_id="1", permissions={"chat.send"})
+    _activate_client(client)
     server.clients[ws] = client
 
     send_payloads: list[object] = []
@@ -1167,6 +1222,7 @@ async def test_chat_reboot_schedules_and_broadcasts_message(monkeypatch: pytest.
         username="tester",
         permissions={"chat.send", "server.allow_reboot"},
     )
+    _activate_client(client)
     server.clients[ws] = client
 
     broadcast_payloads: list[object] = []
@@ -1199,6 +1255,7 @@ async def test_chat_reboot_already_in_progress_sends_sender_only_notice(monkeypa
         username="tester",
         permissions={"chat.send", "server.allow_reboot"},
     )
+    _activate_client(client)
     server.clients[ws] = client
 
     broadcast_payloads: list[object] = []
