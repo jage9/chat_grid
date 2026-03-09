@@ -24,6 +24,7 @@ type UiBindingsDeps = {
   openSettings: () => void;
   closeSettings: () => void;
   updateStatus: (message: string) => void;
+  getGridName: () => string;
   sfxUiBlip: () => void;
   setupLocalMedia: (audioDeviceId: string) => Promise<void>;
   setPreferredInput: (id: string, name: string) => void;
@@ -46,7 +47,7 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
 
   deps.dom.focusGridButton.addEventListener('click', () => {
     deps.dom.canvas.focus();
-    deps.updateStatus('Chat Grid focused.');
+    deps.updateStatus(`${deps.getGridName()} focused.`);
     deps.sfxUiBlip();
   });
 

@@ -59,3 +59,20 @@ base_path = "/ttgrid/"
     )
     cfg = load_config(config_path)
     assert cfg.server.base_path == "/ttgrid/"
+
+
+def test_load_config_reads_grid_name_and_welcome_message(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        """
+[network]
+allow_insecure_ws = true
+
+[server]
+grid_name = "TT Grid"
+welcome_message = "Welcome to TT Grid."
+""".strip()
+    )
+    cfg = load_config(config_path)
+    assert cfg.server.grid_name == "TT Grid"
+    assert cfg.server.welcome_message == "Welcome to TT Grid."

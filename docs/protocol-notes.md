@@ -95,6 +95,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - `permissions`
   - `policy` (`usernameMinLength`, `usernameMaxLength`, `passwordMinLength`, `passwordMaxLength`)
 - `auth_required.authPolicy`: server auth limits advertised before login/register submit.
+- `auth_required.gridName` / `auth_required.welcomeMessage`: server-owned pre-login branding values.
 - `auth_result.authPolicy`: server auth limits echoed on auth success/failure responses.
 - `auth_result.sessionToken` is used by the client to call the instance-scoped HTTP endpoint `GET <base_path>auth/session/set` (`Authorization: Bearer <sessionToken>`, `X-Chgrid-Auth-Client: 1`) so the server can issue an instance-scoped `HttpOnly` session cookie.
 - `welcome.worldConfig.gridSize`: server-authoritative grid size used by clients for bounds/drawing.
@@ -104,6 +105,8 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `welcome.serverInfo`: server process identity/version metadata:
   - `instanceId`: unique id generated at server startup
   - `version`: server package version (or `unknown` fallback)
+  - `gridName`: server-owned user-facing grid name
+  - `welcomeMessage`: server-owned pre-login welcome string
 - `welcome.uiDefinitions`: server-provided item UI definitions:
   - `itemTypeOrder`: add-item menu order
   - `itemTypes[].tooltip`: item-level tooltip/help text

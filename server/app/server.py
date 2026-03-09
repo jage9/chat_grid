@@ -165,6 +165,11 @@ class SignalingServer:
         state_save_max_delay_ms: int = 1000,
         host_origin: str | None = None,
         base_path: str = "/",
+        grid_name: str = "Chat Grid",
+        welcome_message: str = (
+            "Welcome to the Chat Grid, your immersive audio playground. "
+            "Configure your audio, then Log in or register to join the grid."
+        ),
     ):
         """Initialize runtime state, TLS context, and item service."""
 
@@ -194,6 +199,11 @@ class SignalingServer:
         self.server_version = self._resolve_server_version()
         self.host_origin = normalize_origin(host_origin, field_name="host origin") if host_origin else None
         self.base_path = self._normalize_base_path(base_path)
+        self.grid_name = str(grid_name).strip() or "Chat Grid"
+        self.welcome_message = (
+            str(welcome_message).strip()
+            or "Welcome to the Chat Grid, your immersive audio playground. Configure your audio, then Log in or register to join the grid."
+        )
         self.auth_session_cookie_name = self._session_cookie_name_for_base_path(self.base_path)
         self.websocket_path = self._base_path_join(WEBSOCKET_PATH)
         self.auth_session_cookie_set_path = self._base_path_join(AUTH_SESSION_COOKIE_SET_PATH)
@@ -1493,6 +1503,8 @@ class SignalingServer:
                         type="auth_required",
                         message="Authentication required.",
                         authPolicy=self._auth_policy(),
+                        gridName=self.grid_name,
+                        welcomeMessage=self.welcome_message,
                     ),
                 )
             async for raw_message in websocket:
@@ -1549,7 +1561,12 @@ class SignalingServer:
                 "movementMaxStepsPerTick": self.movement_max_steps_per_tick,
             },
             uiDefinitions=self._build_ui_definitions(client),
-            serverInfo={"instanceId": self.instance_id, "version": self.server_version},
+            serverInfo={
+                "instanceId": self.instance_id,
+                "version": self.server_version,
+                "gridName": self.grid_name,
+                "welcomeMessage": self.welcome_message,
+            },
             auth={
                 "authenticated": client.authenticated,
                 "userId": client.user_id,
@@ -3311,5 +3328,7 @@ def run() -> None:
         state_save_max_delay_ms=config.storage.state_save_max_delay_ms,
         host_origin=host_origin,
         base_path=config.server.base_path,
+        grid_name=config.server.grid_name,
+        welcome_message=config.server.welcome_message,
     )
     asyncio.run(server.start())

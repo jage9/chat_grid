@@ -242,6 +242,8 @@ class AuthRequiredPacket(BasePacket):
     type: Literal["auth_required"]
     message: str
     authPolicy: dict | None = None
+    gridName: str | None = None
+    welcomeMessage: str | None = None
 
 
 class AuthResultPacket(BasePacket):

@@ -5,6 +5,10 @@ bind_ip = "127.0.0.1"
 port = 8765
 # Public base path for this grid instance. Examples: "/", "/chgrid/", "/ttgrid/".
 base_path = "/"
+# User-facing grid name shown in the web client. 
+grid_name = "Chat Grid"
+# User-facing pre-connect welcome text shown on the home screen.
+welcome_message = "Welcome to the Chat Grid, your immersive audio playground. Configure your audio, then Log in or register to join the grid."
 
 [network]
 # Maximum inbound websocket message size in bytes.

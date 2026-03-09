@@ -56,6 +56,8 @@ export const welcomeMessageSchema = z.object({
     .object({
       instanceId: z.string(),
       version: z.string().optional(),
+      gridName: z.string().optional(),
+      welcomeMessage: z.string().optional(),
     })
     .optional(),
   auth: z
@@ -136,6 +138,8 @@ export const welcomeMessageSchema = z.object({
 export const authRequiredSchema = z.object({
   type: z.literal('auth_required'),
   message: z.string(),
+  gridName: z.string().optional(),
+  welcomeMessage: z.string().optional(),
   authPolicy: z
     .object({
       usernameMinLength: z.number().int().positive(),

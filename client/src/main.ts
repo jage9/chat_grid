@@ -98,6 +98,7 @@ declare global {
 }
 
 type Dom = {
+  gridTitle: HTMLElement;
   connectionStatus: HTMLElement;
   appVersion: HTMLElement;
   loginView: HTMLElement;
@@ -135,6 +136,7 @@ type Dom = {
 };
 
 const dom: Dom = {
+  gridTitle: requiredById('gridTitle'),
   connectionStatus: requiredById('connectionStatus'),
   appVersion: requiredById('appVersion'),
   loginView: requiredById('loginView'),
@@ -225,6 +227,9 @@ const APP_VERSION = String(
 dom.appVersion.textContent = APP_VERSION
   ? `Another AI experiment with Jage. Version ${APP_VERSION}`
   : 'Another AI experiment with Jage. Version unknown';
+const DEFAULT_GRID_NAME = 'Chat Grid';
+const DEFAULT_WELCOME_MESSAGE =
+  'Welcome to the Chat Grid, your immersive audio playground. Configure your audio, then Log in or register to join the grid.';
 const APP_BASE_URL = import.meta.env.BASE_URL || '/';
 /** Resolves an app-relative path against the configured Vite base path. */
 function withBase(path: string): string {
@@ -259,6 +264,8 @@ let lastFocusedElement: Element | null = null;
 let lastAnnouncementText = '';
 let lastAnnouncementAt = 0;
 let outputMode = settings.loadOutputMode();
+let activeGridName = DEFAULT_GRID_NAME;
+let activeWelcomeMessage = DEFAULT_WELCOME_MESSAGE;
 const messageBuffer: string[] = [];
 let messageCursor = -1;
 const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig);
@@ -360,6 +367,17 @@ void loadHelp();
 void itemBehaviorRegistry.initialize();
 void loadChangelog();
 
+function applyGridBranding(gridName: string | null | undefined, welcomeMessage: string | null | undefined): void {
+  const nextGridName = String(gridName ?? '').trim() || DEFAULT_GRID_NAME;
+  const nextWelcomeMessage = String(welcomeMessage ?? '').trim() || DEFAULT_WELCOME_MESSAGE;
+  activeGridName = nextGridName;
+  activeWelcomeMessage = nextWelcomeMessage;
+  document.title = nextGridName;
+  dom.gridTitle.textContent = nextGridName;
+  dom.focusGridButton.textContent = nextGridName;
+  dom.canvas.setAttribute('aria-label', `${nextGridName}, press question mark for help.`);
+}
+
 /** Fetches a required DOM element and casts it to the requested element type. */
 function requiredById<T extends HTMLElement>(id: string): T {
   const found = document.getElementById(id);
@@ -405,6 +423,7 @@ const adminController = createAdminController({
   signalingSend: (message) => signaling.send(message),
   announceMenuEntry,
   updateStatus,
+  getGridName: () => activeGridName,
   sfxUiBlip: () => audio.sfxUiBlip(),
   sfxUiCancel: () => audio.sfxUiCancel(),
   applyTextInputEdit,
@@ -1345,6 +1364,7 @@ function sendAuthRequest(): void {
 
 /** Handles server auth-required prompts prior to world welcome. */
 function handleAuthRequired(message: Extract<IncomingMessage, { type: 'auth_required' }>): void {
+  applyGridBranding(message.gridName, message.welcomeMessage);
   authController.handleAuthRequired(message);
 }
 
@@ -1563,6 +1583,7 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   let connectedAnnouncement: string | null = null;
   let playSelfLoginSound = false;
   if (message.type === 'welcome') {
+    applyGridBranding(message.serverInfo?.gridName, message.serverInfo?.welcomeMessage);
     const uiAdminActions =
       (message.uiDefinitions as { adminMenu?: { actions?: Array<{ id: string; label: string }> } } | undefined)?.adminMenu?.actions ??
       message.auth?.adminMenuActions;
@@ -2676,5 +2697,5 @@ updateDeviceSummary();
 setConnectionStatus(
   isVersionReloadedSession()
     ? 'Client updated, please reconnect.'
-    : 'Welcome to the Chat Grid, your immersive audio playground. Configure your audio, then Log in or register to join the grid.',
+    : activeWelcomeMessage,
 );
