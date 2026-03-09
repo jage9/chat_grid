@@ -193,6 +193,7 @@ class SignalingServer:
         self.server_version = self._resolve_server_version()
         self.host_origin = normalize_origin(host_origin, field_name="host origin") if host_origin else None
         self.base_path = self._normalize_base_path(base_path)
+        self.auth_session_cookie_name = self._session_cookie_name_for_base_path(self.base_path)
         self.websocket_path = self._base_path_join(WEBSOCKET_PATH)
         self.auth_session_cookie_set_path = self._base_path_join(AUTH_SESSION_COOKIE_SET_PATH)
         self.auth_session_cookie_clear_path = self._base_path_join(AUTH_SESSION_COOKIE_CLEAR_PATH)
@@ -287,6 +288,17 @@ class SignalingServer:
             return f"/{token}"
         return f"{self.base_path}{token}"
 
+    @staticmethod
+    def _session_cookie_name_for_base_path(base_path: str) -> str:
+        """Return one deterministic session cookie name for the configured instance path."""
+
+        if base_path == "/":
+            return AUTH_SESSION_COOKIE_NAME
+        suffix = re.sub(r"[^a-z0-9]+", "_", base_path.strip("/").casefold()).strip("_")
+        if not suffix:
+            return AUTH_SESSION_COOKIE_NAME
+        return f"chgrid_session_{suffix}"
+
     def _session_cookie_secure(self, request: HttpRequest | None = None) -> bool:
         """Return True when session cookies should be marked Secure."""
 
@@ -302,7 +314,7 @@ class SignalingServer:
 
         secure = "; Secure" if self._session_cookie_secure(request) else ""
         return (
-            f"{AUTH_SESSION_COOKIE_NAME}={token}; Path={self.base_path}; HttpOnly; SameSite=Lax; "
+            f"{self.auth_session_cookie_name}={token}; Path={self.base_path}; HttpOnly; SameSite=Lax; "
             f"Max-Age={AUTH_SESSION_COOKIE_MAX_AGE_SECONDS}{secure}"
         )
 
@@ -310,7 +322,7 @@ class SignalingServer:
         """Build Set-Cookie header value that expires the session cookie."""
 
         secure = "; Secure" if self._session_cookie_secure(request) else ""
-        return f"{AUTH_SESSION_COOKIE_NAME}=; Path={self.base_path}; HttpOnly; SameSite=Lax; Max-Age=0{secure}"
+        return f"{self.auth_session_cookie_name}=; Path={self.base_path}; HttpOnly; SameSite=Lax; Max-Age=0{secure}"
 
     def _origin_allowed(self, request: HttpRequest) -> bool:
         """Return whether one auth helper HTTP request comes from the configured app origin."""
@@ -364,7 +376,7 @@ class SignalingServer:
 
         if path == self.auth_session_cookie_check_path:
             cookie_header = str(request.headers.get("Cookie", "")).strip()
-            token = self._cookie_value(cookie_header, AUTH_SESSION_COOKIE_NAME)
+            token = self._cookie_value(cookie_header, self.auth_session_cookie_name)
             if not token:
                 return HttpResponse(401, "Unauthorized", headers, b"missing session")
             try:
@@ -400,7 +412,7 @@ class SignalingServer:
         cookie_header = str(headers.get("Cookie", "")).strip()
         if not cookie_header:
             return ""
-        return self._cookie_value(cookie_header, AUTH_SESSION_COOKIE_NAME)
+        return self._cookie_value(cookie_header, self.auth_session_cookie_name)
 
     def _build_admin_menu_actions_for_client(self, client: ClientConnection | None) -> list[dict[str, str]]:
         """Build server-authored admin menu actions allowed for one client."""

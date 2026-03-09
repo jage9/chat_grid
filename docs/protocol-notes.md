@@ -96,7 +96,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - `policy` (`usernameMinLength`, `usernameMaxLength`, `passwordMinLength`, `passwordMaxLength`)
 - `auth_required.authPolicy`: server auth limits advertised before login/register submit.
 - `auth_result.authPolicy`: server auth limits echoed on auth success/failure responses.
-- `auth_result.sessionToken` is used by the client to call the instance-scoped HTTP endpoint `GET <base_path>auth/session/set` (`Authorization: Bearer <sessionToken>`, `X-Chgrid-Auth-Client: 1`) so the server can issue `Set-Cookie: chgrid_session_token=...; HttpOnly`.
+- `auth_result.sessionToken` is used by the client to call the instance-scoped HTTP endpoint `GET <base_path>auth/session/set` (`Authorization: Bearer <sessionToken>`, `X-Chgrid-Auth-Client: 1`) so the server can issue an instance-scoped `HttpOnly` session cookie.
 - `welcome.worldConfig.gridSize`: server-authoritative grid size used by clients for bounds/drawing.
 - `welcome.worldConfig.movementTickMs`: server movement-rate window used for client movement pacing.
 - `welcome.worldConfig.movementMaxStepsPerTick`: max allowed grid steps per movement window.
@@ -127,7 +127,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - Server also supports websocket handshake cookie resume:
   - accepts browser sockets only when websocket `Origin` matches `CHGRID_HOST_ORIGIN`
   - websocket and auth helper routes are scoped under the configured `server.base_path`
-  - reads `chgrid_session_token` from websocket `Cookie` header
+  - reads the instance-scoped session cookie from the websocket `Cookie` header
   - attempts resume before sending `auth_required`
   - exposes `GET <base_path>auth/session/clear` to expire the `HttpOnly` cookie (`X-Chgrid-Auth-Client: 1` and matching `Origin` required)
 - Server applies auth hardening before accepting login/register/resume:

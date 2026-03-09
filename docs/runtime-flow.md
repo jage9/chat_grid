@@ -5,7 +5,7 @@
 1. User clicks connect.
 2. Client validates auth form and sets up local media.
 3. Client connects signaling websocket from the configured app origin.
-4. Server accepts the socket only on the configured instance websocket path and when the browser `Origin` matches `CHGRID_HOST_ORIGIN`, then attempts cookie-based session resume from websocket handshake cookie (`chgrid_session_token`).
+4. Server accepts the socket only on the configured instance websocket path and when the browser `Origin` matches `CHGRID_HOST_ORIGIN`, then attempts cookie-based session resume from the instance-scoped websocket handshake cookie.
 5. If resume does not authenticate, server sends `auth_required`.
    - includes `authPolicy` limits for username/password.
 6. Client sends `auth_login` or `auth_register` (or explicit `auth_resume` if provided by caller).
