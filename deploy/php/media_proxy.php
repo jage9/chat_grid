@@ -187,7 +187,7 @@ function load_proxy_session_check_url()
     return $value;
 }
 
-function require_valid_proxy_session($sessionCheckUrl)
+function require_valid_proxy_session($sessionCheckUrl, $allowedOrigin)
 {
     $cookieHeader = isset($_SERVER['HTTP_COOKIE']) ? trim((string) $_SERVER['HTTP_COOKIE']) : '';
     if ($cookieHeader === '') {
@@ -216,6 +216,7 @@ function require_valid_proxy_session($sessionCheckUrl)
         array(
             'Cookie: ' . $cookieHeader,
             'X-Chgrid-Auth-Client: 1',
+            'Origin: ' . $allowedOrigin,
         )
     );
 
@@ -521,7 +522,7 @@ if ($method !== 'GET' && $method !== 'HEAD') {
     send_text(405, 'method not allowed');
 }
 
-require_valid_proxy_session($sessionCheckUrl);
+require_valid_proxy_session($sessionCheckUrl, $allowedOrigin);
 
 $rawUrl = isset($_GET['url']) ? trim((string) $_GET['url']) : '';
 if ($rawUrl === '') {

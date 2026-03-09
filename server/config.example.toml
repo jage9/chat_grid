@@ -15,9 +15,11 @@ allow_insecure_ws = false
 [tls]
 # Required when allow_insecure_ws = false.
 cert_file = ""
+# Private key paired with tls.cert_file.
 key_file = ""
 
 [logging]
+# Python logging level for the signaling server.
 level = "INFO"
 
 [storage]
