@@ -22,6 +22,7 @@ import uuid
 from pathlib import Path
 from typing import Literal
 from urllib.error import URLError
+from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError, TypeAdapter
@@ -330,13 +331,26 @@ class SignalingServer:
         if not self.host_origin:
             return False
         raw_origin = str(request.headers.get("Origin", "")).strip()
-        if not raw_origin:
+        if raw_origin:
+            try:
+                origin = normalize_origin(raw_origin)
+            except ValueError:
+                return False
+            return origin == self.host_origin
+
+        fetch_site = str(request.headers.get("Sec-Fetch-Site", "")).strip().lower()
+        if fetch_site == "same-origin":
+            return True
+
+        raw_referer = str(request.headers.get("Referer", "")).strip()
+        if not raw_referer:
             return False
         try:
-            origin = normalize_origin(raw_origin)
+            parts = urlsplit(raw_referer)
+            referer_origin = urlunsplit((parts.scheme, parts.netloc, "", "", ""))
+            return normalize_origin(referer_origin, field_name="referer") == self.host_origin
         except ValueError:
             return False
-        return origin == self.host_origin
 
     @staticmethod
     def _cookie_value(cookie_header: str, name: str) -> str:

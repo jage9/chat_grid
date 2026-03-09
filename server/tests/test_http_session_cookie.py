@@ -118,6 +118,23 @@ async def test_session_cookie_helpers_reject_wrong_origin() -> None:
     assert response.status_code == 403
 
 
+@pytest.mark.asyncio
+async def test_session_cookie_helpers_accept_same_origin_referer_without_origin() -> None:
+    server = _server()
+    request = _request(
+        server.auth_session_cookie_clear_path,
+        headers={
+            AUTH_SESSION_COOKIE_CLIENT_HEADER: "1",
+            "Referer": "https://example.com/chgrid/",
+        },
+    )
+
+    response = await server._process_http_request(SimpleNamespace(), request)
+
+    assert response is not None
+    assert response.status_code == 200
+
+
 def test_session_token_from_websocket_cookie_reads_named_cookie() -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, base_path="/chgrid/")
     websocket = SimpleNamespace(

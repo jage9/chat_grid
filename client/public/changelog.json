@@ -1,6 +1,12 @@
 {
   "sections": [
     {
+      "date": "March 8, 2026",
+      "items": [
+        "Added a command palette with Shift+K, Shift+F10, or the Applications key to show all available commands."
+      ]
+    },
+    {
       "date": "February 28, 2026",
       "items": [
         "Added Item Management menu with z, to transfer items or delete them. Shift+D is gone now.",

@@ -156,6 +156,14 @@ export function createAuthController(deps: AuthControllerDeps): {
     }
   }
 
+  function resetSavedSessionHint(): void {
+    authUserId = '';
+    authUsername = '';
+    deps.saveAuthUsername('');
+    deps.dom.authUsername.value = '';
+    deps.dom.registerUsername.value = '';
+  }
+
   function updateConnectAvailability(): void {
     const hasSavedSessionHint = sanitizeAuthUsername(authUsername).length > 0;
     const showLogout = deps.isRunning() || hasSavedSessionHint;
@@ -256,6 +264,10 @@ export function createAuthController(deps: AuthControllerDeps): {
         deps.signalingSend(packet);
         return;
       }
+      if (sanitizeAuthUsername(authUsername).length > 0) {
+        resetSavedSessionHint();
+        setAuthMode('login');
+      }
       deps.setConnecting(false);
       updateConnectAvailability();
     }
@@ -311,6 +323,7 @@ export function createAuthController(deps: AuthControllerDeps): {
       deps.dom.registerPassword.value = '';
       deps.dom.registerPasswordConfirm.value = '';
       if (message.message.toLowerCase().includes('session')) {
+        resetSavedSessionHint();
         void clearHttpOnlySessionCookie();
       }
       applyAuthPermissions('user', []);
