@@ -28,7 +28,6 @@ Notes:
 - Server bind/port defaults are `127.0.0.1:8765` unless changed in config or CLI flags.
 - Client dev defaults to Vite local host/port (`localhost:5173`) unless flags override.
 - Auth requires `CHGRID_AUTH_SECRET` in server environment; `deploy/scripts/install_server.sh` creates `server/.env` with this value automatically if missing.
-- Saved login/session persistence uses a server-set `HttpOnly` cookie (`chgrid_session_token`).
 
 Common server overrides:
 - `uv run python main.py --config /path/to/config.toml`
@@ -46,7 +45,6 @@ Summary:
 2. Build client and publish `client/dist/` to your web root/subdirectory.
 3. Configure server `config.toml` and run it via `systemd`.
 4. Add Apache `/ws` websocket proxy from `deploy/apache/chgrid-vhost-snippet.conf`.
-   Include `/auth/session/*` proxy routes from the same snippet so login cookies can be set/cleared reliably.
 
 ## Key Paths
 
