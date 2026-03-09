@@ -14,11 +14,20 @@ def _fake_ws() -> ServerConnection:
     return cast(ServerConnection, object())
 
 
+def _activate_client(client: ClientConnection) -> ClientConnection:
+    client.authenticated = True
+    client.user_id = client.user_id or client.id
+    client.username = client.username or client.nickname
+    client.permissions = set(client.permissions or set()) | {"profile.update_nickname"}
+    client.world_ready = True
+    return client
+
+
 @pytest.mark.asyncio
 async def test_same_nickname_same_case_is_noop(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="1", nickname="Jage")
+    client = _activate_client(ClientConnection(websocket=ws, id="1", nickname="Jage"))
     server.clients[ws] = client
 
     sent_packets: list[object] = []
@@ -47,7 +56,7 @@ async def test_same_nickname_same_case_is_noop(monkeypatch: pytest.MonkeyPatch) 
 async def test_case_only_change_is_allowed_and_broadcast(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="1", nickname="jage")
+    client = _activate_client(ClientConnection(websocket=ws, id="1", nickname="jage"))
     server.clients[ws] = client
 
     sent_packets: list[object] = []

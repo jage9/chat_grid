@@ -13,11 +13,24 @@ def _fake_ws() -> ServerConnection:
     return cast(ServerConnection, object())
 
 
+def _activate_client(
+    client: ClientConnection,
+    *,
+    permissions: set[str] | None = None,
+) -> ClientConnection:
+    client.authenticated = True
+    client.user_id = client.user_id or client.id
+    client.username = client.username or client.nickname
+    client.permissions = set(permissions or client.permissions or set())
+    client.world_ready = True
+    return client
+
+
 @pytest.mark.asyncio
 async def test_item_use_has_global_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6), permissions={"item.use"})
     server.clients[ws] = client
     item = server.item_service.default_item(client, "dice")
     server.item_service.add_item(item)
@@ -52,7 +65,7 @@ async def test_item_use_has_global_cooldown(monkeypatch: pytest.MonkeyPatch) -> 
 async def test_radio_use_toggles_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6), permissions={"item.use"})
     server.clients[ws] = client
     item = server.item_service.default_item(client, "radio_station")
     server.item_service.add_item(item)
@@ -88,7 +101,10 @@ async def test_radio_use_toggles_enabled(monkeypatch: pytest.MonkeyPatch) -> Non
 async def test_radio_media_fields_update_validate(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6),
+        permissions={"item.edit.own"},
+    )
     server.clients[ws] = client
     item = server.item_service.default_item(client, "radio_station")
     server.item_service.add_item(item)
@@ -165,7 +181,10 @@ async def test_radio_media_fields_update_validate(monkeypatch: pytest.MonkeyPatc
 async def test_item_update_strips_unknown_params(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6),
+        permissions={"item.edit.own"},
+    )
     server.clients[ws] = client
     item = server.item_service.default_item(client, "radio_station")
     server.item_service.add_item(item)
@@ -194,7 +213,7 @@ async def test_item_update_strips_unknown_params(monkeypatch: pytest.MonkeyPatch
 async def test_item_use_revalidates_updated_params(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6), permissions={"item.use"})
     server.clients[ws] = client
     item = server.item_service.default_item(client, "widget")
     item.params["hackedFlag"] = True
@@ -223,7 +242,7 @@ async def test_item_use_revalidates_updated_params(monkeypatch: pytest.MonkeyPat
 async def test_clock_use_reports_time_without_use_sound_packet(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6), permissions={"item.use"})
     server.clients[ws] = client
     item = server.item_service.default_item(client, "clock")
     server.item_service.add_item(item)
@@ -252,7 +271,10 @@ async def test_clock_use_reports_time_without_use_sound_packet(monkeypatch: pyte
 async def test_clock_timezone_update_validates(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6),
+        permissions={"item.edit.own"},
+    )
     server.clients[ws] = client
     item = server.item_service.default_item(client, "clock")
     server.item_service.add_item(item)
@@ -311,7 +333,7 @@ async def test_clock_timezone_update_validates(monkeypatch: pytest.MonkeyPatch) 
 async def test_failed_wheel_use_does_not_consume_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6), permissions={"item.use"})
     server.clients[ws] = client
     item = server.item_service.default_item(client, "wheel")
     item.params["spaces"] = ",,,"
@@ -343,7 +365,10 @@ async def test_failed_wheel_use_does_not_consume_cooldown(monkeypatch: pytest.Mo
 async def test_widget_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6),
+        permissions={"item.edit.own", "item.use"},
+    )
     server.clients[ws] = client
     item = server.item_service.default_item(client, "widget")
     server.item_service.add_item(item)
@@ -426,7 +451,7 @@ async def test_widget_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_carried_item_use_sound_uses_carrier_position(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6), permissions={"item.use"})
     server.clients[ws] = client
     item = server.item_service.default_item(client, "widget")
     item.params["useSound"] = "sounds/test.ogg"
@@ -464,7 +489,10 @@ async def test_carried_item_use_sound_uses_carrier_position(monkeypatch: pytest.
 async def test_piano_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6),
+        permissions={"item.edit.own", "item.use"},
+    )
     server.clients[ws] = client
     item = server.item_service.default_item(client, "piano")
     server.item_service.add_item(item)
@@ -549,9 +577,12 @@ async def test_piano_update_and_use(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_piano_note_packet_broadcasts(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws_sender = _fake_ws()
-    sender = ClientConnection(websocket=ws_sender, id="u1", nickname="tester", x=5, y=6)
+    sender = _activate_client(
+        ClientConnection(websocket=ws_sender, id="u1", nickname="tester", x=5, y=6),
+        permissions={"item.use"},
+    )
     ws_other = _fake_ws()
-    other = ClientConnection(websocket=ws_other, id="u2", nickname="listener", x=7, y=6)
+    other = _activate_client(ClientConnection(websocket=ws_other, id="u2", nickname="listener", x=7, y=6))
     server.clients[ws_sender] = sender
     server.clients[ws_other] = other
     item = server.item_service.default_item(sender, "piano")
@@ -597,7 +628,10 @@ async def test_piano_note_packet_broadcasts(monkeypatch: pytest.MonkeyPatch) -> 
 async def test_piano_note_key_cap(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws_sender = _fake_ws()
-    sender = ClientConnection(websocket=ws_sender, id="u1", nickname="tester", x=5, y=6)
+    sender = _activate_client(
+        ClientConnection(websocket=ws_sender, id="u1", nickname="tester", x=5, y=6),
+        permissions={"item.use"},
+    )
     server.clients[ws_sender] = sender
     item = server.item_service.default_item(sender, "piano")
     server.item_service.add_item(item)
@@ -632,7 +666,7 @@ async def test_piano_note_key_cap(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_piano_recording_toggle_and_save(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6), permissions={"item.use"})
     server.clients[ws] = client
     item = server.item_service.default_item(client, "piano")
     server.item_service.add_item(item)
@@ -700,7 +734,7 @@ async def test_piano_recording_toggle_and_save(monkeypatch: pytest.MonkeyPatch) 
 async def test_piano_playback_starts_task(monkeypatch: pytest.MonkeyPatch) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = _fake_ws()
-    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    client = _activate_client(ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6), permissions={"item.use"})
     server.clients[ws] = client
     item = server.item_service.default_item(client, "piano")
     item.params["songId"] = "item:test-song"
