@@ -60,6 +60,7 @@ body {
   margin: 0.35rem 0;
 }
 
+#helpToggle,
 #updatesToggle {
   margin-bottom: 0.35rem;
 }
@@ -202,8 +203,14 @@ canvas {
 #instructions {
   color: #94a3b8;
   text-align: left;
-  margin: 0.75rem auto;
+  margin: 0.35rem auto 0;
   width: fit-content;
+}
+
+#instructions h3 {
+  color: #cbd5e1;
+  font-size: 0.95rem;
+  margin: 0.35rem 0 0.2rem;
 }
 
 .hidden {

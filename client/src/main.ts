@@ -113,6 +113,8 @@ type Dom = {
   authSessionText: HTMLParagraphElement;
   authModeSeparator: HTMLElement;
   showRegisterButton: HTMLButtonElement;
+  helpSection: HTMLElement;
+  helpToggle: HTMLButtonElement;
   updatesSection: HTMLElement;
   updatesToggle: HTMLButtonElement;
   updatesPanel: HTMLDivElement;
@@ -148,6 +150,8 @@ const dom: Dom = {
   authSessionText: requiredById('authSessionText'),
   authModeSeparator: requiredById('authModeSeparator'),
   showRegisterButton: requiredById('showRegisterButton'),
+  helpSection: requiredById('helpSection'),
+  helpToggle: requiredById('helpToggle'),
   updatesSection: requiredById('updatesSection'),
   updatesToggle: requiredById('updatesToggle'),
   updatesPanel: requiredById('updatesPanel'),
@@ -435,13 +439,18 @@ function setUpdatesExpanded(expanded: boolean): void {
   dom.updatesPanel.classList.toggle('hidden', !expanded);
 }
 
+/** Toggles help panel visibility and syncs associated ARIA state. */
+function setHelpExpanded(expanded: boolean): void {
+  dom.helpToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  dom.helpToggle.textContent = expanded ? 'Hide help' : 'Show help';
+  dom.instructions.hidden = !expanded;
+  dom.instructions.classList.toggle('hidden', !expanded);
+}
+
 /** Renders help sections into the footer help container and builds linearized viewer lines. */
 function renderHelp(help: HelpData): void {
   const lines = buildHelpLines(help);
   dom.instructions.innerHTML = '';
-  const heading = document.createElement('h2');
-  heading.textContent = 'Help';
-  dom.instructions.appendChild(heading);
   for (const section of help.sections) {
     const sectionHeading = document.createElement('h3');
     sectionHeading.textContent = section.title;
@@ -458,6 +467,8 @@ function renderHelp(help: HelpData): void {
   mainHelpViewerLines = lines;
   helpViewerLines = lines;
   helpViewerIndex = 0;
+  dom.helpSection.classList.remove('hidden');
+  setHelpExpanded(false);
 }
 
 /** Loads runtime help content from `help.json` and applies it when available. */
@@ -465,15 +476,21 @@ async function loadHelp(): Promise<void> {
   try {
     const response = await fetch(withBase('help.json'), { cache: 'no-store' });
     if (!response.ok) {
+      dom.helpSection.classList.add('hidden');
       return;
     }
     const help = (await response.json()) as HelpData;
     if (!Array.isArray(help.sections) || help.sections.length === 0) {
+      dom.helpSection.classList.add('hidden');
       return;
     }
     renderHelp(help);
+    dom.helpToggle.addEventListener('click', () => {
+      const expanded = dom.helpToggle.getAttribute('aria-expanded') === 'true';
+      setHelpExpanded(!expanded);
+    });
   } catch {
-    // Keep existing/static help if loading fails.
+    dom.helpSection.classList.add('hidden');
   }
 }
 

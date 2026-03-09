@@ -66,13 +66,16 @@
         class="hidden"
         aria-label="Chat Grid, press question mark for help."
       ></canvas>
-      <div id="instructions" class="hidden"></div>
-
       <footer id="appFooter">
         <small id="appVersion">Another AI experiment with Jage. Version</small>
         <small id="appGithubLinkWrap">
           <a id="appGithubLink" href="https://www.github.com/jage9/chat_grid">Chat Grid on Github</a>
         </small>
+        <section id="helpSection" class="updates-section hidden">
+          <h2>Help</h2>
+          <button id="helpToggle" type="button" aria-expanded="false" aria-controls="instructions">Show help</button>
+          <div id="instructions" class="hidden" hidden></div>
+        </section>
         <section id="updatesSection" class="updates-section">
           <h2>Latest Updates</h2>
           <button id="updatesToggle" type="button" aria-expanded="false" aria-controls="updatesPanel">
