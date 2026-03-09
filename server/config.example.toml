@@ -3,6 +3,8 @@
 bind_ip = "127.0.0.1"
 # Listen port for signaling websocket server.
 port = 8765
+# Public base path for this grid instance. Examples: "/", "/chgrid/", "/ttgrid/".
+base_path = "/"
 
 [network]
 # Maximum inbound websocket message size in bytes.

@@ -8,6 +8,7 @@ from app.config import load_config
 def test_load_config_defaults_when_path_none() -> None:
     cfg = load_config(None)
     assert cfg.server.bind_ip == "127.0.0.1"
+    assert cfg.server.base_path == "/"
     assert cfg.network.allow_insecure_ws is False
     assert cfg.storage.state_file == "runtime/items.json"
     assert cfg.storage.state_save_debounce_ms == 200
@@ -43,3 +44,18 @@ state_save_max_delay_ms = 900
     cfg = load_config(config_path)
     assert cfg.storage.state_save_debounce_ms == 150
     assert cfg.storage.state_save_max_delay_ms == 900
+
+
+def test_load_config_reads_server_base_path(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        """
+[network]
+allow_insecure_ws = true
+
+[server]
+base_path = "/ttgrid/"
+""".strip()
+    )
+    cfg = load_config(config_path)
+    assert cfg.server.base_path == "/ttgrid/"

@@ -13,6 +13,7 @@ class ServerConfigSection(BaseModel):
 
     bind_ip: str = "127.0.0.1"
     port: int = 8765
+    base_path: str = "/"
 
 
 class NetworkConfigSection(BaseModel):

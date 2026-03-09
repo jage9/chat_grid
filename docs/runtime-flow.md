@@ -5,14 +5,14 @@
 1. User clicks connect.
 2. Client validates auth form and sets up local media.
 3. Client connects signaling websocket from the configured app origin.
-4. Server accepts the socket only when the browser `Origin` matches `CHGRID_HOST_ORIGIN`, then attempts cookie-based session resume from websocket handshake cookie (`chgrid_session_token`).
+4. Server accepts the socket only on the configured instance websocket path and when the browser `Origin` matches `CHGRID_HOST_ORIGIN`, then attempts cookie-based session resume from websocket handshake cookie (`chgrid_session_token`).
 5. If resume does not authenticate, server sends `auth_required`.
    - includes `authPolicy` limits for username/password.
 6. Client sends `auth_login` or `auth_register` (or explicit `auth_resume` if provided by caller).
 7. Server sends `auth_result`.
    - includes role + permissions for authenticated session.
-8. Client persists authenticated session into a server-managed `HttpOnly` cookie via `GET /auth/session/set` (`Authorization: Bearer <sessionToken>`, `X-Chgrid-Auth-Client: 1`), and clears it via `GET /auth/session/clear` (`X-Chgrid-Auth-Client: 1`) on logout/session errors.
-   - the optional PHP media proxy validates that same cookie through `GET /auth/session/check` before relaying media
+8. Client persists authenticated session into instance-scoped server-managed `HttpOnly` cookie helpers under the active app base path via `GET <base_path>auth/session/set` (`Authorization: Bearer <sessionToken>`, `X-Chgrid-Auth-Client: 1`), and clears it via `GET <base_path>auth/session/clear` on logout/session errors.
+   - the optional PHP media proxy validates that same cookie through `GET <base_path>auth/session/check` before relaying media
 9. Server sends `welcome` with users/items snapshot.
 10. Client:
    - applies `welcome.worldConfig.gridSize` for authoritative grid bounds/rendering

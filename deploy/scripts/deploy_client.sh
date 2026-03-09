@@ -57,6 +57,7 @@ except ModuleNotFoundError:  # pragma: no cover - compatibility fallback
 config_path = Path(sys.argv[1])
 host = "127.0.0.1"
 port = 8765
+base_path = "/"
 if config_path.exists():
     with config_path.open("rb") as fp:
         data = tomllib.load(fp)
@@ -72,7 +73,9 @@ if config_path.exists():
         port = int(server.get("port", port))
     except (TypeError, ValueError):
         port = 8765
-print(f"http://{host}:{port}/auth/session/check")
+    raw_base_path = str(server.get("base_path", base_path)).strip() or "/"
+    base_path = "/" if raw_base_path == "/" else f"/{raw_base_path.strip('/')}/"
+print(f"http://{host}:{port}{base_path}auth/session/check")
 PY
   )"
   escaped_host_origin=${CHGRID_HOST_ORIGIN//\\/\\\\}

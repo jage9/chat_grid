@@ -236,8 +236,8 @@ const SYSTEM_SOUND_URLS = {
   logout: withBase('sounds/logout.ogg'),
   notify: withBase('sounds/notify.ogg'),
 } as const;
-const AUTH_SESSION_COOKIE_SET_URL = '/auth/session/set';
-const AUTH_SESSION_COOKIE_CLEAR_URL = '/auth/session/clear';
+const AUTH_SESSION_COOKIE_SET_URL = withBase('auth/session/set');
+const AUTH_SESSION_COOKIE_CLEAR_URL = withBase('auth/session/clear');
 const AUTH_SESSION_COOKIE_CLIENT_HEADER = 'X-Chgrid-Auth-Client';
 const ACTION_SOUND_URL = withBase('sounds/action.ogg');
 const FOOTSTEP_SOUND_URLS = Array.from({ length: 11 }, (_, index) => withBase(`sounds/step-${index + 1}.ogg`));
@@ -313,7 +313,7 @@ let activeTeleport:
   | null = null;
 
 const signalingProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-const signalingUrl = `${signalingProtocol}://${window.location.host}/ws`;
+const signalingUrl = `${signalingProtocol}://${window.location.host}${withBase('ws')}`;
 const signaling = new SignalingClient(signalingUrl, handleSignalingStatus);
 
 const peerManager = new PeerManager(

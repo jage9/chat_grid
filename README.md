@@ -47,7 +47,7 @@ Summary:
 1. Copy repo to your server.
 2. Build client and publish `client/dist/` to your web root/subdirectory.
 3. Configure server `config.toml` and run it via `systemd`.
-4. Add Apache `/ws` websocket proxy from `deploy/apache/chgrid-vhost-snippet.conf`.
+4. Add base-path-scoped websocket/auth proxy routes from `deploy/apache/chgrid-vhost-snippet.conf`.
 
 ## Key Paths
 

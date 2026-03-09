@@ -79,21 +79,19 @@ cd "$REPO_ROOT"
 Expected proxy endpoints:
 
 ```apache
-ProxyPass        /ws  ws://127.0.0.1:8765
-ProxyPassReverse /ws  ws://127.0.0.1:8765
-ProxyPass        /auth/session/  http://127.0.0.1:8765/auth/session/
-ProxyPassReverse /auth/session/  http://127.0.0.1:8765/auth/session/
+ProxyPass        /chgrid/ws  ws://127.0.0.1:8765/chgrid/ws
+ProxyPassReverse /chgrid/ws  ws://127.0.0.1:8765/chgrid/ws
+ProxyPass        /chgrid/auth/session/  http://127.0.0.1:8765/chgrid/auth/session/
+ProxyPassReverse /chgrid/auth/session/  http://127.0.0.1:8765/chgrid/auth/session/
 ```
 
 The websocket server enforces browser origin matching against `CHGRID_HOST_ORIGIN`, so the public site origin must match that env var exactly.
+The `server.base_path` value in `config.toml` must match the published client path and the proxy paths above.
 
 What each route does:
-- `/ws`: websocket signaling (presence, movement, item actions, chat, voice signaling).
-- `/auth/session/set`: called by client after successful login to set `HttpOnly` session cookie.
-- `/auth/session/clear`: called by client on logout/session-reset to clear `HttpOnly` session cookie.
-
-Important:
-- Keep `/auth/session/*` at domain root even when the app is served from a subpath like `/chgrid`.
+- `<base_path>ws`: websocket signaling (presence, movement, item actions, chat, voice signaling).
+- `<base_path>auth/session/set`: called by client after successful login to set the instance-scoped `HttpOnly` session cookie.
+- `<base_path>auth/session/clear`: called by client on logout/session-reset to clear the instance-scoped `HttpOnly` session cookie.
 
 After Apache changes, reload Apache using your host's command.
 
