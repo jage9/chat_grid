@@ -112,11 +112,6 @@ function connectRadioChannelSource(
 }
 
 /** Returns whether a hostname belongs to Dropbox domains that need proxy support. */
-function isDropboxHost(hostname: string): boolean {
-  const host = hostname.toLowerCase();
-  return host.endsWith('dropbox.com') || host.endsWith('dropboxusercontent.com');
-}
-
 export function shouldProxyStreamUrl(streamUrl: string): boolean {
   try {
     const parsed = new URL(streamUrl);
@@ -126,12 +121,11 @@ export function shouldProxyStreamUrl(streamUrl: string): boolean {
     ) {
       return false;
     }
-    if (parsed.protocol === 'http:') return true;
-    if (parsed.protocol === 'https:' && isDropboxHost(parsed.hostname)) return true;
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    return parsed.origin !== window.location.origin;
   } catch {
     return false;
   }
-  return false;
 }
 
 export function getProxyUrlForStream(streamUrl: string): string {
