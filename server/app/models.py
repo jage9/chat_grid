@@ -12,13 +12,6 @@ class BasePacket(BaseModel):
     type: str
 
 
-class SignalPacket(BasePacket):
-    type: Literal["signal"]
-    targetId: str
-    sdp: dict | None = None
-    ice: dict | None = None
-
-
 class UpdatePositionPacket(BasePacket):
     type: Literal["update_position"]
     x: int
@@ -184,8 +177,7 @@ class ItemUpdatePacket(BasePacket):
 
 
 ClientPacket = (
-    SignalPacket
-    | UpdatePositionPacket
+    UpdatePositionPacket
     | TeleportCompletePacket
     | UpdateNicknamePacket
     | ChatMessagePacket
@@ -294,14 +286,10 @@ class BroadcastNicknamePacket(BasePacket):
     nickname: str
 
 
-class ForwardSignalPacket(BasePacket):
-    type: Literal["signal"]
-    senderId: str
-    senderNickname: str
-    x: int
-    y: int
-    sdp: dict | None = None
-    ice: dict | None = None
+class LiveKitTokenPacket(BasePacket):
+    type: Literal["livekit_token"]
+    token: str
+    url: str
 
 
 class BroadcastChatMessagePacket(BasePacket):

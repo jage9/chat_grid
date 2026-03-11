@@ -1,0 +1,17 @@
+# LiveKit server configuration for self-hosted Docker deployment.
+# See https://docs.livekit.io/realtime/self-hosting/deployment/ for all options.
+
+port: 7880
+rtc:
+  port_range_start: 50000
+  port_range_end: 60000
+  tcp_port: 7881
+  udp_port: 7882
+  # Use the host's external IP for ICE candidates so browsers can reach the server.
+  use_external_ip: true
+
+keys:
+  devkey: a]3jK$2pL9mN#vQ8wR5tY7uI0oP4sD6fG
+
+logging:
+  level: info

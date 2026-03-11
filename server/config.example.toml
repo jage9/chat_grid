@@ -2,7 +2,7 @@
 # Bind IP for signaling server.
 bind_ip = "127.0.0.1"
 # Listen port for signaling websocket server.
-port = 8765
+port = 4474
 # Public base path for this grid instance. Examples: "/", "/chgrid/", "/ttgrid/".
 base_path = "/"
 # User-facing grid name shown in the web client. 
@@ -47,3 +47,10 @@ password_max_length = 32
 # Username length policy.
 username_min_length = 2
 username_max_length = 32
+
+[livekit]
+# LiveKit SFU server URL (e.g. ws://localhost:7880 or wss://your-livekit.example.com).
+url = ""
+# LiveKit API credentials. Generate these with `livekit-server --keys`.
+api_key = ""
+api_secret = ""

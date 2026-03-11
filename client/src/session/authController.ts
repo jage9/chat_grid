@@ -459,6 +459,7 @@ export function createAuthController(deps: AuthControllerDeps): {
     handleAuthResult,
     handleAuthPermissions,
     applyWelcomeAuth,
+    applyVoiceSendPermission,
     logOutAccount,
   };
 }

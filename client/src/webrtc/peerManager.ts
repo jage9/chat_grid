@@ -1,24 +1,32 @@
+import {
+  Room,
+  RoomEvent,
+  Track,
+  RemoteTrack,
+  RemoteTrackPublication,
+  RemoteParticipant,
+  LocalTrack,
+  LocalAudioTrack,
+  type AudioCaptureOptions,
+} from 'livekit-client';
 import { AudioEngine, type SpatialPeerRuntime } from '../audio/audioEngine';
 import type { RemoteUser } from '../network/protocol';
 
 export type PeerRuntime = SpatialPeerRuntime & {
   id: string;
-  pc: RTCPeerConnection;
   remoteStream?: MediaStream;
 };
-
-type SendSignal = (targetId: string, payload: { sdp?: RTCSessionDescriptionInit; ice?: RTCIceCandidateInit }) => void;
 
 type StatusHandler = (message: string) => void;
 
 export class PeerManager {
   private readonly peers = new Map<string, PeerRuntime>();
   private outputDeviceId = '';
+  private room: Room | null = null;
+  private localTrack: LocalAudioTrack | null = null;
 
   constructor(
     private readonly audio: AudioEngine,
-    private readonly sendSignal: SendSignal,
-    private readonly getLocalStream: () => MediaStream | null,
     private readonly status: StatusHandler,
   ) {}
 
@@ -30,11 +38,74 @@ export class PeerManager {
     return this.peers.values();
   }
 
-  async createOrGetPeer(targetId: string, isInitiator: boolean, userData: Partial<RemoteUser>): Promise<PeerRuntime> {
+  /** Connect to a LiveKit room using the provided token and URL. */
+  async connectToRoom(url: string, token: string): Promise<void> {
+    if (this.room) {
+      await this.room.disconnect();
+    }
+
+    const room = new Room({
+      audioCaptureDefaults: {
+        sampleRate: 48000,
+        channelCount: 2,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      } as AudioCaptureOptions,
+      audioOutput: {
+        deviceId: this.outputDeviceId || undefined,
+      },
+      publishDefaults: {
+        audioPreset: {
+          maxBitrate: 128_000,
+        },
+        dtx: false,
+        red: true,
+        stopMicTrackOnMute: false,
+      },
+    });
+
+    room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+      if (track.kind !== Track.Kind.Audio) return;
+      void this.handleRemoteTrackSubscribed(participant, track);
+    });
+
+    room.on(RoomEvent.TrackUnsubscribed, (_track: RemoteTrack, _publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+      const peer = this.peers.get(participant.identity);
+      if (peer) {
+        this.audio.cleanupPeerAudio(peer);
+        peer.remoteStream = undefined;
+      }
+    });
+
+    room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+      const peer = this.peers.get(participant.identity);
+      if (peer) {
+        this.audio.cleanupPeerAudio(peer);
+        peer.remoteStream = undefined;
+      }
+    });
+
+    room.on(RoomEvent.Disconnected, () => {
+      this.status('LiveKit disconnected.');
+    });
+
+    room.on(RoomEvent.Reconnecting, () => {
+      this.status('LiveKit reconnecting...');
+    });
+
+    room.on(RoomEvent.Reconnected, () => {
+      this.status('LiveKit reconnected.');
+    });
+
+    await room.connect(url, token);
+    this.room = room;
+  }
+
+  /** Ensure a peer entry exists for a given user (called when roster arrives). */
+  ensurePeer(targetId: string, userData: Partial<RemoteUser>): PeerRuntime {
     const existing = this.peers.get(targetId);
     if (existing) return existing;
-
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
 
     const peer: PeerRuntime = {
       id: targetId,
@@ -42,115 +113,39 @@ export class PeerManager {
       x: userData.x ?? 20,
       y: userData.y ?? 20,
       listenGain: 1,
-      pc,
     };
 
     this.peers.set(targetId, peer);
-
-    const stream = this.getLocalStream();
-    if (stream) {
-      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-    } else {
-      // Ensure initial offers still negotiate audio receive even before mic setup finishes.
-      pc.addTransceiver('audio', { direction: 'sendrecv' });
-    }
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        this.sendSignal(targetId, { ice: event.candidate.toJSON() });
-      }
-    };
-
-    pc.ontrack = async (event) => {
-      peer.remoteStream = event.streams[0];
-      if (this.audio.isVoiceLayerEnabled()) {
-        await this.audio.attachRemoteStream(peer, event.streams[0], this.outputDeviceId);
-      } else {
-        this.audio.cleanupPeerAudio(peer);
-      }
-    };
-
-    if (isInitiator) {
-      let offer = await pc.createOffer();
-      offer = this.tuneOpus(offer);
-      await pc.setLocalDescription(offer);
-      this.sendSignal(targetId, { sdp: pc.localDescription ?? undefined });
-    }
-
     return peer;
   }
 
-  async handleSignal(data: {
-    senderId: string;
-    senderNickname?: string;
-    x?: number;
-    y?: number;
-    sdp?: RTCSessionDescriptionInit;
-    ice?: RTCIceCandidateInit;
-  }): Promise<PeerRuntime> {
-    const peer = await this.createOrGetPeer(data.senderId, false, {
-      id: data.senderId,
-      nickname: data.senderNickname,
-      x: data.x,
-      y: data.y,
-    });
-
-    if (data.sdp) {
-      await peer.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-      if (data.sdp.type === 'offer') {
-        let answer = await peer.pc.createAnswer();
-        answer = this.tuneOpus(answer);
-        await peer.pc.setLocalDescription(answer);
-        this.sendSignal(data.senderId, { sdp: peer.pc.localDescription ?? undefined });
-      }
-    }
-
-    if (data.ice) {
-      await peer.pc.addIceCandidate(new RTCIceCandidate(data.ice)).catch(() => undefined);
-    }
-
-    return peer;
-  }
-
+  /** Publish a local audio stream to the LiveKit room. */
   async replaceOutgoingTrack(stream: MediaStream): Promise<void> {
     const newTrack = stream.getAudioTracks()[0];
-    if (!newTrack) {
-      return;
-    }
-    for (const peer of this.peers.values()) {
-      const sender =
-        peer.pc.getSenders().find((candidate) => candidate.track?.kind === 'audio') ??
-        peer.pc
-          .getTransceivers()
-          .find((transceiver) => transceiver.receiver.track?.kind === 'audio' || transceiver.sender.track?.kind === 'audio')
-          ?.sender;
-      if (!sender) {
-        peer.pc.addTrack(newTrack, stream);
-        await this.renegotiatePeer(peer);
-      } else {
-        await sender.replaceTrack(newTrack);
-      }
-    }
-  }
+    if (!newTrack) return;
 
-  /** Re-negotiate one peer connection after adding a new outbound track. */
-  private async renegotiatePeer(peer: PeerRuntime): Promise<void> {
-    if (peer.pc.connectionState === 'closed') return;
-    if (peer.pc.signalingState !== 'stable') return;
-    try {
-      let offer = await peer.pc.createOffer();
-      offer = this.tuneOpus(offer);
-      await peer.pc.setLocalDescription(offer);
-      this.sendSignal(peer.id, { sdp: peer.pc.localDescription ?? undefined });
-    } catch {
-      // Best-effort renegotiation; transport-level failures recover on subsequent signaling.
+    if (!this.room) return;
+
+    if (this.localTrack) {
+      // Replace the underlying MediaStreamTrack on the existing LiveKit track.
+      await this.localTrack.replaceTrack(newTrack);
+    } else {
+      const localAudioTrack = new LocalAudioTrack(newTrack, undefined, false);
+      await this.room.localParticipant.publishTrack(localAudioTrack, {
+        audioPreset: {
+          maxBitrate: 128_000,
+        },
+        dtx: false,
+        red: true,
+        stopMicTrackOnMute: false,
+      });
+      this.localTrack = localAudioTrack;
     }
   }
 
   removePeer(id: string): void {
     const peer = this.peers.get(id);
     if (!peer) return;
-    peer.pc.close();
     this.audio.cleanupPeerAudio(peer);
     this.peers.delete(id);
   }
@@ -159,6 +154,11 @@ export class PeerManager {
     for (const id of this.peers.keys()) {
       this.removePeer(id);
     }
+    if (this.room) {
+      void this.room.disconnect();
+      this.room = null;
+    }
+    this.localTrack = null;
   }
 
   setPeerPosition(id: string, x: number, y: number): void {
@@ -210,24 +210,19 @@ export class PeerManager {
     }
   }
 
-  private tuneOpus(desc: RTCSessionDescriptionInit): RTCSessionDescriptionInit {
-    if (!desc.sdp) return desc;
-    const lines = desc.sdp.split('\r\n');
-    let opusPayload: string | undefined;
-    for (const line of lines) {
-      if (line.includes('opus/48000')) {
-        const match = line.match(/(\d+) opus\/48000/);
-        if (match) opusPayload = match[1];
-      }
+  private async handleRemoteTrackSubscribed(participant: RemoteParticipant, track: RemoteTrack): Promise<void> {
+    const mediaStreamTrack = track.mediaStreamTrack;
+    if (!mediaStreamTrack) return;
+
+    const stream = new MediaStream([mediaStreamTrack]);
+    const peer = this.peers.get(participant.identity);
+    if (!peer) return;
+
+    peer.remoteStream = stream;
+    if (this.audio.isVoiceLayerEnabled()) {
+      await this.audio.attachRemoteStream(peer, stream, this.outputDeviceId);
+    } else {
+      this.audio.cleanupPeerAudio(peer);
     }
-    if (opusPayload) {
-      for (let index = 0; index < lines.length; index += 1) {
-        if (lines[index].includes(`a=fmtp:${opusPayload}`)) {
-          lines[index] += ';maxaveragebitrate=128000;stereo=1;sprop-stereo=1;useinbandfec=1;usedtx=0';
-          break;
-        }
-      }
-    }
-    return { ...desc, sdp: lines.join('\r\n') };
   }
 }

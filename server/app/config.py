@@ -12,7 +12,7 @@ class ServerConfigSection(BaseModel):
     """Bind address and port options for websocket serving."""
 
     bind_ip: str = "127.0.0.1"
-    port: int = 8765
+    port: int = 4474
     base_path: str = "/"
     grid_name: str = "Chat Grid"
     welcome_message: str = (
@@ -65,6 +65,14 @@ class AuthConfigSection(BaseModel):
     username_max_length: int = Field(default=32, ge=1)
 
 
+class LiveKitConfigSection(BaseModel):
+    """LiveKit SFU connection settings for audio transport."""
+
+    api_key: str = ""
+    api_secret: str = ""
+    url: str = ""
+
+
 class AppConfig(BaseModel):
     """Top-level application configuration document."""
 
@@ -75,6 +83,7 @@ class AppConfig(BaseModel):
     storage: StorageConfigSection = StorageConfigSection()
     world: WorldConfigSection = WorldConfigSection()
     auth: AuthConfigSection = AuthConfigSection()
+    livekit: LiveKitConfigSection = LiveKitConfigSection()
 
 
 def load_config(path: Path | None) -> AppConfig:

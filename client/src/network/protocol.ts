@@ -175,15 +175,10 @@ export const authResultSchema = z.object({
     .optional(),
 });
 
-export const signalMessageSchema = z.object({
-  type: z.literal('signal'),
-  senderId: z.string(),
-  senderNickname: z.string().optional(),
-  x: z.number().int().optional(),
-  y: z.number().int().optional(),
-  targetId: z.string().optional(),
-  sdp: z.any().optional(),
-  ice: z.any().optional(),
+export const livekitTokenSchema = z.object({
+  type: z.literal('livekit_token'),
+  token: z.string(),
+  url: z.string(),
 });
 
 export const updatePositionSchema = z.object({
@@ -368,7 +363,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   authRequiredSchema,
   authResultSchema,
   welcomeMessageSchema,
-  signalMessageSchema,
+  livekitTokenSchema,
   updatePositionSchema,
   teleportCompleteSchema,
   updateNicknameSchema,
@@ -407,7 +402,6 @@ export type OutgoingMessage =
   | { type: 'admin_user_ban'; username: string }
   | { type: 'admin_user_unban'; username: string }
   | { type: 'admin_user_delete'; username: string }
-  | { type: 'signal'; targetId: string; sdp?: RTCSessionDescriptionInit; ice?: RTCIceCandidateInit }
   | { type: 'update_position'; x: number; y: number }
   | { type: 'teleport_complete'; x: number; y: number }
   | { type: 'update_nickname'; nickname: string }

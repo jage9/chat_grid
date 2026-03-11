@@ -74,7 +74,7 @@ from .models import (
     BroadcastTeleportCompletePacket,
     ChatMessagePacket,
     ClientPacket,
-    ForwardSignalPacket,
+    LiveKitTokenPacket,
     ItemActionResultPacket,
     ItemAddPacket,
     ItemClockAnnouncePacket,
@@ -170,6 +170,9 @@ class SignalingServer:
             "Welcome to the Chat Grid, your immersive audio playground. "
             "Configure your audio, then Log in or register to join the grid."
         ),
+        livekit_api_key: str = "",
+        livekit_api_secret: str = "",
+        livekit_url: str = "",
     ):
         """Initialize runtime state, TLS context, and item service."""
 
@@ -224,6 +227,30 @@ class SignalingServer:
         self._clock_alarm_markers: dict[str, str] = {}
         self._started_at_monotonic = time.monotonic()
         self._pending_reboot_task: asyncio.Task[None] | None = None
+        self.livekit_api_key = livekit_api_key.strip()
+        self.livekit_api_secret = livekit_api_secret.strip()
+        self.livekit_url = livekit_url.strip()
+
+    @property
+    def livekit_enabled(self) -> bool:
+        return bool(self.livekit_api_key and self.livekit_api_secret and self.livekit_url)
+
+    def _generate_livekit_token(self, client: "ClientConnection") -> str:
+        """Generate a LiveKit access token for the given client."""
+        from livekit.api import AccessToken, VideoGrants
+
+        token = (
+            AccessToken(self.livekit_api_key, self.livekit_api_secret)
+            .with_identity(client.id)
+            .with_name(client.nickname)
+            .with_grants(VideoGrants(
+                room_join=True,
+                room="chatgrid",
+                can_publish=self._client_has_permission(client, "voice.send"),
+                can_subscribe=True,
+            ))
+        )
+        return token.to_jwt()
 
     @staticmethod
     def _resolve_server_version(release_version: str) -> str:
@@ -1591,6 +1618,15 @@ class SignalingServer:
             },
         )
         await self._send(client.websocket, packet)
+        if self.livekit_enabled:
+            await self._send(
+                client.websocket,
+                LiveKitTokenPacket(
+                    type="livekit_token",
+                    token=self._generate_livekit_token(client),
+                    url=self.livekit_url,
+                ),
+            )
 
     async def _send_authenticated_welcome(self, client: ClientConnection) -> None:
         """Prepare authenticated client state and send welcome before world activation."""
@@ -3104,26 +3140,6 @@ class SignalingServer:
             await self._send_item_result(client, True, "update", f"Updated {item.title}.", item.id)
             return
 
-        if not self._client_has_permission(client, "voice.send"):
-            return
-        target = self._find_by_id(packet.targetId)
-        if not target:
-            PACKET_LOGGER.info("signal target not found sender=%s target=%s", client.id, packet.targetId)
-            return
-
-        await self._send(
-            target.websocket,
-            ForwardSignalPacket(
-                type="signal",
-                senderId=client.id,
-                senderNickname=client.nickname,
-                x=client.x,
-                y=client.y,
-                sdp=packet.sdp,
-                ice=packet.ice,
-            ),
-        )
-
     async def _broadcast(self, packet: object, exclude: ServerConnection | None = None) -> None:
         """Broadcast one packet to all clients except an optional websocket."""
 
@@ -3344,5 +3360,8 @@ def run() -> None:
         base_path=config.server.base_path,
         grid_name=config.server.grid_name,
         welcome_message=config.server.welcome_message,
+        livekit_api_key=os.getenv("LIVEKIT_API_KEY", "").strip() or config.livekit.api_key,
+        livekit_api_secret=os.getenv("LIVEKIT_API_SECRET", "").strip() or config.livekit.api_secret,
+        livekit_url=os.getenv("LIVEKIT_URL", "").strip() or config.livekit.url,
     )
     asyncio.run(server.start())

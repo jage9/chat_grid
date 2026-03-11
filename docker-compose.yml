@@ -1,0 +1,36 @@
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+
+  server:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      - CHGRID_AUTH_SECRET=${CHGRID_AUTH_SECRET}
+      - CHGRID_HOST_ORIGIN=${CHGRID_HOST_ORIGIN:-http://localhost}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY:-devkey}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET:-secret}
+      - LIVEKIT_URL=${LIVEKIT_URL:-ws://localhost:7880}
+    volumes:
+      - server-runtime:/app/runtime
+    depends_on:
+      - livekit
+
+  client:
+    build: ./client
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4474:80"
+    depends_on:
+      - server
+
+volumes:
+  server-runtime:
