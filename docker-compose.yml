@@ -25,8 +25,13 @@ services:
       - livekit
 
   client:
-    build: ./client
+    build:
+      context: .
+      dockerfile: client/Dockerfile
     restart: unless-stopped
+    environment:
+      - CHGRID_HOST_ORIGIN=${CHGRID_HOST_ORIGIN:-http://localhost}
+      - CHGRID_MEDIA_PROXY_SESSION_CHECK_URL=http://server:4474/auth/session/check
     ports:
       - "127.0.0.1:4474:80"
     depends_on:
