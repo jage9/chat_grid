@@ -1498,10 +1498,10 @@ function disconnect(): void {
 /** Connects to the LiveKit room and ensures peers exist for roster members. */
 async function connectLiveKit(url: string, token: string): Promise<void> {
   try {
-    await peerManager.connectToRoom(url, token);
     for (const peer of state.peers.values()) {
       peerManager.ensurePeer(peer.id, peer);
     }
+    await peerManager.connectToRoom(url, token);
   } catch (error) {
     console.error('LiveKit connect failed:', error);
     updateStatus('LiveKit connection failed.');

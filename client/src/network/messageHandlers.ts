@@ -162,19 +162,20 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           deps.state.player.y = message.y;
           break;
         }
-        const peer = deps.state.peers.get(message.id);
-        const prevX = peer?.x ?? message.x;
-        const prevY = peer?.y ?? message.y;
-        if (peer) {
-          peer.x = message.x;
-          peer.y = message.y;
+        let peer = deps.state.peers.get(message.id);
+        if (!peer) {
+          peer = { id: message.id, nickname: 'user...', x: message.x, y: message.y };
+          deps.state.peers.set(message.id, peer);
+          deps.peerManager.ensurePeer(message.id, peer);
         }
+        const prevX = peer.x;
+        const prevY = peer.y;
+        peer.x = message.x;
+        peer.y = message.y;
         deps.peerManager.setPeerPosition(message.id, message.x, message.y);
-        if (peer) {
-          const movementDelta = Math.hypot(message.x - prevX, message.y - prevY);
-          if (movementDelta <= 1.5 && deps.getAudioLayers().world) {
-            deps.playRemoteSpatialStepOrTeleport(deps.randomFootstepUrl(), peer.x, peer.y);
-          }
+        const movementDelta = Math.hypot(message.x - prevX, message.y - prevY);
+        if (movementDelta <= 1.5 && deps.getAudioLayers().world) {
+          deps.playRemoteSpatialStepOrTeleport(deps.randomFootstepUrl(), peer.x, peer.y);
         }
         break;
       }

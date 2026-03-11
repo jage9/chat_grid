@@ -24,6 +24,7 @@ export class PeerManager {
   private outputDeviceId = '';
   private room: Room | null = null;
   private localTrack: LocalAudioTrack | null = null;
+  private pendingOutboundStream: MediaStream | null = null;
 
   constructor(
     private readonly audio: AudioEngine,
@@ -100,6 +101,11 @@ export class PeerManager {
 
     await room.connect(url, token);
     this.room = room;
+    if (this.pendingOutboundStream) {
+      const pending = this.pendingOutboundStream;
+      this.pendingOutboundStream = null;
+      await this.replaceOutgoingTrack(pending);
+    }
   }
 
   /** Ensure a peer entry exists for a given user (called when roster arrives). */
@@ -124,7 +130,11 @@ export class PeerManager {
     const newTrack = stream.getAudioTracks()[0];
     if (!newTrack) return;
 
-    if (!this.room) return;
+    if (!this.room) {
+      this.pendingOutboundStream = stream;
+      return;
+    }
+    this.pendingOutboundStream = null;
 
     if (this.localTrack) {
       // Replace the underlying MediaStreamTrack on the existing LiveKit track.
@@ -159,6 +169,7 @@ export class PeerManager {
       this.room = null;
     }
     this.localTrack = null;
+    this.pendingOutboundStream = null;
   }
 
   setPeerPosition(id: string, x: number, y: number): void {
@@ -215,8 +226,13 @@ export class PeerManager {
     if (!mediaStreamTrack) return;
 
     const stream = new MediaStream([mediaStreamTrack]);
-    const peer = this.peers.get(participant.identity);
-    if (!peer) return;
+    let peer = this.peers.get(participant.identity);
+    if (!peer) {
+      peer = this.ensurePeer(participant.identity, {
+        id: participant.identity,
+        nickname: participant.name ?? 'user...',
+      });
+    }
 
     peer.remoteStream = stream;
     if (this.audio.isVoiceLayerEnabled()) {
