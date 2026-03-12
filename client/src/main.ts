@@ -1013,7 +1013,7 @@ function openItemPropertyOptionSelect(item: WorldItem, key: string): void {
 /** Fetches the list of widget sounds from the server. Returns [] on error. */
 async function fetchWidgetSounds(): Promise<string[]> {
   try {
-    const response = await fetch('/sounds_list.php');
+    const response = await fetch(withBase('sounds_list.php'));
     if (!response.ok) return [];
     const names = (await response.json()) as string[];
     if (!Array.isArray(names)) return [];
