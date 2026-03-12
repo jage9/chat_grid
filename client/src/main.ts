@@ -31,6 +31,7 @@ import { dispatchModeInput } from './input/modeDispatcher';
 import { handleListControlKey } from './input/listController';
 import { createAdminController, type AdminMenuAction } from './input/adminController';
 import { setupKeyboardInputHandlers } from './input/keyboardController';
+import { setupMobileControls } from './input/mobileController';
 import { handleYesNoMenuInput, YES_NO_OPTIONS } from './input/yesNoMenu';
 import { getEditSessionAction } from './input/editSession';
 import { formatSteppedNumber, snapNumberToStep } from './input/numeric';
@@ -2678,6 +2679,25 @@ setupKeyboardInputHandlers({
   setReplaceTextOnNextType: (value) => {
     replaceTextOnNextType = value;
   },
+});
+setupMobileControls({
+  dom: {
+    canvas: dom.canvas,
+    mobileControls: requiredById('mobileControls') as HTMLDivElement,
+    toggleButton: requiredById('mobileControlsToggle') as HTMLButtonElement,
+    dpadUp:    requiredById('dpadUp') as HTMLButtonElement,
+    dpadDown:  requiredById('dpadDown') as HTMLButtonElement,
+    dpadLeft:  requiredById('dpadLeft') as HTMLButtonElement,
+    dpadRight: requiredById('dpadRight') as HTMLButtonElement,
+    btnChat:          requiredById('mobileBtnChat') as HTMLButtonElement,
+    btnUse:           requiredById('mobileBtnUse') as HTMLButtonElement,
+    btnLocateUser:    requiredById('mobileBtnLocateUser') as HTMLButtonElement,
+    btnLocateItem:    requiredById('mobileBtnLocateItem') as HTMLButtonElement,
+    btnCommandPalette: requiredById('mobileBtnCommands') as HTMLButtonElement,
+  },
+  state,
+  handleModeInput,
+  openCommandPalette,
 });
 setupDomUiHandlers({
   dom,

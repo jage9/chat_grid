@@ -95,6 +95,27 @@
           <button id="closeSettingsButton">Close</button>
         </div>
       </div>
+
+      <div id="mobileControls" class="mobile-controls" data-expanded="false" aria-label="Mobile game controls">
+        <button id="mobileControlsToggle" type="button" class="mobile-toggle-btn"
+          aria-expanded="false" aria-controls="mobileControlsBody">&#9776; Controls</button>
+        <div id="mobileControlsBody" class="mobile-controls-body">
+          <div class="dpad" role="group" aria-label="Movement">
+            <button id="dpadUp"    type="button" class="dpad-btn dpad-up"    aria-label="Move up">&#9650;</button>
+            <button id="dpadLeft"  type="button" class="dpad-btn dpad-left"  aria-label="Move left">&#9664;</button>
+            <div class="dpad-center" aria-hidden="true"></div>
+            <button id="dpadRight" type="button" class="dpad-btn dpad-right" aria-label="Move right">&#9654;</button>
+            <button id="dpadDown"  type="button" class="dpad-btn dpad-down"  aria-label="Move down">&#9660;</button>
+          </div>
+          <div class="mobile-actions" role="group" aria-label="Actions">
+            <button id="mobileBtnChat"       type="button" class="mobile-action-btn">Chat</button>
+            <button id="mobileBtnUse"        type="button" class="mobile-action-btn">Use</button>
+            <button id="mobileBtnLocateUser" type="button" class="mobile-action-btn">Find User</button>
+            <button id="mobileBtnLocateItem" type="button" class="mobile-action-btn">Find Item</button>
+            <button id="mobileBtnCommands"   type="button" class="mobile-action-btn mobile-action-btn--wide">Commands</button>
+          </div>
+        </div>
+      </div>
     </main>
     <script src="%BASE_URL%version.js"></script>
     <script type="module" src="/src/main.ts"></script>

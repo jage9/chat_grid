@@ -234,3 +234,124 @@ canvas {
   display: grid;
   gap: 0.5rem;
 }
+
+/* ── Mobile controls panel ─────────────────────────────────────────────── */
+
+/* Hide on pointer:fine (mouse) devices; show on touch screens */
+@media (hover: hover) and (pointer: fine) {
+  .mobile-controls {
+    display: none;
+  }
+}
+
+/* Extra bottom padding so the fixed panel doesn't cover footer content */
+@media not all and (hover: hover) and (pointer: fine) {
+  .app {
+    padding-bottom: 3rem;
+  }
+}
+
+.mobile-controls {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgb(15 23 42 / 95%);
+  border-top: 1px solid #334155;
+  z-index: 100;
+}
+
+.mobile-toggle-btn {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 1rem;
+  background: none;
+  border: none;
+  color: #e5e7eb;
+  font-family: inherit;
+  font-size: 1rem;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.mobile-controls-body {
+  display: none;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0.75rem 1rem 1rem;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.mobile-controls[data-expanded="true"] .mobile-controls-body {
+  display: flex;
+}
+
+/* D-pad: 3×3 cross layout */
+.dpad {
+  display: grid;
+  grid-template-areas:
+    ". up ."
+    "left mid right"
+    ". down .";
+  grid-template-columns: repeat(3, 52px);
+  grid-template-rows: repeat(3, 52px);
+  gap: 2px;
+}
+
+.dpad-btn {
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  color: #e5e7eb;
+  font-size: 1.1rem;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dpad-btn:active {
+  background: #334155;
+}
+
+.dpad-up    { grid-area: up; }
+.dpad-left  { grid-area: left; }
+.dpad-center { grid-area: mid; }
+.dpad-right { grid-area: right; }
+.dpad-down  { grid-area: down; }
+
+/* Action buttons row */
+.mobile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.mobile-action-btn {
+  min-height: 48px;
+  padding: 0.25rem 0.75rem;
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  color: #e5e7eb;
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.mobile-action-btn:active {
+  background: #334155;
+}
+
+.mobile-action-btn--wide {
+  flex: 1 0 100%;
+}
