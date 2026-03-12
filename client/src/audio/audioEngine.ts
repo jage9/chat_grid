@@ -48,6 +48,9 @@ export class AudioEngine {
   private readonly sampleLoaders = new Map<string, Promise<AudioBuffer>>();
   private readonly activeSpatialSamples = new Set<ActiveSpatialSampleRuntime>();
 
+  private previewSourceNode: AudioBufferSourceNode | null = null;
+  private previewGainNode: GainNode | null = null;
+
   private outboundSource: MediaStreamAudioSourceNode | null = null;
   private outboundInputGain: GainNode | null = null;
   private outboundInputGainValue = 1;
@@ -488,6 +491,47 @@ export class AudioEngine {
       source.start();
     } catch {
       // Ignore sample decode/load errors.
+    }
+  }
+
+  stopPreviewSample(): void {
+    if (this.previewSourceNode) {
+      try { this.previewSourceNode.stop(); } catch { /* already ended */ }
+      try { this.previewSourceNode.disconnect(); } catch { /* ignore */ }
+      this.previewSourceNode = null;
+    }
+    if (this.previewGainNode) {
+      try { this.previewGainNode.disconnect(); } catch { /* ignore */ }
+      this.previewGainNode = null;
+    }
+  }
+
+  async playPreviewSample(url: string, gain = 1): Promise<void> {
+    this.stopPreviewSample();
+    await this.ensureContext();
+    const { audioCtx, sfxGainNode } = this;
+    if (!audioCtx || !sfxGainNode) return;
+    if (gain <= 0) return;
+    try {
+      const buffer = await this.getSampleBuffer(url);
+      this.stopPreviewSample();
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      const gainNode = audioCtx.createGain();
+      gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+      gainNode.gain.setTargetAtTime(gain, audioCtx.currentTime, ONE_SHOT_ATTACK_SECONDS);
+      source.connect(gainNode).connect(sfxGainNode);
+      this.previewSourceNode = source;
+      this.previewGainNode = gainNode;
+      source.onended = () => {
+        if (this.previewSourceNode === source) {
+          this.previewSourceNode = null;
+          this.previewGainNode = null;
+        }
+      };
+      source.start();
+    } catch {
+      // Ignore decode/load errors.
     }
   }
 

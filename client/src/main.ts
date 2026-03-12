@@ -1027,15 +1027,25 @@ let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Plays a sound preview with debounce, for use while navigating sound picker. */
 function previewSound(soundPath: string): void {
+  audio.stopPreviewSample();
   if (previewDebounceTimer !== null) {
     clearTimeout(previewDebounceTimer);
   }
   previewDebounceTimer = setTimeout(() => {
     previewDebounceTimer = null;
     if (soundPath) {
-      void audio.playSample(soundPath, 0.7);
+      void audio.playPreviewSample(soundPath, 0.7);
     }
   }, 200);
+}
+
+/** Stops any in-progress preview sound and clears the debounce timer. */
+function stopPreviewSound(): void {
+  if (previewDebounceTimer !== null) {
+    clearTimeout(previewDebounceTimer);
+    previewDebounceTimer = null;
+  }
+  audio.stopPreviewSample();
 }
 
 /** Opens the sound picker for a sound-typed item property, falling back to text edit if no sounds are found. */
@@ -2629,6 +2639,7 @@ const itemPropertyEditor = createItemPropertyEditor({
   sfxUiCancel: () => audio.sfxUiCancel(),
   openSoundPropertyPicker: (item, key) => { void openSoundPropertyPicker(item, key); },
   previewSound,
+  stopPreviewSound,
 });
 
 /** Handles nickname edit mode submission/cancel and text editing keys. */

@@ -49,6 +49,7 @@ type EditorDeps = {
   sfxUiCancel: () => void;
   openSoundPropertyPicker?: (item: WorldItem, key: string) => void;
   previewSound?: (soundPath: string) => void;
+  stopPreviewSound?: () => void;
 };
 
 /**
@@ -408,6 +409,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
     }
 
     if (control.type === 'select') {
+      deps.stopPreviewSound?.();
       const selectedValue = deps.state.itemPropertyOptionValues[deps.state.itemPropertyOptionIndex];
       deps.signalingSend({ type: 'item_update', itemId, params: { [propertyKey]: selectedValue } });
       const item = deps.state.items.get(itemId);
@@ -422,6 +424,7 @@ export function createItemPropertyEditor(deps: EditorDeps): {
     }
 
     if (control.type === 'cancel') {
+      deps.stopPreviewSound?.();
       deps.state.mode = 'itemProperties';
       deps.state.editingPropertyKey = null;
       deps.state.itemPropertyOptionValues = [];
