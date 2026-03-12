@@ -47,6 +47,8 @@ type EditorDeps = {
   updateStatus: (message: string) => void;
   sfxUiBlip: () => void;
   sfxUiCancel: () => void;
+  openSoundPropertyPicker?: (item: WorldItem, key: string) => void;
+  previewSound?: (soundPath: string) => void;
 };
 
 /**
@@ -187,9 +189,13 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         deps.openItemPropertyOptionSelect(item, selectedKey);
         return;
       }
+      if (metadata?.valueType === 'sound' && deps.openSoundPropertyPicker) {
+        deps.openSoundPropertyPicker(item, selectedKey);
+        return;
+      }
       deps.state.mode = 'itemPropertyEdit';
       deps.state.editingPropertyKey = selectedKey;
-      const selectedMetadata = deps.getItemPropertyMetadata(item.type, selectedKey);
+      const selectedMetadata = metadata;
       deps.state.nicknameInput =
         selectedKey === 'title'
           ? item.title
@@ -369,6 +375,13 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       const nextIndex = (deps.state.itemPropertyOptionIndex + delta + length * 1000) % length;
       deps.state.itemPropertyOptionIndex = nextIndex;
       deps.updateStatus(deps.state.itemPropertyOptionValues[nextIndex]);
+      const pageItem = deps.state.items.get(itemId!);
+      if (pageItem) {
+        const pageMeta = deps.getItemPropertyMetadata(pageItem.type, propertyKey);
+        if (pageMeta?.valueType === 'sound') {
+          deps.previewSound?.(deps.state.itemPropertyOptionValues[nextIndex]);
+        }
+      }
       deps.sfxUiBlip();
       return;
     }
@@ -383,6 +396,13 @@ export function createItemPropertyEditor(deps: EditorDeps): {
     if (control.type === 'move') {
       deps.state.itemPropertyOptionIndex = control.index;
       deps.updateStatus(deps.state.itemPropertyOptionValues[deps.state.itemPropertyOptionIndex]);
+      const moveItem = deps.state.items.get(itemId!);
+      if (moveItem) {
+        const moveMeta = deps.getItemPropertyMetadata(moveItem.type, propertyKey);
+        if (moveMeta?.valueType === 'sound') {
+          deps.previewSound?.(deps.state.itemPropertyOptionValues[deps.state.itemPropertyOptionIndex]);
+        }
+      }
       deps.sfxUiBlip();
       return;
     }

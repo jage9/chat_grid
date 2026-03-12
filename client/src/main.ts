@@ -1010,6 +1010,60 @@ function openItemPropertyOptionSelect(item: WorldItem, key: string): void {
   audio.sfxUiBlip();
 }
 
+/** Fetches the list of widget sounds from the server. Returns [] on error. */
+async function fetchWidgetSounds(): Promise<string[]> {
+  try {
+    const response = await fetch('/sounds_list.php');
+    if (!response.ok) return [];
+    const names = (await response.json()) as string[];
+    if (!Array.isArray(names)) return [];
+    return names.map((name: string) => `sounds/widgets/${name}`);
+  } catch {
+    return [];
+  }
+}
+
+let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Plays a sound preview with debounce, for use while navigating sound picker. */
+function previewSound(soundPath: string): void {
+  if (previewDebounceTimer !== null) {
+    clearTimeout(previewDebounceTimer);
+  }
+  previewDebounceTimer = setTimeout(() => {
+    previewDebounceTimer = null;
+    if (soundPath) {
+      void audio.playSample(soundPath, 0.7);
+    }
+  }, 200);
+}
+
+/** Opens the sound picker for a sound-typed item property, falling back to text edit if no sounds are found. */
+async function openSoundPropertyPicker(item: WorldItem, key: string): Promise<void> {
+  updateStatus('Loading sounds...');
+  const sounds = await fetchWidgetSounds();
+  if (sounds.length === 0) {
+    state.mode = 'itemPropertyEdit';
+    state.editingPropertyKey = key;
+    const currentValue = String(item.params[key] ?? '');
+    state.nicknameInput = currentValue;
+    state.cursorPos = currentValue.length;
+    replaceTextOnNextType = true;
+    updateStatus(`Edit ${itemPropertyLabel(key)}: ${currentValue}`);
+    audio.sfxUiBlip();
+    return;
+  }
+  const options = ['', ...sounds];
+  state.mode = 'itemPropertyOptionSelect';
+  state.editingPropertyKey = key;
+  state.itemPropertyOptionValues = options;
+  const currentValue = String(item.params[key] ?? '').trim();
+  const currentIndex = options.indexOf(currentValue);
+  state.itemPropertyOptionIndex = currentIndex >= 0 ? currentIndex : 0;
+  updateStatus(`Select ${itemPropertyLabel(key)}: ${options[state.itemPropertyOptionIndex] || 'none'}`);
+  audio.sfxUiBlip();
+}
+
 /** Returns the active text-input max length for the current UI mode, if applicable. */
 function textInputMaxLengthForMode(mode: typeof state.mode): number | null {
   if (mode === 'nickname') return NICKNAME_MAX_LENGTH;
@@ -2573,6 +2627,8 @@ const itemPropertyEditor = createItemPropertyEditor({
   updateStatus,
   sfxUiBlip: () => audio.sfxUiBlip(),
   sfxUiCancel: () => audio.sfxUiCancel(),
+  openSoundPropertyPicker: (item, key) => { void openSoundPropertyPicker(item, key); },
+  previewSound,
 });
 
 /** Handles nickname edit mode submission/cancel and text editing keys. */
