@@ -2955,6 +2955,20 @@ class SignalingServer:
                     BroadcastChatMessagePacket(type="chat_message", message=secondary_result.others_message, system=True),
                     exclude=client.websocket,
                 )
+            use_sound = self._resolve_item_use_sound(item)
+            if use_sound:
+                sound_x, sound_y = self._get_item_sound_source_position(item)
+                sound_range = self._get_item_emit_range(item)
+                await self._broadcast(
+                    ItemUseSoundPacket(
+                        type="item_use_sound",
+                        itemId=item.id,
+                        sound=use_sound,
+                        x=sound_x,
+                        y=sound_y,
+                        range=sound_range,
+                    )
+                )
             await self._send_item_result(client, True, "secondary_use", secondary_result.self_message, item.id)
             return
 
