@@ -34,6 +34,8 @@ services:
       - CHGRID_MEDIA_PROXY_SESSION_CHECK_URL=http://server:4474/auth/session/check
     ports:
       - "127.0.0.1:4474:80"
+    volumes:
+      - ./sounds/widgets:/usr/share/nginx/html/sounds/widgets
     depends_on:
       - server
 

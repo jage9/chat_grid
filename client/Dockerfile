@@ -13,4 +13,4 @@ COPY deploy/php/media_proxy.php /usr/share/nginx/html/media_proxy.php
 COPY deploy/php/sounds_list.php /usr/share/nginx/html/sounds_list.php
 COPY client/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
-CMD ["sh", "-c", "php-fpm83 && exec nginx -g 'daemon off;'"]
+CMD ["sh", "-c", "find /usr/share/nginx/html/sounds/widgets -type d -exec chmod 755 {} \\; 2>/dev/null; find /usr/share/nginx/html/sounds/widgets -type f -exec chmod 644 {} \\; 2>/dev/null; php-fpm83 && exec nginx -g 'daemon off;'"]
