@@ -23,8 +23,10 @@ type MessageHandlerDeps = {
     itemPropertyIndex: number;
     carriedItemId: string | null;
     whiteboardItemId: string | null;
+    cardTableItemId: string | null;
   };
   refreshWhiteboardStatus: () => void;
+  refreshCardTableStatus: () => void;
   dom: {
     connectButton: HTMLElement;
     disconnectButton: HTMLElement;
@@ -265,6 +267,15 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           (deps.state.mode === 'whiteboardLines' || deps.state.mode === 'whiteboardLineActions')
         ) {
           deps.refreshWhiteboardStatus();
+        }
+        if (
+          deps.state.cardTableItemId === message.item.id &&
+          (deps.state.mode === 'cardTableMenu' ||
+            deps.state.mode === 'cardTableHand' ||
+            deps.state.mode === 'cardTableCardAction' ||
+            deps.state.mode === 'cardTableDiscard')
+        ) {
+          deps.refreshCardTableStatus();
         }
         await deps.refreshAudioSubscriptions(true);
         break;

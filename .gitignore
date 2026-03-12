@@ -23,3 +23,7 @@ plans/
 
 # Host-local notes
 local/
+
+# Ignore actual sounds in sounds/widgets/
+sounds/widgets/*.ogg
+sounds/widgets/**/*.ogg

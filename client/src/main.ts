@@ -65,6 +65,7 @@ import {
 } from './items/itemRegistry';
 import { createItemInteractionController } from './items/itemInteractionController';
 import { createWhiteboardController } from './items/whiteboardController';
+import { createCardTableController } from './items/cardTableController';
 import { createItemPropertyEditor } from './items/itemPropertyEditor';
 import { createItemPropertyPresentation } from './items/itemPropertyPresentation';
 import { ItemBehaviorRegistry } from './items/types/behaviorRegistry';
@@ -472,6 +473,13 @@ const whiteboardController = createWhiteboardController({
   setReplaceTextOnNextType: (value) => {
     replaceTextOnNextType = value;
   },
+});
+const cardTableController = createCardTableController({
+  state,
+  signalingSend: (message) => signaling.send(message),
+  updateStatus,
+  sfxUiBlip: () => audio.sfxUiBlip(),
+  sfxUiCancel: () => audio.sfxUiCancel(),
 });
 
 /** Toggles updates panel visibility and syncs associated ARIA state. */
@@ -984,6 +992,10 @@ function recomputeActiveItemPropertyKeys(itemId: string): void {
 function useItem(item: WorldItem): void {
   if (item.type === 'whiteboard') {
     whiteboardController.beginWhiteboardLines(item);
+    return;
+  }
+  if (item.type === 'card_table') {
+    cardTableController.beginCardTableMenu(item);
     return;
   }
   signaling.send({ type: 'item_use', itemId: item.id });
@@ -1669,6 +1681,7 @@ const onAppMessage = createOnMessageHandler({
     void connectLiveKit(url, token);
   },
   refreshWhiteboardStatus: () => whiteboardController.refreshWhiteboardStatus(),
+  refreshCardTableStatus: () => cardTableController.refreshCardTableStatus(),
 });
 
 /** Handles signaling packets with heartbeat/restart metadata before app-level dispatch. */
@@ -2719,6 +2732,16 @@ function handleModeInput(input: ModeInput): void {
         whiteboardController.handleWhiteboardLineActionsModeInput(currentCode, currentKey),
       whiteboardLineEdit: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>
         whiteboardController.handleWhiteboardLineEditModeInput(currentCode, currentKey, currentCtrlKey),
+      cardTableMenu: ({ code: currentCode, key: currentKey }) =>
+        cardTableController.handleCardTableMenuModeInput(currentCode, currentKey),
+      cardTableHand: ({ code: currentCode, key: currentKey }) =>
+        cardTableController.handleCardTableHandModeInput(currentCode, currentKey),
+      cardTableCardAction: ({ code: currentCode, key: currentKey }) =>
+        cardTableController.handleCardTableCardActionModeInput(currentCode, currentKey),
+      cardTableDiscard: ({ code: currentCode, key: currentKey }) =>
+        cardTableController.handleCardTableDiscardModeInput(currentCode, currentKey),
+      cardTableConfirmReset: ({ code: currentCode, key: currentKey }) =>
+        cardTableController.handleCardTableConfirmResetModeInput(currentCode, currentKey),
     },
     onNormalMode: handleNormalModeInput,
   });

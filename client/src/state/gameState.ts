@@ -54,7 +54,12 @@ export type GameMode =
   | 'pianoUse'
   | 'whiteboardLines'
   | 'whiteboardLineActions'
-  | 'whiteboardLineEdit';
+  | 'whiteboardLineEdit'
+  | 'cardTableMenu'
+  | 'cardTableHand'
+  | 'cardTableCardAction'
+  | 'cardTableDiscard'
+  | 'cardTableConfirmReset';
 
 export type Player = {
   id: string | null;
@@ -103,6 +108,12 @@ export type GameState = {
   whiteboardLineIndex: number;
   whiteboardLineActionIndex: number;
   whiteboardEditingLineIndex: number | null;
+  cardTableItemId: string | null;
+  cardTableMenuIndex: number;
+  cardTableHandIndex: number;
+  cardTableCardActionIndex: number;
+  cardTableDiscardIndex: number;
+  cardTableConfirmIndex: number;
 };
 
 export function createInitialState(): GameState {
@@ -143,6 +154,12 @@ export function createInitialState(): GameState {
     whiteboardLineIndex: 0,
     whiteboardLineActionIndex: 0,
     whiteboardEditingLineIndex: null,
+    cardTableItemId: null,
+    cardTableMenuIndex: 0,
+    cardTableHandIndex: 0,
+    cardTableCardActionIndex: 0,
+    cardTableDiscardIndex: 0,
+    cardTableConfirmIndex: 0,
   };
 }
 
