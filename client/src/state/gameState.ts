@@ -51,7 +51,10 @@ export type GameMode =
   | 'adminUserRoleSelect'
   | 'adminUserDeleteConfirm'
   | 'adminRoleNameEdit'
-  | 'pianoUse';
+  | 'pianoUse'
+  | 'whiteboardLines'
+  | 'whiteboardLineActions'
+  | 'whiteboardLineEdit';
 
 export type Player = {
   id: string | null;
@@ -96,6 +99,10 @@ export type GameState = {
   peers: Map<string, PeerState>;
   items: Map<string, WorldItem>;
   carriedItemId: string | null;
+  whiteboardItemId: string | null;
+  whiteboardLineIndex: number;
+  whiteboardLineActionIndex: number;
+  whiteboardEditingLineIndex: number | null;
 };
 
 export function createInitialState(): GameState {
@@ -132,6 +139,10 @@ export function createInitialState(): GameState {
     peers: new Map(),
     items: new Map(),
     carriedItemId: null,
+    whiteboardItemId: null,
+    whiteboardLineIndex: 0,
+    whiteboardLineActionIndex: 0,
+    whiteboardEditingLineIndex: null,
   };
 }
 

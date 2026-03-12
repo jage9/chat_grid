@@ -1,0 +1,1 @@
+"""Whiteboard item type package."""

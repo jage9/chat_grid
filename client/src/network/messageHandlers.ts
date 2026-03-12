@@ -22,7 +22,9 @@ type MessageHandlerDeps = {
     itemPropertyKeys: string[];
     itemPropertyIndex: number;
     carriedItemId: string | null;
+    whiteboardItemId: string | null;
   };
+  refreshWhiteboardStatus: () => void;
   dom: {
     connectButton: HTMLElement;
     disconnectButton: HTMLElement;
@@ -257,6 +259,12 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           if (key && deps.shouldAnnounceItemPropertyEcho()) {
             deps.updateStatus(`${deps.itemPropertyLabel(key)}: ${deps.getItemPropertyValue(message.item, key)}`);
           }
+        }
+        if (
+          deps.state.whiteboardItemId === message.item.id &&
+          (deps.state.mode === 'whiteboardLines' || deps.state.mode === 'whiteboardLineActions')
+        ) {
+          deps.refreshWhiteboardStatus();
         }
         await deps.refreshAudioSubscriptions(true);
         break;

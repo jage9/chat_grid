@@ -64,6 +64,7 @@ import {
   itemTypeLabel,
 } from './items/itemRegistry';
 import { createItemInteractionController } from './items/itemInteractionController';
+import { createWhiteboardController } from './items/whiteboardController';
 import { createItemPropertyEditor } from './items/itemPropertyEditor';
 import { createItemPropertyPresentation } from './items/itemPropertyPresentation';
 import { ItemBehaviorRegistry } from './items/types/behaviorRegistry';
@@ -460,6 +461,17 @@ const itemInteractionController = createItemInteractionController({
   itemPropertyLabel,
   useItem: (item) => useItem(item),
   secondaryUseItem: (item) => secondaryUseItem(item),
+});
+const whiteboardController = createWhiteboardController({
+  state,
+  signalingSend: (message) => signaling.send(message),
+  updateStatus,
+  sfxUiBlip: () => audio.sfxUiBlip(),
+  sfxUiCancel: () => audio.sfxUiCancel(),
+  applyTextInputEdit,
+  setReplaceTextOnNextType: (value) => {
+    replaceTextOnNextType = value;
+  },
 });
 
 /** Toggles updates panel visibility and syncs associated ARIA state. */
@@ -970,6 +982,10 @@ function recomputeActiveItemPropertyKeys(itemId: string): void {
 
 /** Sends an item-use request for the selected item. */
 function useItem(item: WorldItem): void {
+  if (item.type === 'whiteboard') {
+    whiteboardController.beginWhiteboardLines(item);
+    return;
+  }
   signaling.send({ type: 'item_use', itemId: item.id });
 }
 
@@ -1001,6 +1017,7 @@ function textInputMaxLengthForMode(mode: typeof state.mode): number | null {
   if (mode === 'itemPropertyEdit') return 500;
   if (mode === 'micGainEdit') return 8;
   if (mode === 'adminRoleNameEdit') return 32;
+  if (mode === 'whiteboardLineEdit') return 200;
   return null;
 }
 
@@ -1025,7 +1042,8 @@ function isTextEditingMode(mode: typeof state.mode): boolean {
     mode === 'chat' ||
     mode === 'itemPropertyEdit' ||
     mode === 'micGainEdit' ||
-    mode === 'adminRoleNameEdit'
+    mode === 'adminRoleNameEdit' ||
+    mode === 'whiteboardLineEdit'
   );
 }
 
@@ -1586,6 +1604,7 @@ const onAppMessage = createOnMessageHandler({
   connectToLiveKit: (url, token) => {
     void connectLiveKit(url, token);
   },
+  refreshWhiteboardStatus: () => whiteboardController.refreshWhiteboardStatus(),
 });
 
 /** Handles signaling packets with heartbeat/restart metadata before app-level dispatch. */
@@ -2627,6 +2646,12 @@ function handleModeInput(input: ModeInput): void {
         itemPropertyEditor.handleItemPropertyEditModeInput(currentCode, currentKey, currentCtrlKey),
       itemPropertyOptionSelect: ({ code: currentCode, key: currentKey }) =>
         itemPropertyEditor.handleItemPropertyOptionSelectModeInput(currentCode, currentKey),
+      whiteboardLines: ({ code: currentCode, key: currentKey }) =>
+        whiteboardController.handleWhiteboardLinesModeInput(currentCode, currentKey),
+      whiteboardLineActions: ({ code: currentCode, key: currentKey }) =>
+        whiteboardController.handleWhiteboardLineActionsModeInput(currentCode, currentKey),
+      whiteboardLineEdit: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>
+        whiteboardController.handleWhiteboardLineEditModeInput(currentCode, currentKey, currentCtrlKey),
     },
     onNormalMode: handleNormalModeInput,
   });
