@@ -142,22 +142,8 @@ export function createCardTableController(deps: CardTableControllerDeps): {
           deps.sfxUiCancel();
           return;
         }
-        const card = drawPile[0];
-        const newDrawPile = drawPile.slice(1);
-        const hands = item.params['hands'];
-        const handsObj: Record<string, string[]> =
-          hands && typeof hands === 'object' && !Array.isArray(hands)
-            ? (hands as Record<string, string[]>)
-            : {};
-        const currentHand = Array.isArray(handsObj[nickname]) ? [...handsObj[nickname]] : [];
-        currentHand.push(card);
-        const newHands = { ...handsObj, [nickname]: currentHand };
-        deps.signalingSend({
-          type: 'item_update',
-          itemId: item.id,
-          params: { draw_pile: newDrawPile, hands: newHands },
-        });
-        deps.updateStatus(`Drew ${cardName(card)}. ${newDrawPile.length} cards remaining in pile.`);
+        deps.signalingSend({ type: 'item_interact', itemId: item.id, action: 'draw' });
+        deps.updateStatus('Drawing a card.');
         deps.sfxUiBlip();
         return;
       }
@@ -292,58 +278,30 @@ export function createCardTableController(deps: CardTableControllerDeps): {
 
     if (control.type === 'select') {
       const actionIdx = deps.state.cardTableCardActionIndex;
-      const card = hand[cardIndex];
-      const newHand = [...hand];
-      newHand.splice(cardIndex, 1);
-
-      const hands = item.params['hands'];
-      const handsObj: Record<string, string[]> =
-        hands && typeof hands === 'object' && !Array.isArray(hands)
-          ? (hands as Record<string, string[]>)
-          : {};
-
       if (actionIdx === 0) {
         // Discard
-        const discardPile = getDiscardPile(item);
-        const newDiscard = [card, ...discardPile];
-        const newHands = { ...handsObj, [nickname]: newHand };
         deps.signalingSend({
-          type: 'item_update',
+          type: 'item_interact',
           itemId: item.id,
-          params: { discard_pile: newDiscard, hands: newHands },
+          action: 'discard',
+          params: { card_index: cardIndex },
         });
-        deps.state.cardTableHandIndex = Math.min(cardIndex, Math.max(0, newHand.length - 1));
-        if (newHand.length === 0) {
-          deps.state.mode = 'cardTableMenu';
-          deps.state.cardTableMenuIndex = 2; // view hand entry
-          deps.updateStatus(`${cardName(card)} discarded. Hand is empty.`);
-        } else {
-          deps.state.mode = 'cardTableHand';
-          deps.updateStatus(`${cardName(card)} discarded.`);
-        }
+        deps.state.mode = 'cardTableHand';
+        deps.updateStatus('Discarding card.');
         deps.sfxUiBlip();
         return;
       }
 
       if (actionIdx === 1) {
         // Return to draw pile
-        const drawPile = getDrawPile(item);
-        const newDrawPile = [...drawPile, card];
-        const newHands = { ...handsObj, [nickname]: newHand };
         deps.signalingSend({
-          type: 'item_update',
+          type: 'item_interact',
           itemId: item.id,
-          params: { draw_pile: newDrawPile, hands: newHands },
+          action: 'return_to_pile',
+          params: { card_index: cardIndex },
         });
-        deps.state.cardTableHandIndex = Math.min(cardIndex, Math.max(0, newHand.length - 1));
-        if (newHand.length === 0) {
-          deps.state.mode = 'cardTableMenu';
-          deps.state.cardTableMenuIndex = 2;
-          deps.updateStatus(`${cardName(card)} returned to draw pile. Hand is empty.`);
-        } else {
-          deps.state.mode = 'cardTableHand';
-          deps.updateStatus(`${cardName(card)} returned to draw pile.`);
-        }
+        deps.state.mode = 'cardTableHand';
+        deps.updateStatus('Returning card to draw pile.');
         deps.sfxUiBlip();
         return;
       }
@@ -395,28 +353,15 @@ export function createCardTableController(deps: CardTableControllerDeps): {
 
       // Take card from discard into hand
       const cardIdx = deps.state.cardTableDiscardIndex;
-      const card = discardPile[cardIdx];
-      const newDiscard = [...discardPile];
-      newDiscard.splice(cardIdx, 1);
-
-      const hands = item.params['hands'];
-      const handsObj: Record<string, string[]> =
-        hands && typeof hands === 'object' && !Array.isArray(hands)
-          ? (hands as Record<string, string[]>)
-          : {};
-      const currentHand = Array.isArray(handsObj[nickname]) ? [...handsObj[nickname]] : [];
-      currentHand.push(card);
-      const newHands = { ...handsObj, [nickname]: currentHand };
-
       deps.signalingSend({
-        type: 'item_update',
+        type: 'item_interact',
         itemId: item.id,
-        params: { discard_pile: newDiscard, hands: newHands },
+        action: 'draw_from_discard',
+        params: { card_index: cardIdx },
       });
-
       deps.state.mode = 'cardTableMenu';
       deps.state.cardTableMenuIndex = 0;
-      deps.updateStatus(`Took ${cardName(card)} from discard pile.`);
+      deps.updateStatus('Taking card from discard pile.');
       deps.sfxUiBlip();
       return;
     }

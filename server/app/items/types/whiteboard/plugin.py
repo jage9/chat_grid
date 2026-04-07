@@ -12,5 +12,6 @@ ITEM_TYPE_PLUGIN = {
         definition,
         validate_update=validator.validate_update,
         use_item=actions.use_item,
+        interact_item=actions.interact_item,
     ),
 }

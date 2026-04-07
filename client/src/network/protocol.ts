@@ -241,7 +241,7 @@ export const itemRemoveSchema = z.object({
 export const itemActionResultSchema = z.object({
   type: z.literal('item_action_result'),
   ok: z.boolean(),
-  action: z.enum(['add', 'pickup', 'drop', 'delete', 'transfer', 'use', 'secondary_use', 'update']),
+  action: z.enum(['add', 'pickup', 'drop', 'delete', 'transfer', 'use', 'secondary_use', 'update', 'interact']),
   message: z.string(),
   itemId: z.string().optional(),
 });
@@ -415,6 +415,7 @@ export type OutgoingMessage =
   | { type: 'item_transfer'; itemId: string; targetUserId: string }
   | { type: 'item_use'; itemId: string }
   | { type: 'item_secondary_use'; itemId: string }
+  | { type: 'item_interact'; itemId: string; action: string; params?: Record<string, unknown> }
   | { type: 'item_piano_note'; itemId: string; keyId: string; midi: number; on: boolean }
   | { type: 'item_piano_recording'; itemId: string; action: 'toggle_record' | 'playback' | 'stop_playback' | 'stop_record' }
   | {

@@ -80,6 +80,7 @@ from .models import (
     ItemClockAnnouncePacket,
     ItemDeletePacket,
     ItemDropPacket,
+    ItemInteractPacket,
     ItemPianoNoteBroadcastPacket,
     ItemPianoNotePacket,
     ItemPianoRecordingPacket,
@@ -2970,6 +2971,52 @@ class SignalingServer:
                     )
                 )
             await self._send_item_result(client, True, "secondary_use", secondary_result.self_message, item.id)
+            return
+
+        if isinstance(packet, ItemInteractPacket):
+            if not self._client_has_permission(client, "item.use"):
+                await self._send_item_result(client, False, "interact", "Not authorized to use items.")
+                return
+            item = self.items.get(packet.itemId)
+            if not item:
+                await self._send_item_result(client, False, "interact", "Item not found.")
+                return
+            if item.carrierId not in (None, client.id):
+                await self._send_item_result(client, False, "interact", "Item is not available.", item.id)
+                return
+            if item.carrierId is None and (item.x != client.x or item.y != client.y):
+                await self._send_item_result(client, False, "interact", "Item is not on your square.", item.id)
+                return
+            handler = get_item_type_handler(item.type)
+            if handler.interact is None:
+                await self._send_item_result(
+                    client, False, "interact", f"{item.title} does not support interact actions.", item.id
+                )
+                return
+            try:
+                interact_result = handler.interact(item, packet.action, packet.params, client.nickname)
+            except ValueError as exc:
+                await self._send_item_result(client, False, "interact", str(exc), item.id)
+                return
+            if interact_result.updated_params is not None:
+                try:
+                    item.params = handler.validate_update(item, {**item.params, **interact_result.updated_params})
+                except ValueError as exc:
+                    await self._send_item_result(client, False, "interact", str(exc), item.id)
+                    return
+                item.updatedAt = self.item_service.now_ms()
+                actor_id, actor_name = self._item_updated_actor(client)
+                item.updatedBy = actor_id
+                item.updatedByName = actor_name
+                item.version += 1
+                self._request_state_save()
+                await self._broadcast_item(item)
+            if interact_result.others_message.strip():
+                await self._broadcast(
+                    BroadcastChatMessagePacket(type="chat_message", message=interact_result.others_message, system=True),
+                    exclude=client.websocket,
+                )
+            await self._send_item_result(client, True, "interact", interact_result.self_message, item.id)
             return
 
         if isinstance(packet, ItemPianoNotePacket):

@@ -176,6 +176,13 @@ class ItemUpdatePacket(BasePacket):
     params: dict | None = None
 
 
+class ItemInteractPacket(BasePacket):
+    type: Literal["item_interact"]
+    itemId: str
+    action: str = Field(min_length=1, max_length=64)
+    params: dict | None = None
+
+
 ClientPacket = (
     UpdatePositionPacket
     | TeleportCompletePacket
@@ -204,6 +211,7 @@ ClientPacket = (
     | ItemTransferTargetsPacket
     | ItemUsePacket
     | ItemSecondaryUsePacket
+    | ItemInteractPacket
     | ItemPianoNotePacket
     | ItemPianoRecordingPacket
     | ItemUpdatePacket
@@ -366,7 +374,7 @@ class ItemRemovePacket(BasePacket):
 class ItemActionResultPacket(BasePacket):
     type: Literal["item_action_result"]
     ok: bool
-    action: Literal["add", "pickup", "drop", "delete", "transfer", "use", "secondary_use", "update"]
+    action: Literal["add", "pickup", "drop", "delete", "transfer", "use", "secondary_use", "update", "interact"]
     message: str
     itemId: str | None = None
 

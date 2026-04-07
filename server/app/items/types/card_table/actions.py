@@ -8,6 +8,26 @@ from typing import Callable
 from ....item_types import ItemUseResult
 from ....models import WorldItem
 
+_VALID_RANKS = {"A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"}
+_VALID_SUITS = {"S", "H", "D", "C"}
+_RANK_NAMES = {
+    "A": "Ace", "2": "Two", "3": "Three", "4": "Four", "5": "Five",
+    "6": "Six", "7": "Seven", "8": "Eight", "9": "Nine", "10": "Ten",
+    "J": "Jack", "Q": "Queen", "K": "King",
+}
+_SUIT_NAMES = {"S": "Spades", "H": "Hearts", "D": "Diamonds", "C": "Clubs"}
+
+_CARD_TABLE_ACTIONS = frozenset(["draw", "draw_from_discard", "discard", "return_to_pile"])
+
+
+def _card_name(code: str) -> str:
+    """Human-readable card name."""
+    if code in ("JO1", "JO2"):
+        return "Joker"
+    suit = code[-1]
+    rank = code[:-1]
+    return f"{_RANK_NAMES.get(rank, rank)} of {_SUIT_NAMES.get(suit, suit)}"
+
 
 def _build_deck(include_jokers: bool) -> list[str]:
     """Return a sorted list of 52 (or 54) card codes."""
@@ -62,3 +82,84 @@ def secondary_use_item(item: WorldItem, nickname: str, _clock_formatter: Callabl
             "hands": {},
         },
     )
+
+
+def interact_item(
+    item: WorldItem,
+    action: str,
+    params: dict | None,
+    nickname: str,
+) -> ItemUseResult:
+    """Handle a card table interact action on behalf of any user."""
+    if action not in _CARD_TABLE_ACTIONS:
+        raise ValueError(f"Unknown card table action: {action!r}")
+
+    draw_pile = list(item.params.get("draw_pile", []))
+    discard_pile = list(item.params.get("discard_pile", []))
+    hands_raw = item.params.get("hands", {})
+    hands: dict[str, list[str]] = dict(hands_raw) if isinstance(hands_raw, dict) else {}
+
+    if action == "draw":
+        if not draw_pile:
+            raise ValueError("Draw pile is empty.")
+        card = draw_pile.pop(0)
+        hand = list(hands.get(nickname, []))
+        hand.append(card)
+        hands[nickname] = hand
+        return ItemUseResult(
+            self_message=f"You drew {_card_name(card)}. {len(draw_pile)} remaining in draw pile.",
+            others_message=f"{nickname} draws a card.",
+            updated_params={"draw_pile": draw_pile, "hands": hands},
+        )
+
+    if action == "draw_from_discard":
+        if not discard_pile:
+            raise ValueError("Discard pile is empty.")
+        if not params or "card_index" not in params:
+            raise ValueError("draw_from_discard requires params.card_index.")
+        card_index = params["card_index"]
+        if not isinstance(card_index, int) or card_index < 0 or card_index >= len(discard_pile):
+            raise ValueError("Invalid card_index.")
+        card = discard_pile.pop(card_index)
+        hand = list(hands.get(nickname, []))
+        hand.append(card)
+        hands[nickname] = hand
+        return ItemUseResult(
+            self_message=f"You took {_card_name(card)} from the discard pile.",
+            others_message=f"{nickname} takes a card from the discard pile.",
+            updated_params={"discard_pile": discard_pile, "hands": hands},
+        )
+
+    if action == "discard":
+        if not params or "card_index" not in params:
+            raise ValueError("discard requires params.card_index.")
+        hand = list(hands.get(nickname, []))
+        card_index = params["card_index"]
+        if not isinstance(card_index, int) or card_index < 0 or card_index >= len(hand):
+            raise ValueError("Invalid card_index.")
+        card = hand.pop(card_index)
+        discard_pile.insert(0, card)
+        hands[nickname] = hand
+        return ItemUseResult(
+            self_message=f"You discarded {_card_name(card)}.",
+            others_message=f"{nickname} discards a card.",
+            updated_params={"discard_pile": discard_pile, "hands": hands},
+        )
+
+    if action == "return_to_pile":
+        if not params or "card_index" not in params:
+            raise ValueError("return_to_pile requires params.card_index.")
+        hand = list(hands.get(nickname, []))
+        card_index = params["card_index"]
+        if not isinstance(card_index, int) or card_index < 0 or card_index >= len(hand):
+            raise ValueError("Invalid card_index.")
+        card = hand.pop(card_index)
+        draw_pile.append(card)
+        hands[nickname] = hand
+        return ItemUseResult(
+            self_message=f"You returned {_card_name(card)} to the draw pile.",
+            others_message=f"{nickname} returns a card to the draw pile.",
+            updated_params={"draw_pile": draw_pile, "hands": hands},
+        )
+
+    raise ValueError(f"Unhandled action: {action!r}")  # unreachable guard

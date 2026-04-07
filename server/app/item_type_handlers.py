@@ -11,6 +11,7 @@ ITEM_TYPE_HANDLERS: dict[ItemType, ItemTypeHandler] = {
         validate_update=module.validate_update,
         use=module.use_item,
         secondary_use=getattr(module, "secondary_use_item", None),
+        interact=getattr(module, "interact_item", None),
     )
     for item_type, module in ITEM_MODULES.items()
 }

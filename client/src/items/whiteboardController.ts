@@ -141,10 +141,13 @@ export function createWhiteboardController(deps: WhiteboardControllerDeps): {
         deps.sfxUiBlip();
       } else {
         // Delete
-        const newLines = [...lines];
-        newLines.splice(lineIndex, 1);
-        deps.signalingSend({ type: 'item_update', itemId: item.id, params: { lines: newLines } });
-        deps.state.whiteboardLineIndex = Math.min(deps.state.whiteboardLineIndex, newLines.length);
+        deps.signalingSend({
+          type: 'item_interact',
+          itemId: item.id,
+          action: 'delete_line',
+          params: { line_index: lineIndex },
+        });
+        deps.state.whiteboardLineIndex = Math.min(deps.state.whiteboardLineIndex, Math.max(0, lines.length - 1));
         deps.state.mode = 'whiteboardLines';
         deps.updateStatus('Line deleted.');
         deps.sfxUiBlip();
@@ -175,20 +178,21 @@ export function createWhiteboardController(deps: WhiteboardControllerDeps): {
         return;
       }
 
-      const lines = getLines(item);
       const editIndex = deps.state.whiteboardEditingLineIndex;
-      let newLines: string[];
       if (editIndex !== null) {
-        newLines = [...lines];
-        newLines[editIndex] = text;
+        deps.signalingSend({
+          type: 'item_interact',
+          itemId: item.id,
+          action: 'edit_line',
+          params: { line_index: editIndex, text },
+        });
       } else {
-        newLines = [...lines, text];
-      }
-
-      deps.signalingSend({ type: 'item_update', itemId: item.id, params: { lines: newLines } });
-
-      if (editIndex === null) {
-        deps.state.whiteboardLineIndex = newLines.length - 1;
+        deps.signalingSend({
+          type: 'item_interact',
+          itemId: item.id,
+          action: 'add_line',
+          params: { text },
+        });
       }
 
       deps.state.nicknameInput = '';
