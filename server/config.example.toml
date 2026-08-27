@@ -50,7 +50,5 @@ username_min_length = 2
 username_max_length = 32
 
 [livekit]
-# Public WebSocket URL for LiveKit, for example "wss://livekit.example.com".
-url = ""
 # Room name shared by Chat Grid participants.
 room_name = "chatgrid"

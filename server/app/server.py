@@ -4114,9 +4114,9 @@ def run() -> None:
         host_origin = normalize_origin(host_origin, field_name="CHGRID_HOST_ORIGIN")
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
-    livekit_url = config.livekit.url.strip()
+    livekit_url = os.getenv("LIVEKIT_URL", "").strip()
     if not livekit_url:
-        raise SystemExit("livekit.url is required in config.toml.")
+        raise SystemExit("LIVEKIT_URL is required.")
     livekit_api_key = os.getenv("LIVEKIT_API_KEY", "").strip()
     livekit_api_secret = os.getenv("LIVEKIT_API_SECRET", "").strip()
     if not livekit_api_key or not livekit_api_secret:

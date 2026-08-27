@@ -66,9 +66,8 @@ class AuthConfigSection(BaseModel):
 
 
 class LiveKitConfigSection(BaseModel):
-    """Non-secret LiveKit connection settings for voice transport."""
+    """Non-secret LiveKit room settings for voice transport."""
 
-    url: str = ""
     room_name: str = "chatgrid"
 
 

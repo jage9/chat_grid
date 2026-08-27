@@ -87,10 +87,8 @@ def test_load_config_reads_livekit_settings(tmp_path: Path) -> None:
 allow_insecure_ws = true
 
 [livekit]
-url = "wss://livekit.example.test"
 room_name = "grid-room"
 """.strip()
     )
     cfg = load_config(config_path)
-    assert cfg.livekit.url == "wss://livekit.example.test"
     assert cfg.livekit.room_name == "grid-room"
