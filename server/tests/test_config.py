@@ -14,6 +14,7 @@ def test_load_config_defaults_when_path_none() -> None:
     assert cfg.storage.state_save_debounce_ms == 200
     assert cfg.storage.state_save_max_delay_ms == 1000
     assert cfg.world.grid_size == 41
+    assert cfg.livekit.room_name == "chatgrid"
 
 
 def test_load_config_requires_tls_when_insecure_disabled(tmp_path: Path) -> None:

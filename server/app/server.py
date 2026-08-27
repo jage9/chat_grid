@@ -4114,6 +4114,13 @@ def run() -> None:
         host_origin = normalize_origin(host_origin, field_name="CHGRID_HOST_ORIGIN")
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
+    livekit_url = config.livekit.url.strip()
+    if not livekit_url:
+        raise SystemExit("livekit.url is required in config.toml.")
+    livekit_api_key = os.getenv("LIVEKIT_API_KEY", "").strip()
+    livekit_api_secret = os.getenv("LIVEKIT_API_SECRET", "").strip()
+    if not livekit_api_key or not livekit_api_secret:
+        raise SystemExit("LIVEKIT_API_KEY and LIVEKIT_API_SECRET are required.")
     auth_db_value = config.auth.db_file.strip()
     if not auth_db_value:
         raise SystemExit("auth.db_file must not be empty.")
@@ -4248,9 +4255,9 @@ def run() -> None:
         base_path=config.server.base_path,
         grid_name=config.server.grid_name,
         welcome_message=config.server.welcome_message,
-        livekit_url=config.livekit.url,
-        livekit_api_key=os.getenv("LIVEKIT_API_KEY", "").strip(),
-        livekit_api_secret=os.getenv("LIVEKIT_API_SECRET", "").strip(),
+        livekit_url=livekit_url,
+        livekit_api_key=livekit_api_key,
+        livekit_api_secret=livekit_api_secret,
         livekit_room_name=config.livekit.room_name,
     )
     asyncio.run(server.start())

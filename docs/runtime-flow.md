@@ -18,6 +18,7 @@
 9. Server sends `welcome` with users/items snapshot, followed by a short-lived `livekit_token` when LiveKit is configured.
    - `livekit.url` and `livekit.room_name` are deployment settings in `server/config.toml`.
    - `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` are required server environment secrets.
+   - Server startup fails with a clear configuration error when the URL or either credential is absent.
 10. Client:
    - applies `welcome.worldConfig.gridSize` for authoritative grid bounds/rendering
    - applies `welcome.worldConfig.movementTickMs` as movement pacing guidance
