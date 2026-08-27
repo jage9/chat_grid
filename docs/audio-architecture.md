@@ -2,7 +2,7 @@
 
 ## Audio Domains
 
-- Voice: remote WebRTC peer audio.
+- Voice: remote LiveKit audio tracks. Chat Grid supplies player positions and applies the positional mix.
 - Media: radio station streams.
 - Item: looping item emit sounds (`emitSound`).
 - World: one-shot spatial world events from others (movement/teleport and item-use spatial sounds).

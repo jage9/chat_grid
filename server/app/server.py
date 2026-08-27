@@ -77,7 +77,7 @@ from .models import (
     BroadcastTeleportCompletePacket,
     ChatMessagePacket,
     ClientPacket,
-    ForwardSignalPacket,
+    LiveKitTokenPacket,
     ItemActionResultPacket,
     ItemAddPacket,
     ItemClockAnnouncePacket,
@@ -102,7 +102,6 @@ from .models import (
     PingPacket,
     PongPacket,
     RemoteUser,
-    SignalPacket,
     TeleportCompletePacket,
     UpdateNicknamePacket,
     UpdatePositionPacket,
@@ -209,6 +208,10 @@ class SignalingServer:
             "Welcome to the Chat Grid, your immersive audio playground. "
             "Configure your audio, then Log in or register to join the grid."
         ),
+        livekit_url: str | None = None,
+        livekit_api_key: str | None = None,
+        livekit_api_secret: str | None = None,
+        livekit_room_name: str = "chatgrid",
     ):
         """Initialize runtime state, TLS context, and item service."""
 
@@ -257,6 +260,17 @@ class SignalingServer:
             str(welcome_message).strip()
             or "Welcome to the Chat Grid, your immersive audio playground. Configure your audio, then Log in or register to join the grid."
         )
+        self.livekit_url = (livekit_url or "").strip()
+        self.livekit_api_key = (livekit_api_key or "").strip()
+        self.livekit_api_secret = (livekit_api_secret or "").strip()
+        self.livekit_room_name = livekit_room_name.strip() or "chatgrid"
+        livekit_values = (
+            self.livekit_url,
+            self.livekit_api_key,
+            self.livekit_api_secret,
+        )
+        if any(livekit_values) and not all(livekit_values):
+            raise ValueError("LiveKit requires url, API key, and API secret.")
         self.auth_session_cookie_name = self._session_cookie_name_for_base_path(
             self.base_path
         )
@@ -286,6 +300,37 @@ class SignalingServer:
         self._clock_alarm_markers: dict[str, str] = {}
         self._started_at_monotonic = time.monotonic()
         self._pending_reboot_task: asyncio.Task[None] | None = None
+
+    @property
+    def livekit_enabled(self) -> bool:
+        """Return whether complete LiveKit credentials are configured."""
+
+        return bool(
+            self.livekit_url and self.livekit_api_key and self.livekit_api_secret
+        )
+
+    def _generate_livekit_token(self, client: ClientConnection) -> str:
+        """Create a short-lived LiveKit token for one authenticated client."""
+
+        from datetime import timedelta
+
+        from livekit import api
+
+        return (
+            api.AccessToken(self.livekit_api_key, self.livekit_api_secret)
+            .with_ttl(timedelta(minutes=15))
+            .with_identity(client.id)
+            .with_name(client.nickname)
+            .with_grants(
+                api.VideoGrants(
+                    room_join=True,
+                    room=self.livekit_room_name,
+                    can_publish=self._client_has_permission(client, "voice.send"),
+                    can_subscribe=True,
+                )
+            )
+            .to_jwt()
+        )
 
     @staticmethod
     def _resolve_server_version(release_version: str) -> str:
@@ -1949,6 +1994,15 @@ class SignalingServer:
             },
         )
         await self._send(client.websocket, packet)
+        if self.livekit_enabled:
+            await self._send(
+                client.websocket,
+                LiveKitTokenPacket(
+                    type="livekit_token",
+                    token=self._generate_livekit_token(client),
+                    url=self.livekit_url,
+                ),
+            )
 
     async def _send_authenticated_welcome(self, client: ClientConnection) -> None:
         """Prepare authenticated client state and send welcome before world activation."""
@@ -3962,32 +4016,6 @@ class SignalingServer:
             )
             return
 
-        if not self._client_has_permission(client, "voice.send"):
-            return
-        if not isinstance(packet, SignalPacket):
-            return
-        target = self._find_by_id(packet.targetId)
-        if not target:
-            PACKET_LOGGER.info(
-                "signal target not found sender=%s target=%s",
-                client.id,
-                packet.targetId,
-            )
-            return
-
-        await self._send(
-            target.websocket,
-            ForwardSignalPacket(
-                type="signal",
-                senderId=client.id,
-                senderNickname=client.nickname,
-                x=client.x,
-                y=client.y,
-                sdp=packet.sdp,
-                ice=packet.ice,
-            ),
-        )
-
     async def _broadcast(
         self, packet: object, exclude: ServerConnection | None = None
     ) -> None:
@@ -4220,5 +4248,12 @@ def run() -> None:
         base_path=config.server.base_path,
         grid_name=config.server.grid_name,
         welcome_message=config.server.welcome_message,
+        livekit_url=os.getenv("LIVEKIT_URL", "").strip() or config.livekit.url,
+        livekit_api_key=os.getenv("LIVEKIT_API_KEY", "").strip()
+        or config.livekit.api_key,
+        livekit_api_secret=os.getenv("LIVEKIT_API_SECRET", "").strip()
+        or config.livekit.api_secret,
+        livekit_room_name=os.getenv("LIVEKIT_ROOM_NAME", "").strip()
+        or config.livekit.room_name,
     )
     asyncio.run(server.start())

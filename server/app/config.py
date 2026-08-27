@@ -65,6 +65,15 @@ class AuthConfigSection(BaseModel):
     username_max_length: int = Field(default=32, ge=1)
 
 
+class LiveKitConfigSection(BaseModel):
+    """LiveKit SFU connection settings for voice transport."""
+
+    url: str = ""
+    api_key: str = ""
+    api_secret: str = ""
+    room_name: str = "chatgrid"
+
+
 class AppConfig(BaseModel):
     """Top-level application configuration document."""
 
@@ -75,6 +84,7 @@ class AppConfig(BaseModel):
     storage: StorageConfigSection = StorageConfigSection()
     world: WorldConfigSection = WorldConfigSection()
     auth: AuthConfigSection = AuthConfigSection()
+    livekit: LiveKitConfigSection = LiveKitConfigSection()
 
 
 def load_config(path: Path | None) -> AppConfig:

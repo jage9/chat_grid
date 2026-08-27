@@ -76,3 +76,22 @@ welcome_message = "Welcome to TT Grid."
     cfg = load_config(config_path)
     assert cfg.server.grid_name == "TT Grid"
     assert cfg.server.welcome_message == "Welcome to TT Grid."
+
+
+def test_load_config_reads_livekit_settings(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        """
+[network]
+allow_insecure_ws = true
+
+[livekit]
+url = "wss://livekit.example.test"
+api_key = "key"
+api_secret = "secret"
+room_name = "grid-room"
+""".strip()
+    )
+    cfg = load_config(config_path)
+    assert cfg.livekit.url == "wss://livekit.example.test"
+    assert cfg.livekit.room_name == "grid-room"

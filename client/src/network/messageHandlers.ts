@@ -32,8 +32,7 @@ type MessageHandlerDeps = {
   };
   signalingSend: (message: unknown) => void;
   peerManager: {
-    createOrGetPeer: (id: string, initiator: boolean, user: { id: string; nickname: string; x: number; y: number }) => Promise<unknown>;
-    handleSignal: (message: IncomingMessage) => Promise<{ id: string; nickname: string; x: number; y: number }>;
+    ensurePeer: (id: string, user: { id: string; nickname: string; x: number; y: number }) => unknown;
     setPeerPosition: (id: string, x: number, y: number) => void;
     setPeerNickname: (id: string, nickname: string) => void;
     removePeer: (id: string) => void;
@@ -77,8 +76,7 @@ type MessageHandlerDeps = {
   handleAdminUsersList: (message: Extract<IncomingMessage, { type: 'admin_users_list' }>) => void;
   handleAdminActionResult: (message: Extract<IncomingMessage, { type: 'admin_action_result' }>) => void;
   handleItemTransferTargets: (message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>) => void;
-  isPeerNegotiationReady: () => boolean;
-  enqueuePendingSignal: (message: Extract<IncomingMessage, { type: 'signal' }>) => void;
+  connectToLiveKit: (url: string, token: string) => void;
 };
 
 /**
@@ -140,6 +138,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
 
         for (const user of message.users) {
           deps.state.peers.set(user.id, { ...user });
+          deps.peerManager.ensurePeer(user.id, user);
         }
         deps.state.items.clear();
         for (const item of message.items || []) {
@@ -153,30 +152,8 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.gameLoop();
         break;
 
-      case 'signal': {
-        if (!deps.isPeerNegotiationReady()) {
-          deps.enqueuePendingSignal(message);
-          if (!deps.state.peers.has(message.senderId)) {
-          deps.state.peers.set(message.senderId, {
-            id: message.senderId,
-            userId: null,
-            nickname: deps.sanitizeName(message.senderNickname || 'user...') || 'user...',
-            x: Number.isFinite(message.x) ? message.x : 20,
-            y: Number.isFinite(message.y) ? message.y : 20,
-            });
-          }
-          break;
-        }
-        const peer = await deps.peerManager.handleSignal(message);
-        if (!deps.state.peers.has(peer.id)) {
-          deps.state.peers.set(peer.id, {
-            id: peer.id,
-            userId: null,
-            nickname: deps.sanitizeName(peer.nickname) || 'user...',
-            x: peer.x,
-            y: peer.y,
-          });
-        }
+      case 'livekit_token': {
+        deps.connectToLiveKit(message.url, message.token);
         break;
       }
 
@@ -192,7 +169,16 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         if (peer) {
           peer.x = message.x;
           peer.y = message.y;
+        } else {
+          deps.state.peers.set(message.id, {
+            id: message.id,
+            userId: null,
+            nickname: 'user...',
+            x: message.x,
+            y: message.y,
+          });
         }
+        deps.peerManager.ensurePeer(message.id, deps.state.peers.get(message.id)!);
         deps.peerManager.setPeerPosition(message.id, message.x, message.y);
         if (peer) {
           const movementDelta = Math.hypot(message.x - prevX, message.y - prevY);

@@ -7,7 +7,7 @@ import {
   type EffectId,
   type EffectRuntime,
 } from './effects';
-import { applySpatialMixToNodes, resolveSpatialMix, SPATIAL_RAMP_SECONDS, SPATIAL_TIME_CONSTANT_SECONDS } from './spatial';
+import { applySpatialMixToNodes, resolveSpatialMix } from './spatial';
 
 export type SpatialPeerRuntime = {
   nickname: string;

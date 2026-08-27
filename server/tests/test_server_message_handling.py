@@ -22,6 +22,7 @@ from app.models import (
     AuthResultPacket,
     ItemActionResultPacket,
     ItemTransferTargetsResultPacket,
+    LiveKitTokenPacket,
     PongPacket,
 )
 from app.server import (
@@ -137,6 +138,37 @@ async def test_update_position_rejects_out_of_bounds(
     assert client.x == 5
     assert client.y == 6
     assert broadcast_payloads == []
+
+
+@pytest.mark.asyncio
+async def test_welcome_includes_livekit_token_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer(
+        "127.0.0.1",
+        8765,
+        None,
+        None,
+        livekit_url="wss://livekit.example.test",
+        livekit_api_key="key",
+        livekit_api_secret="test-livekit-secret-with-at-least-32-bytes",
+    )
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="connection-1", nickname="tester"),
+        permissions={"voice.send"},
+    )
+    sent: list[object] = []
+
+    async def fake_send(_websocket: ServerConnection, packet: object) -> None:
+        sent.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    await server._send_welcome(client)
+
+    token_packet = _last_packet_of_type(sent, LiveKitTokenPacket)
+    assert token_packet.url == "wss://livekit.example.test"
+    assert token_packet.token
 
 
 @pytest.mark.asyncio

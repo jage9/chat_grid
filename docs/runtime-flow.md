@@ -15,7 +15,7 @@
    - includes role + permissions for authenticated session.
 8. Client persists authenticated session into instance-scoped server-managed `HttpOnly` cookie helpers under the active app base path via `GET <base_path>auth/session/set` (`Authorization: Bearer <sessionToken>`, `X-Chgrid-Auth-Client: 1`), and clears it via `GET <base_path>auth/session/clear` on logout/session errors.
    - the optional PHP media proxy validates that same cookie through `GET <base_path>auth/session/check` before relaying media
-9. Server sends `welcome` with users/items snapshot.
+9. Server sends `welcome` with users/items snapshot, followed by a short-lived `livekit_token` when LiveKit is configured.
 10. Client:
    - applies `welcome.worldConfig.gridSize` for authoritative grid bounds/rendering
    - applies `welcome.worldConfig.movementTickMs` as movement pacing guidance
@@ -27,6 +27,7 @@
    - sends initial `update_position` echo from server-assigned starting tile
    - sends initial `update_nickname`
    - creates peer runtimes for known users
+   - joins the LiveKit room with the server-issued token and publishes the processed microphone track
    - syncs item runtimes (`radio`, `emit`)
    - applies audio layer state
    - starts signaling heartbeat monitor
@@ -47,7 +48,7 @@ Each frame:
 
 Core incoming message effects:
 
-- `signal`: WebRTC negotiation and ICE exchange.
+- `livekit_token`: connects the authenticated browser to the LiveKit audio room.
 - `auth_required`: prompt client to authenticate before gameplay messages.
 - `auth_result`: auth success/failure with optional session token + account metadata + `authPolicy`.
 - `auth_permissions`: live permission refresh (role + permission set) after role/permission admin changes.
@@ -96,7 +97,7 @@ On disconnect:
 
 ## Runtime Components
 
-- `PeerManager`: peer connection lifecycle and remote track attach.
+- `PeerManager`: LiveKit room lifecycle and remote track attach.
 - `RadioStationRuntime`: shared stream sources + per-item output/effects/spatialization.
 - `ItemEmitRuntime`: per-item looping emit source + spatialization.
 - `AudioEngine`: shared audio context, samples, effects, voice graph.

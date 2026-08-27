@@ -47,7 +47,9 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - admin mutations include `user_delete` for account deletion.
 - `welcome`: initial snapshot with users/items plus server UI/world metadata.
   - Server delays roster activation/login broadcast until `welcome_ready` is received.
-- `signal`: forwarded WebRTC offer/answer/ICE.
+- `livekit_token`: short-lived authenticated LiveKit room token and public WebSocket URL.
+  - Issued only after authentication when complete LiveKit configuration is enabled.
+  - The API secret is never sent to the browser.
 - `update_position`, `update_nickname`, `user_left`: presence updates.
 - `teleport_complete`: peer teleport landing event with spatial coordinates.
 - `chat_message`: system and user chat stream.
@@ -145,6 +147,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - Client validates incoming packet shapes and applies runtime behavior.
 - Server is authoritative for role/permission checks on every privileged packet.
 - `voice.send` permission changes are pushed at runtime via `auth_permissions`.
+- LiveKit token publish permission is derived from `voice.send`; Chat Grid remains authoritative for all account and world permissions.
 - Sound/media field normalization uses shared server policy helpers:
   - `none/off` normalize to empty values
   - bare filenames normalize to `sounds/<name>` for sound-reference fields
