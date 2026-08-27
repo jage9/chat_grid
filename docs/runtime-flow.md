@@ -16,6 +16,8 @@
 8. Client persists authenticated session into instance-scoped server-managed `HttpOnly` cookie helpers under the active app base path via `GET <base_path>auth/session/set` (`Authorization: Bearer <sessionToken>`, `X-Chgrid-Auth-Client: 1`), and clears it via `GET <base_path>auth/session/clear` on logout/session errors.
    - the optional PHP media proxy validates that same cookie through `GET <base_path>auth/session/check` before relaying media
 9. Server sends `welcome` with users/items snapshot, followed by a short-lived `livekit_token` when LiveKit is configured.
+   - `livekit.url` and `livekit.room_name` are deployment settings in `server/config.toml`.
+   - `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` are required server environment secrets.
 10. Client:
    - applies `welcome.worldConfig.gridSize` for authoritative grid bounds/rendering
    - applies `welcome.worldConfig.movementTickMs` as movement pacing guidance

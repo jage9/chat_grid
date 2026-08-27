@@ -66,11 +66,9 @@ class AuthConfigSection(BaseModel):
 
 
 class LiveKitConfigSection(BaseModel):
-    """LiveKit SFU connection settings for voice transport."""
+    """Non-secret LiveKit connection settings for voice transport."""
 
     url: str = ""
-    api_key: str = ""
-    api_secret: str = ""
     room_name: str = "chatgrid"
 
 

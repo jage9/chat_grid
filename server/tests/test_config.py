@@ -87,8 +87,6 @@ allow_insecure_ws = true
 
 [livekit]
 url = "wss://livekit.example.test"
-api_key = "key"
-api_secret = "secret"
 room_name = "grid-room"
 """.strip()
     )

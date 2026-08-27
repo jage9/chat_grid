@@ -4248,12 +4248,9 @@ def run() -> None:
         base_path=config.server.base_path,
         grid_name=config.server.grid_name,
         welcome_message=config.server.welcome_message,
-        livekit_url=os.getenv("LIVEKIT_URL", "").strip() or config.livekit.url,
-        livekit_api_key=os.getenv("LIVEKIT_API_KEY", "").strip()
-        or config.livekit.api_key,
-        livekit_api_secret=os.getenv("LIVEKIT_API_SECRET", "").strip()
-        or config.livekit.api_secret,
-        livekit_room_name=os.getenv("LIVEKIT_ROOM_NAME", "").strip()
-        or config.livekit.room_name,
+        livekit_url=config.livekit.url,
+        livekit_api_key=os.getenv("LIVEKIT_API_KEY", "").strip(),
+        livekit_api_secret=os.getenv("LIVEKIT_API_SECRET", "").strip(),
+        livekit_room_name=config.livekit.room_name,
     )
     asyncio.run(server.start())

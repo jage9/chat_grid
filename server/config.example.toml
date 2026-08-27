@@ -51,9 +51,6 @@ username_max_length = 32
 
 [livekit]
 # Public WebSocket URL for LiveKit, for example "wss://livekit.example.com".
-# Keep API credentials in LIVEKIT_API_KEY and LIVEKIT_API_SECRET environment variables.
 url = ""
-# Optional only when environment variables are not used. Do not commit production secrets.
-api_key = ""
-api_secret = ""
+# Room name shared by Chat Grid participants.
 room_name = "chatgrid"
