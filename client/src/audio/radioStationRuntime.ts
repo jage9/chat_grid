@@ -30,6 +30,7 @@ type ItemRadioOutput = {
   effectValue: number;
   gain: GainNode;
   panner: StereoPannerNode | null;
+  wasAudible: boolean;
 };
 
 export function normalizeRadioEffect(effect: unknown): EffectId {
@@ -287,10 +288,6 @@ export class RadioStationRuntime {
         output.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.05);
         continue;
       }
-      const shared = this.sharedRadioSources.get(output.streamUrl);
-      if (shared) {
-        this.tryStartSharedPlayback(shared);
-      }
       const spatialConfig = this.getSpatialConfig(item);
       const mix = resolveSpatialMix({
         dx: item.x - playerPosition.x,
@@ -307,6 +304,16 @@ export class RadioStationRuntime {
           rearGain: 0.4,
         },
       });
+      const isAudible = mix !== null && mix.gain > 0;
+      if (isAudible && !output.wasAudible) {
+        this.nextSharedStartAtMs.delete(output.streamUrl);
+        this.sharedStartFailureCount.delete(output.streamUrl);
+      }
+      output.wasAudible = isAudible;
+      const shared = this.sharedRadioSources.get(output.streamUrl);
+      if (shared) {
+        this.tryStartSharedPlayback(shared);
+      }
       applySpatialMixToNodes({
         audioCtx,
         gainNode: output.gain,
@@ -498,6 +505,7 @@ export class RadioStationRuntime {
       effectValue,
       gain,
       panner,
+      wasAudible: false,
     });
   }
 

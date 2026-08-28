@@ -54,3 +54,4 @@ Current defaults:
 
 Radio stream startup appends a cache-busting query token on runtime creation to avoid stale buffered playback after reconnect/layer re-enable.
 If a browser leaves a stream-start request pending, the runtime resets that attempt after 15 seconds and resumes its bounded retry schedule.
+Re-entering the audible range clears a retained source's retry cooldown and starts a fresh attempt.
