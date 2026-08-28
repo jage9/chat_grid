@@ -1011,7 +1011,12 @@ class SignalingServer:
 
         try:
             while True:
-                await self._refresh_radio_metadata_once()
+                try:
+                    await self._refresh_radio_metadata_once()
+                except Exception:
+                    # A malformed or abruptly closed upstream must not disable
+                    # metadata updates for every other radio.
+                    LOGGER.exception("radio metadata refresh failed")
                 await asyncio.sleep(RADIO_METADATA_POLL_INTERVAL_S)
         except asyncio.CancelledError:
             return

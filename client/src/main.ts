@@ -262,7 +262,7 @@ let activeGridName = DEFAULT_GRID_NAME;
 let activeWelcomeMessage = DEFAULT_WELCOME_MESSAGE;
 const messageBuffer: string[] = [];
 let messageCursor = -1;
-const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig);
+const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig, updateStatus);
 const itemEmitRuntime = new ItemEmitRuntime(audio, resolveIncomingSoundUrl, getItemSpatialConfig);
 const clockAnnouncer = new ClockAnnouncer(audio, () => ({ x: state.player.x, y: state.player.y }));
 let replaceTextOnNextType = false;

@@ -131,18 +131,35 @@ const STREAM_PLAY_RETRY_MS = 5000;
 const STREAM_PLAY_MAX_RETRIES = 6;
 const STREAM_PLAY_RESET_COOLDOWN_MS = 60000;
 
+function describeMediaError(error: MediaError | null): string {
+  switch (error?.code) {
+    case MediaError.MEDIA_ERR_ABORTED:
+      return 'playback was aborted';
+    case MediaError.MEDIA_ERR_NETWORK:
+      return 'the stream could not be reached';
+    case MediaError.MEDIA_ERR_DECODE:
+      return 'the stream could not be decoded';
+    case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+      return 'the stream format is not supported';
+    default:
+      return 'the stream could not be played';
+  }
+}
+
 export class RadioStationRuntime {
   private readonly sharedRadioSources = new Map<string, SharedRadioSource>();
   private readonly itemRadioOutputs = new Map<string, ItemRadioOutput>();
   private readonly pendingSharedStarts = new Set<string>();
   private readonly nextSharedStartAtMs = new Map<string, number>();
   private readonly sharedStartFailureCount = new Map<string, number>();
+  private readonly reportedPlaybackErrors = new Set<string>();
   private layerEnabled = true;
   private listenerPositions: Array<{ x: number; y: number }> = [];
 
   constructor(
     private readonly audio: AudioEngine,
     private readonly getSpatialConfig: (item: WorldItem) => RadioSpatialConfig,
+    private readonly reportPlaybackError: (message: string) => void = () => undefined,
   ) {}
 
   cleanup(itemId: string): void {
@@ -314,10 +331,16 @@ export class RadioStationRuntime {
     }
     const audioCtx = this.audio.context;
     if (!audioCtx) return null;
-    const element = new Audio(freshRadioPlaybackUrl(streamUrl));
+    const element = new Audio();
     element.crossOrigin = 'anonymous';
     element.loop = true;
     element.preload = 'none';
+    element.src = freshRadioPlaybackUrl(streamUrl);
+    element.addEventListener('error', () => {
+      if (this.reportedPlaybackErrors.has(streamUrl)) return;
+      this.reportedPlaybackErrors.add(streamUrl);
+      this.reportPlaybackError(`Radio error: ${describeMediaError(element.error)}.`);
+    });
     const source = audioCtx.createMediaElementSource(element);
     const shared: SharedRadioSource = {
       streamUrl,
@@ -356,6 +379,7 @@ export class RadioStationRuntime {
       .then(() => {
         this.nextSharedStartAtMs.delete(shared.streamUrl);
         this.sharedStartFailureCount.delete(shared.streamUrl);
+        this.reportedPlaybackErrors.delete(shared.streamUrl);
       })
       .catch(() => {
         const failures = (this.sharedStartFailureCount.get(shared.streamUrl) ?? 0) + 1;

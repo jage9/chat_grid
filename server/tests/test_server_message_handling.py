@@ -238,6 +238,29 @@ async def test_radio_metadata_refresh_updates_without_listener_in_range(
 
 
 @pytest.mark.asyncio
+async def test_radio_metadata_loop_continues_after_refresh_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    refresh_calls = 0
+
+    async def failing_refresh() -> None:
+        nonlocal refresh_calls
+        refresh_calls += 1
+        raise RuntimeError("upstream closed early")
+
+    async def stop_after_first_poll(_delay: float) -> None:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(server, "_refresh_radio_metadata_once", failing_refresh)
+    monkeypatch.setattr(asyncio, "sleep", stop_after_first_poll)
+
+    await server._run_radio_metadata_loop()
+
+    assert refresh_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_item_secondary_use_radio_reports_now_playing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
