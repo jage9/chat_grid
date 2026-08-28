@@ -461,7 +461,7 @@ function resolve_safe_redirect_chain($initialUrl, $allowlistSuffixes, $requestHe
         curl_setopt($ch, CURLOPT_HEADER, false);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_NOSIGNAL, true);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'ChatGrid');
+        curl_setopt($ch, CURLOPT_USERAGENT, 'ChatGridMediaProxy/1.0');
         curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
         curl_setopt($ch, CURLOPT_HEADERFUNCTION, 'proxy_header_callback');
         curl_setopt($ch, CURLOPT_NOBODY, true);
@@ -572,7 +572,7 @@ curl_setopt($ch, CURLOPT_TIMEOUT, 0);
 curl_setopt($ch, CURLOPT_HEADER, false);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
 curl_setopt($ch, CURLOPT_NOSIGNAL, true);
-curl_setopt($ch, CURLOPT_USERAGENT, 'ChatGrid');
+curl_setopt($ch, CURLOPT_USERAGENT, 'ChatGridMediaProxy/1.0');
 curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
 curl_setopt($ch, CURLOPT_HEADERFUNCTION, 'proxy_header_callback');
 curl_setopt($ch, CURLOPT_WRITEFUNCTION, 'proxy_write_callback');
