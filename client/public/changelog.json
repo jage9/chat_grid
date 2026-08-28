@@ -1,6 +1,12 @@
 {
   "sections": [
     {
+      "date": "August 28, 2026",
+      "items": [
+        "Switched voice chat support to use LiveKit."
+      ]
+    },
+    {
       "date": "March 8, 2026",
       "items": [
         "First public release, v0.1.0.",
