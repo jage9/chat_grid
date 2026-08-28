@@ -168,6 +168,7 @@ const UNSUBSCRIBE_HYSTERESIS_SQUARES = 8;
 const STREAM_PLAY_RETRY_MS = 5000;
 const STREAM_PLAY_MAX_RETRIES = 6;
 const STREAM_PLAY_RESET_COOLDOWN_MS = 60000;
+const STREAM_PLAY_START_TIMEOUT_MS = 15000;
 
 export class RadioStationRuntime {
   private readonly sharedRadioSources = new Map<string, SharedRadioSource>();
@@ -175,6 +176,9 @@ export class RadioStationRuntime {
   private readonly pendingSharedStarts = new Set<string>();
   private readonly nextSharedStartAtMs = new Map<string, number>();
   private readonly sharedStartFailureCount = new Map<string, number>();
+  private readonly sharedStartAttemptIds = new Map<string, number>();
+  private readonly sharedStartTimeouts = new Map<string, number>();
+  private nextSharedStartAttemptId = 0;
   private layerEnabled = true;
   private listenerPositions: Array<{ x: number; y: number }> = [];
 
@@ -342,6 +346,7 @@ export class RadioStationRuntime {
     this.pendingSharedStarts.delete(streamUrl);
     this.nextSharedStartAtMs.delete(streamUrl);
     this.sharedStartFailureCount.delete(streamUrl);
+    this.clearSharedStartAttempt(streamUrl);
   }
 
   private getOrCreateSharedSource(streamUrl: string): SharedRadioSource | null {
@@ -382,6 +387,8 @@ export class RadioStationRuntime {
       return;
     }
     this.pendingSharedStarts.add(shared.streamUrl);
+    const attemptId = ++this.nextSharedStartAttemptId;
+    this.sharedStartAttemptIds.set(shared.streamUrl, attemptId);
     if (shared.element.error) {
       try {
         shared.element.load();
@@ -389,25 +396,54 @@ export class RadioStationRuntime {
         // Ignore stale media reload failures.
       }
     }
+    const timeoutId = window.setTimeout(() => {
+      if (this.sharedStartAttemptIds.get(shared.streamUrl) !== attemptId) return;
+      this.clearSharedStartAttempt(shared.streamUrl);
+      try {
+        shared.element.pause();
+        shared.element.load();
+      } catch {
+        // Ignore stale media reset failures.
+      }
+      this.recordSharedStartFailure(shared.streamUrl);
+    }, STREAM_PLAY_START_TIMEOUT_MS);
+    this.sharedStartTimeouts.set(shared.streamUrl, timeoutId);
     void shared.element
       .play()
       .then(() => {
+        if (this.sharedStartAttemptIds.get(shared.streamUrl) !== attemptId) return;
         this.nextSharedStartAtMs.delete(shared.streamUrl);
         this.sharedStartFailureCount.delete(shared.streamUrl);
       })
       .catch(() => {
-        const failures = (this.sharedStartFailureCount.get(shared.streamUrl) ?? 0) + 1;
-        if (failures >= STREAM_PLAY_MAX_RETRIES) {
-          this.sharedStartFailureCount.set(shared.streamUrl, 0);
-          this.nextSharedStartAtMs.set(shared.streamUrl, Date.now() + STREAM_PLAY_RESET_COOLDOWN_MS);
-          return;
-        }
-        this.sharedStartFailureCount.set(shared.streamUrl, failures);
-        this.nextSharedStartAtMs.set(shared.streamUrl, Date.now() + STREAM_PLAY_RETRY_MS);
+        if (this.sharedStartAttemptIds.get(shared.streamUrl) !== attemptId) return;
+        this.recordSharedStartFailure(shared.streamUrl);
       })
       .finally(() => {
-        this.pendingSharedStarts.delete(shared.streamUrl);
+        if (this.sharedStartAttemptIds.get(shared.streamUrl) !== attemptId) return;
+        this.clearSharedStartAttempt(shared.streamUrl);
       });
+  }
+
+  private clearSharedStartAttempt(streamUrl: string): void {
+    const timeoutId = this.sharedStartTimeouts.get(streamUrl);
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+      this.sharedStartTimeouts.delete(streamUrl);
+    }
+    this.sharedStartAttemptIds.delete(streamUrl);
+    this.pendingSharedStarts.delete(streamUrl);
+  }
+
+  private recordSharedStartFailure(streamUrl: string): void {
+    const failures = (this.sharedStartFailureCount.get(streamUrl) ?? 0) + 1;
+    if (failures >= STREAM_PLAY_MAX_RETRIES) {
+      this.sharedStartFailureCount.set(streamUrl, 0);
+      this.nextSharedStartAtMs.set(streamUrl, Date.now() + STREAM_PLAY_RESET_COOLDOWN_MS);
+      return;
+    }
+    this.sharedStartFailureCount.set(streamUrl, failures);
+    this.nextSharedStartAtMs.set(streamUrl, Date.now() + STREAM_PLAY_RETRY_MS);
   }
 
   private async ensureRuntime(item: WorldItem): Promise<void> {
