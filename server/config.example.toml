@@ -5,9 +5,6 @@ bind_ip = "127.0.0.1"
 port = 8765
 # Public base path for this grid instance. Examples: "/", "/chgrid/", "/ttgrid/".
 base_path = "/"
-# Set only when Apache maps a different public path to this backend path. This
-# scopes the browser session cookie to the public path while backend routes use base_path.
-public_base_path = ""
 # User-facing grid name shown in the web client.
 grid_name = "Chat Grid"
 # User-facing pre-connect welcome text shown on the home screen.

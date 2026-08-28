@@ -336,9 +336,7 @@ export function createAuthController(deps: AuthControllerDeps): {
     }
 
     if (message.sessionToken) {
-      // Welcome processing starts radio playback. Persist the authenticated
-      // proxy cookie first so initial media requests cannot race to a 401 body.
-      await persistHttpOnlySessionCookie(message.sessionToken);
+      void persistHttpOnlySessionCookie(message.sessionToken);
     }
     if (message.username) {
       authUsername = message.username;

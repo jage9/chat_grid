@@ -203,7 +203,6 @@ class SignalingServer:
         state_save_max_delay_ms: int = 1000,
         host_origin: str | None = None,
         base_path: str = "/",
-        public_base_path: str = "",
         grid_name: str = "Chat Grid",
         welcome_message: str = (
             "Welcome to the Chat Grid, your immersive audio playground. "
@@ -256,9 +255,6 @@ class SignalingServer:
             else None
         )
         self.base_path = self._normalize_base_path(base_path)
-        self.public_base_path = self._normalize_base_path(
-            public_base_path or self.base_path
-        )
         self.grid_name = str(grid_name).strip() or "Chat Grid"
         self.welcome_message = (
             str(welcome_message).strip()
@@ -276,7 +272,7 @@ class SignalingServer:
         if any(livekit_values) and not all(livekit_values):
             raise ValueError("LiveKit requires url, API key, and API secret.")
         self.auth_session_cookie_name = self._session_cookie_name_for_base_path(
-            self.public_base_path
+            self.base_path
         )
         self.websocket_path = self._base_path_join(WEBSOCKET_PATH)
         self.auth_session_cookie_set_path = self._base_path_join(
@@ -458,7 +454,7 @@ class SignalingServer:
 
         secure = "; Secure" if self._session_cookie_secure(request) else ""
         return (
-            f"{self.auth_session_cookie_name}={token}; Path={self.public_base_path}; HttpOnly; SameSite=Lax; "
+            f"{self.auth_session_cookie_name}={token}; Path={self.base_path}; HttpOnly; SameSite=Lax; "
             f"Max-Age={AUTH_SESSION_COOKIE_MAX_AGE_SECONDS}{secure}"
         )
 
@@ -468,7 +464,7 @@ class SignalingServer:
         """Build Set-Cookie header value that expires the session cookie."""
 
         secure = "; Secure" if self._session_cookie_secure(request) else ""
-        return f"{self.auth_session_cookie_name}=; Path={self.public_base_path}; HttpOnly; SameSite=Lax; Max-Age=0{secure}"
+        return f"{self.auth_session_cookie_name}=; Path={self.base_path}; HttpOnly; SameSite=Lax; Max-Age=0{secure}"
 
     def _origin_allowed(self, request: HttpRequest) -> bool:
         """Return whether one auth helper HTTP request comes from the configured app origin."""
@@ -980,47 +976,41 @@ class SignalingServer:
             return "", ""
 
     async def _refresh_radio_metadata_once(self) -> None:
-        """Refresh station/title metadata for every enabled radio, once per stream URL."""
+        """Refresh station/title metadata for active radios near at least one listener."""
 
-        radios_by_stream: dict[str, list[WorldItem]] = {}
-        for item in self.items.values():
-            if item.type != "radio_station" or not bool(
-                item.params.get("enabled", True)
-            ):
-                continue
+        radios = [
+            item
+            for item in self.items.values()
+            if item.type == "radio_station"
+            and bool(item.params.get("enabled", True))
+            and isinstance(item.params.get("streamUrl"), str)
+            and str(item.params.get("streamUrl", "")).strip()
+            and self._has_listener_in_range(item)
+        ]
+        for item in radios:
             stream_url = str(item.params.get("streamUrl", "")).strip()
-            if stream_url:
-                radios_by_stream.setdefault(stream_url, []).append(item)
-
-        for stream_url, radios in radios_by_stream.items():
             station_name, now_playing = await asyncio.to_thread(
                 self._fetch_stream_metadata, stream_url
             )
-            for item in radios:
-                current_station = str(item.params.get("stationName", "")).strip()
-                current_playing = str(item.params.get("nowPlaying", "")).strip()
-                if station_name == current_station and now_playing == current_playing:
-                    continue
-                item.params["stationName"] = station_name
-                item.params["nowPlaying"] = now_playing
-                item.updatedAt = self.item_service.now_ms()
-                item.updatedBy = "system"
-                item.updatedByName = "system"
-                item.version += 1
-                self._request_state_save()
-                await self._broadcast_item(item)
+            current_station = str(item.params.get("stationName", "")).strip()
+            current_playing = str(item.params.get("nowPlaying", "")).strip()
+            if station_name == current_station and now_playing == current_playing:
+                continue
+            item.params["stationName"] = station_name
+            item.params["nowPlaying"] = now_playing
+            item.updatedAt = self.item_service.now_ms()
+            item.updatedBy = "system"
+            item.updatedByName = "system"
+            item.version += 1
+            self._request_state_save()
+            await self._broadcast_item(item)
 
     async def _run_radio_metadata_loop(self) -> None:
         """Background polling loop that refreshes radio now-playing metadata."""
 
         try:
             while True:
-                try:
-                    await self._refresh_radio_metadata_once()
-                except Exception:
-                    # A malformed or abruptly closed upstream must not disable
-                    # metadata updates for every other radio.
-                    LOGGER.exception("radio metadata refresh failed")
+                await self._refresh_radio_metadata_once()
                 await asyncio.sleep(RADIO_METADATA_POLL_INTERVAL_S)
         except asyncio.CancelledError:
             return
@@ -4263,7 +4253,6 @@ def run() -> None:
         state_save_max_delay_ms=config.storage.state_save_max_delay_ms,
         host_origin=host_origin,
         base_path=config.server.base_path,
-        public_base_path=config.server.public_base_path,
         grid_name=config.server.grid_name,
         welcome_message=config.server.welcome_message,
         livekit_url=livekit_url,

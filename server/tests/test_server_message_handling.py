@@ -205,7 +205,7 @@ async def test_radio_metadata_refresh_updates_station_and_title(
 
 
 @pytest.mark.asyncio
-async def test_radio_metadata_refresh_updates_without_listener_in_range(
+async def test_radio_metadata_refresh_skips_when_no_listener_in_range(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
@@ -232,32 +232,7 @@ async def test_radio_metadata_refresh_updates_without_listener_in_range(
 
     await server._refresh_radio_metadata_once()
 
-    assert called is True
-    assert radio.params["stationName"] == "X"
-    assert radio.params["nowPlaying"] == "Y"
-
-
-@pytest.mark.asyncio
-async def test_radio_metadata_loop_continues_after_refresh_failure(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    refresh_calls = 0
-
-    async def failing_refresh() -> None:
-        nonlocal refresh_calls
-        refresh_calls += 1
-        raise RuntimeError("upstream closed early")
-
-    async def stop_after_first_poll(_delay: float) -> None:
-        raise asyncio.CancelledError
-
-    monkeypatch.setattr(server, "_refresh_radio_metadata_once", failing_refresh)
-    monkeypatch.setattr(asyncio, "sleep", stop_after_first_poll)
-
-    await server._run_radio_metadata_loop()
-
-    assert refresh_calls == 1
+    assert called is False
 
 
 @pytest.mark.asyncio

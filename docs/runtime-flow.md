@@ -102,7 +102,5 @@ On disconnect:
 
 - `PeerManager`: LiveKit room lifecycle and remote track attach.
 - `RadioStationRuntime`: shared stream sources + per-item output/effects/spatialization.
-- The server refreshes station-name and now-playing metadata for every enabled radio,
-  fetching each unique stream URL once per polling cycle.
 - `ItemEmitRuntime`: per-item looping emit source + spatialization.
 - `AudioEngine`: shared audio context, samples, effects, voice graph.

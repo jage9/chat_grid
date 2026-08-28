@@ -209,11 +209,10 @@ export class ItemEmitRuntime {
       if (!audioCtx) {
         continue;
       }
-      const element = new Audio();
+      const element = new Audio(soundUrl);
       element.loop = false;
       element.preload = 'none';
       element.crossOrigin = 'anonymous';
-      element.src = soundUrl;
       const source = audioCtx.createMediaElementSource(element);
       const effectInput = audioCtx.createGain();
       const gain = audioCtx.createGain();

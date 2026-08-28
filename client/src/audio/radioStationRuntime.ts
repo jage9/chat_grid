@@ -1,12 +1,12 @@
 import { HEARING_RADIUS, type WorldItem } from '../state/gameState';
 import { EFFECT_IDS, clampEffectLevel, connectEffectChain, disconnectEffectRuntime, type EffectId, type EffectRuntime } from './effects';
 import { AudioEngine } from './audioEngine';
-import { freshRadioPlaybackUrl, getProxyUrlForMedia, shouldProxyRadioStreamUrl } from './mediaUrl';
 import { applySpatialMixToNodes, resolveSpatialMix } from './spatial';
 import { volumePercentToGain } from './volume';
 
 export const RADIO_CHANNEL_OPTIONS = ['stereo', 'mono', 'left', 'right'] as const;
 export type RadioChannelMode = (typeof RADIO_CHANNEL_OPTIONS)[number];
+const APP_BASE_PATH = import.meta.env.BASE_URL ?? '/';
 
 type SharedRadioSource = {
   streamUrl: string;
@@ -111,12 +111,50 @@ function connectRadioChannelSource(
   };
 }
 
+/** Returns whether a hostname belongs to Dropbox domains that need proxy support. */
+function isDropboxHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host.endsWith('dropbox.com') || host.endsWith('dropboxusercontent.com');
+}
+
 export function shouldProxyStreamUrl(streamUrl: string): boolean {
-  return shouldProxyRadioStreamUrl(streamUrl);
+  try {
+    const parsed = new URL(streamUrl);
+    if (
+      parsed.origin === window.location.origin &&
+      parsed.pathname.toLowerCase().endsWith('/media_proxy.php')
+    ) {
+      return false;
+    }
+    if (parsed.protocol === 'http:') return true;
+    if (parsed.protocol === 'https:' && isDropboxHost(parsed.hostname)) return true;
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 export function getProxyUrlForStream(streamUrl: string): string {
-  return getProxyUrlForMedia(streamUrl);
+  const normalizedBase = APP_BASE_PATH.endsWith('/') ? APP_BASE_PATH : `${APP_BASE_PATH}/`;
+  const proxy = new URL(`${normalizedBase}media_proxy.php`, window.location.origin);
+  proxy.searchParams.set('url', streamUrl);
+  return proxy.toString();
+}
+
+/** Appends a cache-buster query parameter to avoid stale stream buffers between sessions. */
+function freshStreamUrl(streamUrl: string): string {
+  const playbackSource = shouldProxyStreamUrl(streamUrl) ? getProxyUrlForStream(streamUrl) : streamUrl;
+  try {
+    const parsed = new URL(playbackSource);
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname.endsWith('dropbox.com') || hostname.endsWith('dropboxusercontent.com')) {
+      return playbackSource;
+    }
+  } catch {
+    // Leave non-URL strings to the generic cache-buster behavior below.
+  }
+  const separator = playbackSource.includes('?') ? '&' : '?';
+  return `${playbackSource}${separator}chgrid_start=${Date.now()}`;
 }
 
 type RadioSpatialConfig = {
@@ -131,35 +169,18 @@ const STREAM_PLAY_RETRY_MS = 5000;
 const STREAM_PLAY_MAX_RETRIES = 6;
 const STREAM_PLAY_RESET_COOLDOWN_MS = 60000;
 
-function describeMediaError(error: MediaError | null): string {
-  switch (error?.code) {
-    case MediaError.MEDIA_ERR_ABORTED:
-      return 'playback was aborted';
-    case MediaError.MEDIA_ERR_NETWORK:
-      return 'the stream could not be reached';
-    case MediaError.MEDIA_ERR_DECODE:
-      return 'the stream could not be decoded';
-    case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-      return 'the stream format is not supported';
-    default:
-      return 'the stream could not be played';
-  }
-}
-
 export class RadioStationRuntime {
   private readonly sharedRadioSources = new Map<string, SharedRadioSource>();
   private readonly itemRadioOutputs = new Map<string, ItemRadioOutput>();
   private readonly pendingSharedStarts = new Set<string>();
   private readonly nextSharedStartAtMs = new Map<string, number>();
   private readonly sharedStartFailureCount = new Map<string, number>();
-  private readonly reportedPlaybackErrors = new Set<string>();
   private layerEnabled = true;
   private listenerPositions: Array<{ x: number; y: number }> = [];
 
   constructor(
     private readonly audio: AudioEngine,
     private readonly getSpatialConfig: (item: WorldItem) => RadioSpatialConfig,
-    private readonly reportPlaybackError: (message: string) => void = () => undefined,
   ) {}
 
   cleanup(itemId: string): void {
@@ -331,16 +352,10 @@ export class RadioStationRuntime {
     }
     const audioCtx = this.audio.context;
     if (!audioCtx) return null;
-    const element = new Audio();
+    const element = new Audio(freshStreamUrl(streamUrl));
     element.crossOrigin = 'anonymous';
     element.loop = true;
     element.preload = 'none';
-    element.src = freshRadioPlaybackUrl(streamUrl);
-    element.addEventListener('error', () => {
-      if (this.reportedPlaybackErrors.has(streamUrl)) return;
-      this.reportedPlaybackErrors.add(streamUrl);
-      this.reportPlaybackError(`Radio error: ${describeMediaError(element.error)}.`);
-    });
     const source = audioCtx.createMediaElementSource(element);
     const shared: SharedRadioSource = {
       streamUrl,
@@ -379,7 +394,6 @@ export class RadioStationRuntime {
       .then(() => {
         this.nextSharedStartAtMs.delete(shared.streamUrl);
         this.sharedStartFailureCount.delete(shared.streamUrl);
-        this.reportedPlaybackErrors.delete(shared.streamUrl);
       })
       .catch(() => {
         const failures = (this.sharedStartFailureCount.get(shared.streamUrl) ?? 0) + 1;
