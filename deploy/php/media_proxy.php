@@ -16,6 +16,30 @@ $GLOBALS['CHGRID_PROXY_HEADERS_SENT'] = false;
 $GLOBALS['CHGRID_PROXY_STATUS'] = 200;
 $GLOBALS['CHGRID_PROXY_UP_HEADERS'] = array();
 
+function proxy_content_type($headers)
+{
+    $contentType = isset($headers['content-type']) ? trim((string) $headers['content-type']) : '';
+    $disposition = isset($headers['content-disposition']) ? (string) $headers['content-disposition'] : '';
+
+    // Dropbox currently labels some direct MP3 downloads as application/json.
+    // Prefer the explicit download filename when it identifies a supported type.
+    if (preg_match('/filename\*?=(?:UTF-8\'\')?["\']?[^;"\']+\.(mp3|ogg|wav|m4a|aac|flac)["\']?/i', $disposition, $match)) {
+        $extension = strtolower($match[1]);
+        $types = array(
+            'mp3' => 'audio/mpeg',
+            'ogg' => 'audio/ogg',
+            'wav' => 'audio/wav',
+            'm4a' => 'audio/mp4',
+            'aac' => 'audio/aac',
+            'flac' => 'audio/flac',
+        );
+        if (isset($types[$extension]) && ($contentType === '' || stripos($contentType, 'audio/') !== 0)) {
+            return $types[$extension];
+        }
+    }
+    return $contentType !== '' ? $contentType : 'application/octet-stream';
+}
+
 function proxy_emit_downstream_headers()
 {
     if (!empty($GLOBALS['CHGRID_PROXY_HEADERS_SENT'])) {
@@ -32,11 +56,8 @@ function proxy_emit_downstream_headers()
         ? $GLOBALS['CHGRID_PROXY_UP_HEADERS']
         : array();
 
-    if (isset($h['content-type']) && $h['content-type'] !== '') {
-        header('Content-Type: ' . $h['content-type']);
-    } else {
-        header('Content-Type: application/octet-stream');
-    }
+    header('Content-Type: ' . proxy_content_type($h));
+    header('X-Accel-Buffering: no');
     if (isset($h['content-length']) && $h['content-length'] !== '') {
         header('Content-Length: ' . $h['content-length']);
     }

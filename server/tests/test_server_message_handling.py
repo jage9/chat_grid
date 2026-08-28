@@ -205,7 +205,7 @@ async def test_radio_metadata_refresh_updates_station_and_title(
 
 
 @pytest.mark.asyncio
-async def test_radio_metadata_refresh_skips_when_no_listener_in_range(
+async def test_radio_metadata_refresh_updates_without_listener_in_range(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
@@ -232,7 +232,9 @@ async def test_radio_metadata_refresh_skips_when_no_listener_in_range(
 
     await server._refresh_radio_metadata_once()
 
-    assert called is False
+    assert called is True
+    assert radio.params["stationName"] == "X"
+    assert radio.params["nowPlaying"] == "Y"
 
 
 @pytest.mark.asyncio
