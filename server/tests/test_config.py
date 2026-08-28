@@ -56,10 +56,12 @@ allow_insecure_ws = true
 
 [server]
 base_path = "/ttgrid/"
+public_base_path = "/public-ttgrid/"
 """.strip()
     )
     cfg = load_config(config_path)
     assert cfg.server.base_path == "/ttgrid/"
+    assert cfg.server.public_base_path == "/public-ttgrid/"
 
 
 def test_load_config_reads_grid_name_and_welcome_message(tmp_path: Path) -> None:

@@ -21,7 +21,7 @@ Open: `http://localhost:5173`
 Defaults:
 - Server reads `config.toml` automatically when present.
 - Server default bind/port is `127.0.0.1:8765`.
-- Server default base path is `/` for local/dev; production subpath deploys should set `server.base_path` to match the published client path such as `/chgrid/`.
+- Server default base path is `/` for local/dev. Production subpath deploys normally set `server.base_path` to the published client path such as `/chgrid/`. When Apache deliberately maps a different public path to this backend path, set `server.public_base_path` to the public path for session cookies.
 - Server defaults to TLS-required unless you set `network.allow_insecure_ws=true` or pass `--allow-insecure-ws` for local/dev.
 - Client dev default is `localhost:5173`.
 - Auth requires `CHGRID_AUTH_SECRET` in environment.

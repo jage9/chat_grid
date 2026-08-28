@@ -203,6 +203,7 @@ class SignalingServer:
         state_save_max_delay_ms: int = 1000,
         host_origin: str | None = None,
         base_path: str = "/",
+        public_base_path: str = "",
         grid_name: str = "Chat Grid",
         welcome_message: str = (
             "Welcome to the Chat Grid, your immersive audio playground. "
@@ -255,6 +256,9 @@ class SignalingServer:
             else None
         )
         self.base_path = self._normalize_base_path(base_path)
+        self.public_base_path = self._normalize_base_path(
+            public_base_path or self.base_path
+        )
         self.grid_name = str(grid_name).strip() or "Chat Grid"
         self.welcome_message = (
             str(welcome_message).strip()
@@ -272,7 +276,7 @@ class SignalingServer:
         if any(livekit_values) and not all(livekit_values):
             raise ValueError("LiveKit requires url, API key, and API secret.")
         self.auth_session_cookie_name = self._session_cookie_name_for_base_path(
-            self.base_path
+            self.public_base_path
         )
         self.websocket_path = self._base_path_join(WEBSOCKET_PATH)
         self.auth_session_cookie_set_path = self._base_path_join(
@@ -454,7 +458,7 @@ class SignalingServer:
 
         secure = "; Secure" if self._session_cookie_secure(request) else ""
         return (
-            f"{self.auth_session_cookie_name}={token}; Path={self.base_path}; HttpOnly; SameSite=Lax; "
+            f"{self.auth_session_cookie_name}={token}; Path={self.public_base_path}; HttpOnly; SameSite=Lax; "
             f"Max-Age={AUTH_SESSION_COOKIE_MAX_AGE_SECONDS}{secure}"
         )
 
@@ -464,7 +468,7 @@ class SignalingServer:
         """Build Set-Cookie header value that expires the session cookie."""
 
         secure = "; Secure" if self._session_cookie_secure(request) else ""
-        return f"{self.auth_session_cookie_name}=; Path={self.base_path}; HttpOnly; SameSite=Lax; Max-Age=0{secure}"
+        return f"{self.auth_session_cookie_name}=; Path={self.public_base_path}; HttpOnly; SameSite=Lax; Max-Age=0{secure}"
 
     def _origin_allowed(self, request: HttpRequest) -> bool:
         """Return whether one auth helper HTTP request comes from the configured app origin."""
@@ -4259,6 +4263,7 @@ def run() -> None:
         state_save_max_delay_ms=config.storage.state_save_max_delay_ms,
         host_origin=host_origin,
         base_path=config.server.base_path,
+        public_base_path=config.server.public_base_path,
         grid_name=config.server.grid_name,
         welcome_message=config.server.welcome_message,
         livekit_url=livekit_url,

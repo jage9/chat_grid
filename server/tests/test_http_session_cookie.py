@@ -173,3 +173,51 @@ def test_session_cookie_name_scopes_to_base_path() -> None:
 
     assert root_server.auth_session_cookie_name == "chgrid_session_token"
     assert nested_server.auth_session_cookie_name == "chgrid_session_ttgrid"
+
+
+@pytest.mark.asyncio
+async def test_session_cookie_can_use_a_public_path_distinct_from_backend_route() -> (
+    None
+):
+    server = SignalingServer(
+        "127.0.0.1",
+        8765,
+        None,
+        None,
+        host_origin="https://example.com",
+        base_path="/chgrid/",
+        public_base_path="/ttgrid/",
+    )
+    username = f"user_{uuid.uuid4().hex[:8]}"
+    session = server.auth_service.register(username, "password99")
+    set_request = _request(
+        server.auth_session_cookie_set_path,
+        headers={
+            AUTH_SESSION_COOKIE_CLIENT_HEADER: "1",
+            "Authorization": f"Bearer {session.token}",
+            "Origin": "https://example.com",
+        },
+    )
+
+    set_response = await server._process_http_request(SimpleNamespace(), set_request)
+
+    assert set_response is not None
+    set_cookie = set_response.headers.get("Set-Cookie", "")
+    assert "chgrid_session_ttgrid=" in set_cookie
+    assert "Path=/ttgrid/" in set_cookie
+
+    check_request = _request(
+        server.auth_session_cookie_check_path,
+        headers={
+            AUTH_SESSION_COOKIE_CLIENT_HEADER: "1",
+            "Cookie": f"{server.auth_session_cookie_name}={session.token}",
+            "Origin": "https://example.com",
+        },
+    )
+
+    check_response = await server._process_http_request(
+        SimpleNamespace(), check_request
+    )
+
+    assert check_response is not None
+    assert check_response.status_code == 204

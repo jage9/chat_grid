@@ -94,7 +94,7 @@ ProxyPassReverse /chgrid/auth/session/  http://127.0.0.1:8765/chgrid/auth/sessio
 ```
 
 The websocket server enforces browser origin matching against `CHGRID_HOST_ORIGIN`, so the public site origin must match that env var exactly.
-The `server.base_path` value in `config.toml` must match the published client path and the proxy paths above.
+The `server.base_path` value in `config.toml` must match the backend proxy targets above. Usually it also matches the published client path. If Apache intentionally maps a public path to a different backend path, set `server.public_base_path` to the public path so the browser session cookie reaches the client and media proxy.
 
 What each route does:
 - `<base_path>ws`: websocket signaling (presence, movement, item actions, chat, voice signaling).

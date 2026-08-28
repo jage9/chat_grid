@@ -14,6 +14,7 @@ class ServerConfigSection(BaseModel):
     bind_ip: str = "127.0.0.1"
     port: int = 8765
     base_path: str = "/"
+    public_base_path: str = ""
     grid_name: str = "Chat Grid"
     welcome_message: str = (
         "Welcome to the Chat Grid, your immersive audio playground. "
