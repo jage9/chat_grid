@@ -251,7 +251,7 @@
 - The server owns the floor, movement, queue, and door fields. The display title and standard emitter properties, including direction and facing, are editable.
 - Each elevator is an independent object; more than one may be placed.
 - The shaft occupies its single anchor square on both configured floors.
-- The full standard emitter control set is editable. It remains a normal item emitter at the elevator object's canonical position; it does not follow the car.
+- The full standard emitter control set is editable. It emits from the shaft object's anchor on both configured floors and does not follow the car.
 - Whenever the door opens, the landing plays `/sounds/elevator_up.ogg` or `/sounds/elevator_down.ogg` spatially to announce the elevator's next travel direction.
 - Elevator runtime timers are not resumed after a server restart. A loaded elevator returns to a closed, idle state at its last completed floor.
 

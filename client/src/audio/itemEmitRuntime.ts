@@ -1,4 +1,4 @@
-import { HEARING_RADIUS, type WorldItem } from '../state/gameState';
+import { HEARING_RADIUS, isItemOnFloor, type WorldItem } from '../state/gameState';
 import { getItemTypeGlobalProperties } from '../items/itemRegistry';
 import { AudioEngine } from './audioEngine';
 import { connectEffectChain, disconnectEffectRuntime, type EffectId, type EffectRuntime } from './effects';
@@ -410,7 +410,7 @@ export class ItemEmitRuntime {
         output.element.playbackRate = nextPlaybackRate;
       }
       const spatialConfig = this.getSpatialConfig(item);
-      const mix = item.z === playerPosition.z ? resolveSpatialMix({
+      const mix = isItemOnFloor(item, playerPosition.z) ? resolveSpatialMix({
         dx: item.x - playerPosition.x,
         dy: item.y - playerPosition.y,
         range: Math.max(1, spatialConfig.range || HEARING_RADIUS),
@@ -449,7 +449,7 @@ export class ItemEmitRuntime {
     const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
     const threshold = baseRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);
     return listenerPositions.some((listenerPosition) =>
-      item.z === listenerPosition.z
+      isItemOnFloor(item, listenerPosition.z)
       && Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold,
     );
   }

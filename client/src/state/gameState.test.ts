@@ -3,6 +3,7 @@ import {
   createInitialState,
   getNearestItem,
   getNearestItemPosition,
+  isItemOnFloor,
   itemOccupiesPosition,
   type WorldItem,
 } from './gameState';
@@ -49,5 +50,14 @@ describe('floor-aware item footprints', () => {
 
     expect(getNearestItemPosition(item, state.player.x, state.player.y)).toEqual({ x: 11, y: 11 });
     expect(getNearestItem(state)).toEqual({ itemId: item.id, distance: 1 });
+  });
+
+  it('recognizes every configured floor for a multi-floor item', () => {
+    const item = multiSquareItem();
+    item.params.floorZs = [0, 40];
+
+    expect(isItemOnFloor(item, 0)).toBe(true);
+    expect(isItemOnFloor(item, 40)).toBe(true);
+    expect(isItemOnFloor(item, 20)).toBe(false);
   });
 });
