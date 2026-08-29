@@ -3,9 +3,9 @@
 ## Audio Domains
 
 - Voice: remote LiveKit audio tracks. Chat Grid supplies player positions and applies the positional mix.
-- Media: radio station streams. External HTTP(S) radio URLs use the authenticated
-  same-origin media proxy so browser CORS and mixed-content restrictions do not
-  limit playable stations.
+- Media: radio station streams. HTTPS streams play directly when possible. HTTP
+  streams and Dropbox media use the authenticated same-origin proxy to avoid
+  mixed-content and download-page restrictions.
 - Item: looping item emit sounds (`emitSound`).
 - World: one-shot spatial world events from others (movement/teleport and item-use spatial sounds).
 - UI: interface tones and status cues (not layer-controlled).

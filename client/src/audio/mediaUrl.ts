@@ -5,13 +5,19 @@ function isLocalMediaProxyUrl(parsed: URL): boolean {
   return parsed.origin === window.location.origin && parsed.pathname.toLowerCase().endsWith('/media_proxy.php');
 }
 
-/** Returns whether an external radio stream should use the same-origin media proxy. */
+/** Returns whether a hostname belongs to Dropbox domains that need proxy support. */
+function isDropboxHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return host.endsWith('dropbox.com') || host.endsWith('dropboxusercontent.com');
+}
+
+/** Returns whether a radio stream needs the same-origin media proxy. */
 export function shouldProxyRadioStreamUrl(streamUrl: string): boolean {
   try {
     const parsed = new URL(streamUrl);
     if (isLocalMediaProxyUrl(parsed)) return false;
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-    return parsed.origin !== window.location.origin;
+    if (parsed.protocol === 'http:') return true;
+    return parsed.protocol === 'https:' && isDropboxHost(parsed.hostname);
   } catch {
     return false;
   }
