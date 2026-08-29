@@ -3,6 +3,12 @@
   font-family: "Courier New", Courier, monospace;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -188,10 +194,19 @@ button:disabled {
 }
 
 canvas {
+  display: block;
+  width: min(600px, 100%);
+  height: auto;
+  aspect-ratio: 1;
+  margin: 0 auto;
   background: #111827;
   border: 2px solid #60a5fa;
   border-radius: 8px;
   box-shadow: 0 0 20px rgb(96 165 250 / 35%);
+}
+
+.game-surface {
+  width: 100%;
 }
 
 #status {
@@ -233,4 +248,219 @@ canvas {
   padding: 1rem;
   display: grid;
   gap: 0.5rem;
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 44px;
+}
+
+.settings-toggle input {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.mobile-controls {
+  width: min(600px, 100%);
+  margin: 0.65rem auto 0;
+  border: 1px solid #475569;
+  border-radius: 8px;
+  background: #111827;
+}
+
+.mobile-controls-toggle {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 7px 7px 0 0;
+  background: #243247;
+}
+
+.mobile-controls[data-expanded="false"] .mobile-controls-toggle {
+  border-radius: 7px;
+}
+
+.mobile-controls-body {
+  padding: 0.65rem;
+}
+
+.mobile-control-layout {
+  display: grid;
+  grid-template-columns: 164px minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: center;
+}
+
+.mobile-dpad {
+  display: grid;
+  grid-template-areas:
+    ". up ."
+    "left . right"
+    ". down .";
+  grid-template-columns: repeat(3, 52px);
+  grid-template-rows: repeat(3, 52px);
+  gap: 4px;
+  width: 164px;
+  height: 164px;
+}
+
+.mobile-dpad-button {
+  min-width: 52px;
+  min-height: 52px;
+  padding: 0;
+  border-color: #64748b;
+  background: #26364d;
+  font-size: 1.35rem;
+  line-height: 1;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mobile-up {
+  grid-area: up;
+}
+
+.mobile-down {
+  grid-area: down;
+}
+
+.mobile-left {
+  grid-area: left;
+}
+
+.mobile-right {
+  grid-area: right;
+}
+
+.mobile-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.mobile-actions button {
+  min-width: 0;
+  min-height: 48px;
+  padding: 0.45rem;
+  overflow-wrap: anywhere;
+  touch-action: manipulation;
+}
+
+.mobile-actions .mobile-mute {
+  grid-column: 1 / -1;
+  background: #9f3434;
+  border-color: #db6666;
+}
+
+.mobile-actions .mobile-mute[aria-pressed="true"] {
+  background: #256b45;
+  border-color: #4caf78;
+}
+
+.mobile-text-entry {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+  text-align: left;
+}
+
+.mobile-text-entry-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.4rem;
+}
+
+.mobile-text-entry input {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #64748b;
+  border-radius: 6px;
+  background: #030712;
+  color: #f9fafb;
+  font: inherit;
+}
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 3px solid #facc15;
+  outline-offset: 2px;
+}
+
+@media (max-width: 440px) {
+  .app {
+    padding: 0.6rem;
+  }
+
+  .mobile-control-layout {
+    grid-template-columns: 148px minmax(0, 1fr);
+    gap: 0.55rem;
+  }
+
+  .mobile-dpad {
+    grid-template-columns: repeat(3, 46px);
+    grid-template-rows: repeat(3, 46px);
+    width: 146px;
+    height: 146px;
+  }
+
+  .mobile-dpad-button {
+    min-width: 46px;
+    min-height: 46px;
+  }
+
+  .mobile-actions {
+    gap: 0.4rem;
+  }
+
+  .mobile-actions button {
+    padding-inline: 0.25rem;
+  }
+
+  .mobile-text-entry-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .mobile-text-entry-row #mobileTextCancel {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .game-surface {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+    gap: 0.65rem;
+    align-items: start;
+  }
+
+  .game-surface canvas,
+  .game-surface .mobile-controls {
+    width: 100%;
+    margin-top: 0;
+  }
+
+  .mobile-controls-body {
+    padding-block: 0.45rem;
+  }
+
+  .mobile-control-layout {
+    grid-template-columns: 132px minmax(0, 1fr);
+  }
+
+  .mobile-dpad {
+    grid-template-columns: repeat(3, 40px);
+    grid-template-rows: repeat(3, 40px);
+    width: 128px;
+    height: 128px;
+  }
+
+  .mobile-dpad-button {
+    min-width: 40px;
+    min-height: 40px;
+  }
 }

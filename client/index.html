@@ -49,7 +49,7 @@
         <span id="authModeSeparator" aria-hidden="true">or</span>
         <button id="showRegisterButton" type="button">Register</button>
         <button id="logoutButton" class="hidden">Log out</button>
-        <button id="settingsButton">Audio setup</button>
+        <button id="settingsButton">Settings</button>
         <button id="disconnectButton" class="hidden">Disconnect</button>
         <button id="focusGridButton" class="hidden" aria-controls="gameCanvas">Chat Grid</button>
       </div>
@@ -58,14 +58,51 @@
         <p id="audioOutputCurrent" class="hidden"></p>
       </div>
       <div id="status" role="region" aria-live="polite"></div>
-      <canvas
-        id="gameCanvas"
-        width="600"
-        height="600"
-        tabindex="0"
-        class="hidden"
-        aria-label="Chat Grid, press question mark for help."
-      ></canvas>
+      <div class="game-surface">
+        <canvas
+          id="gameCanvas"
+          width="600"
+          height="600"
+          tabindex="0"
+          class="hidden"
+          aria-label="Chat Grid, press question mark for help."
+        ></canvas>
+        <section id="mobileControls" class="mobile-controls hidden" aria-label="Touch controls">
+          <button
+            id="mobileControlsToggle"
+            class="mobile-controls-toggle"
+            type="button"
+            aria-expanded="true"
+            aria-controls="mobileControlsBody"
+          >Hide controls</button>
+          <div id="mobileControlsBody" class="mobile-controls-body">
+            <form id="mobileTextEntry" class="mobile-text-entry hidden">
+              <label id="mobileTextEntryLabel" for="mobileTextInput">Text</label>
+              <div class="mobile-text-entry-row">
+                <input id="mobileTextInput" type="text" autocomplete="off" />
+                <button id="mobileTextSubmit" type="submit">Done</button>
+                <button id="mobileTextCancel" type="button">Cancel</button>
+              </div>
+            </form>
+            <div class="mobile-control-layout">
+              <div class="mobile-dpad" role="group" aria-label="Direction controls">
+                <button id="mobileUp" class="mobile-dpad-button mobile-up" type="button" aria-label="Move up">&uarr;</button>
+                <button id="mobileLeft" class="mobile-dpad-button mobile-left" type="button" aria-label="Move left">&larr;</button>
+                <button id="mobileRight" class="mobile-dpad-button mobile-right" type="button" aria-label="Move right">&rarr;</button>
+                <button id="mobileDown" class="mobile-dpad-button mobile-down" type="button" aria-label="Move down">&darr;</button>
+              </div>
+              <div class="mobile-actions" role="group" aria-label="Game actions">
+                <button id="mobileUse" type="button">Use</button>
+                <button id="mobileBack" type="button">Back</button>
+                <button id="mobileChat" type="button">Chat</button>
+                <button id="mobileCommands" type="button">Commands</button>
+                <button id="mobileMute" class="mobile-mute" type="button" aria-pressed="false">Mute</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
       <footer id="appFooter">
         <section id="helpSection" class="updates-section hidden">
           <h2>Help</h2>
@@ -87,11 +124,15 @@
 
       <div id="settingsModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <div class="modal-content">
-          <h2 id="modalTitle">Audio Settings</h2>
+          <h2 id="modalTitle">Settings</h2>
           <label for="audioInputSelect">Microphone (Input)</label>
           <select id="audioInputSelect"></select>
           <label for="audioOutputSelect">Speakers (Output)</label>
           <select id="audioOutputSelect"></select>
+          <label class="settings-toggle" for="mobileControlsEnabled">
+            <input id="mobileControlsEnabled" type="checkbox" />
+            Show touch controls
+          </label>
           <button id="closeSettingsButton">Close</button>
         </div>
       </div>

@@ -29,6 +29,7 @@ import { dispatchModeInput } from './input/modeDispatcher';
 import { handleListControlKey } from './input/listController';
 import { createAdminController, type AdminMenuAction } from './input/adminController';
 import { setupKeyboardInputHandlers } from './input/keyboardController';
+import { setupMobileControls, type MobileController, type MobileTextEntry } from './input/mobileController';
 import { getEditSessionAction } from './input/editSession';
 import { formatSteppedNumber, snapNumberToStep } from './input/numeric';
 import { type IncomingMessage, type OutgoingMessage } from './network/protocol';
@@ -130,6 +131,24 @@ type Dom = {
   canvas: HTMLCanvasElement;
   status: HTMLDivElement;
   instructions: HTMLDivElement;
+  mobileControls: HTMLElement;
+  mobileControlsBody: HTMLElement;
+  mobileControlsToggle: HTMLButtonElement;
+  mobileControlsEnabled: HTMLInputElement;
+  mobileUp: HTMLButtonElement;
+  mobileDown: HTMLButtonElement;
+  mobileLeft: HTMLButtonElement;
+  mobileRight: HTMLButtonElement;
+  mobileUse: HTMLButtonElement;
+  mobileBack: HTMLButtonElement;
+  mobileChat: HTMLButtonElement;
+  mobileCommands: HTMLButtonElement;
+  mobileMute: HTMLButtonElement;
+  mobileTextEntry: HTMLFormElement;
+  mobileTextEntryLabel: HTMLLabelElement;
+  mobileTextInput: HTMLInputElement;
+  mobileTextSubmit: HTMLButtonElement;
+  mobileTextCancel: HTMLButtonElement;
 };
 
 const dom: Dom = {
@@ -168,6 +187,24 @@ const dom: Dom = {
   canvas: requiredById('gameCanvas'),
   status: requiredById('status'),
   instructions: requiredById('instructions'),
+  mobileControls: requiredById('mobileControls'),
+  mobileControlsBody: requiredById('mobileControlsBody'),
+  mobileControlsToggle: requiredById('mobileControlsToggle'),
+  mobileControlsEnabled: requiredById('mobileControlsEnabled'),
+  mobileUp: requiredById('mobileUp'),
+  mobileDown: requiredById('mobileDown'),
+  mobileLeft: requiredById('mobileLeft'),
+  mobileRight: requiredById('mobileRight'),
+  mobileUse: requiredById('mobileUse'),
+  mobileBack: requiredById('mobileBack'),
+  mobileChat: requiredById('mobileChat'),
+  mobileCommands: requiredById('mobileCommands'),
+  mobileMute: requiredById('mobileMute'),
+  mobileTextEntry: requiredById('mobileTextEntry'),
+  mobileTextEntryLabel: requiredById('mobileTextEntryLabel'),
+  mobileTextInput: requiredById('mobileTextInput'),
+  mobileTextSubmit: requiredById('mobileTextSubmit'),
+  mobileTextCancel: requiredById('mobileTextCancel'),
 };
 
 type ChangelogSection = {
@@ -296,6 +333,8 @@ let subscriptionRefreshPending = false;
 let suppressItemPropertyEchoUntilMs = 0;
 let activeTeleportLoopStop: (() => void) | null = null;
 let activeTeleportLoopToken = 0;
+let mobileControls: MobileController | null = null;
+let queuedMobileDirection: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight' | null = null;
 let activeTeleport:
   | {
       startX: number;
@@ -1187,6 +1226,7 @@ function updateTeleport(): void {
 
 /** Main animation/update loop for movement, spatial audio, and rendering. */
 function gameLoop(): void {
+  mobileControls?.sync();
   if (!state.running) return;
   updateTeleport();
   handleMovement();
@@ -1204,7 +1244,10 @@ function gameLoop(): void {
 
 /** Applies held-arrow movement with bounds checks, tile cues, and server position sync. */
 function handleMovement(): void {
-  if (state.mode !== 'normal') return;
+  if (state.mode !== 'normal') {
+    queuedMobileDirection = null;
+    return;
+  }
   if (activeTeleport) return;
   const now = Date.now();
   if (now - state.player.lastMoveTime < movementTickMs) return;
@@ -1216,6 +1259,13 @@ function handleMovement(): void {
   if (state.keysPressed.ArrowLeft) dx = -1;
   if (state.keysPressed.ArrowRight) dx = 1;
 
+  if (dx === 0 && dy === 0 && queuedMobileDirection) {
+    if (queuedMobileDirection === 'ArrowUp') dy = 1;
+    if (queuedMobileDirection === 'ArrowDown') dy = -1;
+    if (queuedMobileDirection === 'ArrowLeft') dx = -1;
+    if (queuedMobileDirection === 'ArrowRight') dx = 1;
+  }
+
   if (dx === 0 && dy === 0) {
     lastWallCollisionDirection = null;
     return;
@@ -1225,6 +1275,7 @@ function handleMovement(): void {
   const nextY = state.player.y + dy;
   const attemptedDirection = `${dx},${dy}`;
   if (nextX < 0 || nextY < 0 || nextX >= worldGridSize || nextY >= worldGridSize) {
+    queuedMobileDirection = null;
     state.player.lastMoveTime = now;
     if (lastWallCollisionDirection !== attemptedDirection) {
       void audio.playSample(WALL_SOUND_URL, 1);
@@ -1235,6 +1286,7 @@ function handleMovement(): void {
 
   state.player.x = nextX;
   state.player.y = nextY;
+  queuedMobileDirection = null;
   lastWallCollisionDirection = null;
   state.player.lastMoveTime = now;
   void refreshAudioSubscriptions(true);
@@ -2646,6 +2698,42 @@ function closeSettings(): void {
   }
 }
 
+function getMobileTextEntry(): MobileTextEntry | null {
+  const maxLength = textInputMaxLengthForMode(state.mode);
+  if (maxLength === null) return null;
+  if (state.mode === 'chat') {
+    return { label: 'Chat message', value: state.nicknameInput, maxLength, inputMode: 'text', submitLabel: 'Send' };
+  }
+  if (state.mode === 'nickname') {
+    return { label: 'Nickname', value: state.nicknameInput, maxLength, inputMode: 'text', submitLabel: 'Save' };
+  }
+  if (state.mode === 'itemPropertyEdit') {
+    const key = state.editingPropertyKey;
+    return {
+      label: key ? itemPropertyLabel(key) : 'Property value',
+      value: state.nicknameInput,
+      maxLength,
+      inputMode: 'text',
+      submitLabel: 'Save',
+    };
+  }
+  if (state.mode === 'micGainEdit') {
+    return { label: 'Microphone gain', value: state.nicknameInput, maxLength, inputMode: 'decimal', submitLabel: 'Save' };
+  }
+  return { label: 'Role name', value: state.nicknameInput, maxLength, inputMode: 'text', submitLabel: 'Save' };
+}
+
+function pressMobileDirection(code: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight'): void {
+  if (!state.running || state.mode !== 'normal' || activeTeleport) return;
+  queuedMobileDirection = code;
+  state.keysPressed[code] = true;
+  handleMovement();
+}
+
+function releaseMobileDirection(code: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight'): void {
+  state.keysPressed[code] = false;
+}
+
 setupKeyboardInputHandlers({
   dom: {
     settingsModal: dom.settingsModal,
@@ -2670,6 +2758,48 @@ setupKeyboardInputHandlers({
   setReplaceTextOnNextType: (value) => {
     replaceTextOnNextType = value;
   },
+});
+mobileControls = setupMobileControls({
+  dom: {
+    container: dom.mobileControls,
+    body: dom.mobileControlsBody,
+    toggle: dom.mobileControlsToggle,
+    enabled: dom.mobileControlsEnabled,
+    up: dom.mobileUp,
+    down: dom.mobileDown,
+    left: dom.mobileLeft,
+    right: dom.mobileRight,
+    use: dom.mobileUse,
+    back: dom.mobileBack,
+    chat: dom.mobileChat,
+    commands: dom.mobileCommands,
+    mute: dom.mobileMute,
+    textForm: dom.mobileTextEntry,
+    textLabel: dom.mobileTextEntryLabel,
+    textInput: dom.mobileTextInput,
+    textSubmit: dom.mobileTextSubmit,
+    textCancel: dom.mobileTextCancel,
+  },
+  getRunning: () => state.running,
+  getMode: () => state.mode,
+  getMuted: () => state.isMuted,
+  canOpenCommands: canOpenCommandPaletteInMode,
+  dispatchInput: handleModeInput,
+  pressDirection: pressMobileDirection,
+  releaseDirection: releaseMobileDirection,
+  openChat: openChatCommand,
+  openCommands: openCommandPalette,
+  toggleMute,
+  getTextEntry: getMobileTextEntry,
+  setTextEntry: (value, cursor) => {
+    state.nicknameInput = value;
+    state.cursorPos = cursor;
+    replaceTextOnNextType = false;
+  },
+  loadEnabled: () => settings.loadMobileControlsEnabled(),
+  saveEnabled: (value) => settings.saveMobileControlsEnabled(value),
+  loadExpanded: () => settings.loadMobileControlsExpanded(),
+  saveExpanded: (value) => settings.saveMobileControlsExpanded(value),
 });
 setupDomUiHandlers({
   dom,

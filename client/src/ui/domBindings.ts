@@ -76,7 +76,7 @@ export function setupUiHandlers(deps: UiBindingsDeps): void {
 
   deps.dom.settingsModal.addEventListener('keydown', (event) => {
     if (event.key !== 'Tab') return;
-    const focusable = Array.from(deps.dom.settingsModal.querySelectorAll<HTMLElement>('select, button'));
+    const focusable = Array.from(deps.dom.settingsModal.querySelectorAll<HTMLElement>('input, select, button'));
     if (focusable.length === 0) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];

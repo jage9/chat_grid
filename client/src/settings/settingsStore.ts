@@ -13,6 +13,8 @@ const PEER_LISTEN_GAINS_STORAGE_KEY = 'chatGridPeerListenGains';
 const NICKNAME_STORAGE_KEY = 'spatialChatNickname';
 const AUTH_USERNAME_STORAGE_KEY = 'chatGridAuthUsername';
 const LEGACY_AUTH_SESSION_TOKEN_STORAGE_KEY = 'chatGridAuthSessionToken';
+const MOBILE_CONTROLS_ENABLED_STORAGE_KEY = 'chatGridMobileControlsEnabled';
+const MOBILE_CONTROLS_EXPANDED_STORAGE_KEY = 'chatGridMobileControlsExpanded';
 
 type DevicePreference = {
   id: string;
@@ -144,6 +146,24 @@ export class SettingsStore {
 
   saveOutputMode(value: 'mono' | 'stereo'): void {
     localStorage.setItem(AUDIO_OUTPUT_MODE_STORAGE_KEY, value);
+  }
+
+  loadMobileControlsEnabled(): boolean | null {
+    const raw = localStorage.getItem(MOBILE_CONTROLS_ENABLED_STORAGE_KEY);
+    if (raw === null) return null;
+    return raw === 'true';
+  }
+
+  saveMobileControlsEnabled(value: boolean): void {
+    localStorage.setItem(MOBILE_CONTROLS_ENABLED_STORAGE_KEY, String(value));
+  }
+
+  loadMobileControlsExpanded(): boolean {
+    return localStorage.getItem(MOBILE_CONTROLS_EXPANDED_STORAGE_KEY) !== 'false';
+  }
+
+  saveMobileControlsExpanded(value: boolean): void {
+    localStorage.setItem(MOBILE_CONTROLS_EXPANDED_STORAGE_KEY, String(value));
   }
 
   loadAudioDevicePreferences(): AudioDevicePreferences {
