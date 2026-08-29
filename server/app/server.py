@@ -1825,6 +1825,10 @@ class SignalingServer:
                     itemId=item.id,
                     event="arrived",
                     z=destination_z,
+                    message=(
+                        f"{item.title} arrives on {self._floor_name(destination_z)}. "
+                        "The door opens."
+                    ),
                 ),
             )
             carried = self.item_service.find_carried_item(rider.id)
@@ -1836,6 +1840,28 @@ class SignalingServer:
                 carried.updatedBy = rider.user_id or rider.id
                 carried.updatedByName = rider.username or rider.nickname
                 await self._broadcast_item(carried)
+
+    async def _broadcast_elevator_arrival_sound(
+        self, item: WorldItem, origin_z: int, destination_z: int
+    ) -> None:
+        """Play the direction-specific arrival sound at the destination landing."""
+
+        sound = (
+            "/sounds/elevator_up.ogg"
+            if destination_z > origin_z
+            else "/sounds/elevator_down.ogg"
+        )
+        await self._broadcast(
+            ItemUseSoundPacket(
+                type="item_use_sound",
+                itemId=item.id,
+                sound=sound,
+                x=item.x,
+                y=item.y,
+                z=destination_z,
+                range=self._get_item_emit_range(item),
+            )
+        )
 
     async def _broadcast_elevator_travel_positions(
         self, item: WorldItem, destination_z: int
@@ -1886,6 +1912,7 @@ class SignalingServer:
                 state = str(item.params.get("state", "idle"))
                 if state == "moving":
                     await asyncio.sleep(ELEVATOR_TRAVEL_SECONDS)
+                    origin_z = int(item.params.get("currentZ", 0))
                     target_z = int(item.params.get("targetZ", item.params["currentZ"]))
                     item.params["currentZ"] = target_z
                     item.params["targetZ"] = None
@@ -1894,6 +1921,9 @@ class SignalingServer:
                     self._touch_elevator(item)
                     await self._move_elevator_occupants(item, target_z)
                     await self._broadcast_item(item)
+                    await self._broadcast_elevator_arrival_sound(
+                        item, origin_z, target_z
+                    )
                     continue
                 if state == "door_open":
                     await asyncio.sleep(ELEVATOR_DOOR_OPEN_SECONDS)

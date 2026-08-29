@@ -293,6 +293,9 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
 
       case 'item_elevator_status': {
         deps.state.elevatorItemId = message.event === 'exited' ? null : message.itemId;
+        if (message.message) {
+          deps.updateStatus(message.message);
+        }
         break;
       }
 

@@ -240,6 +240,7 @@
 - The server owns every field except the display title.
 - Each elevator is an independent object; more than one may be placed.
 - The shaft occupies its single anchor square on both configured floors.
+- Arrival plays `/sounds/elevator_up.ogg` or `/sounds/elevator_down.ogg` spatially at the destination landing.
 - Elevator runtime timers are not resumed after a server restart. A loaded elevator returns to a closed, idle state at its last completed floor.
 
 ## Packet Shapes
@@ -324,4 +325,4 @@
 }
 ```
 
-- `item_elevator_status` is sent only to a rider and reports `entered`, `moving`, `arrived`, or `exited`, with the current or intermediate `z`.
+- `item_elevator_status` is sent only to a rider and reports `entered`, `moving`, `arrived`, or `exited`, with the current or intermediate `z`. It may include a user-facing `message`; arrival uses it to name the destination floor and open door.

@@ -460,6 +460,7 @@ class ItemElevatorStatusPacket(BasePacket):
     itemId: str
     event: Literal["entered", "moving", "arrived", "exited"]
     z: int
+    message: str | None = None
 
 
 class AdminRoleSummary(BaseModel):

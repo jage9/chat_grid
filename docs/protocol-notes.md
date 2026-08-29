@@ -63,7 +63,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_clock_announce`: ordered list of clock speech samples to play sequentially as spatial audio.
 - `item_piano_note`: broadcast piano note on/off with resolved instrument/envelope/spatial params.
 - `item_piano_status`: structured piano mode/record/playback state events for client runtime control.
-- `item_elevator_status`: targeted rider state (`entered`, `moving`, `arrived`, or `exited`) with `itemId` and `z`.
+- `item_elevator_status`: targeted rider state (`entered`, `moving`, `arrived`, or `exited`) with `itemId`, `z`, and an optional user-facing `message`.
 
 ## Item Packet Behavior
 
@@ -90,6 +90,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - absolute source coordinates `x`, `y`, `z`
 - `item_upsert.item.occupiedOffsets` contains the server-owned horizontal footprint relative to the item anchor.
 - Elevator travel uses an intermediate `update_position.z` so riders are outside both floor audio and visibility groups until arrival.
+- Elevator arrival sends `item_use_sound` at the destination `z`, using the up or down cue that matches its direction.
 
 ## Welcome Metadata
 

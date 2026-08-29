@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 
+from app.item_catalog import get_item_definition
 from app.server import SignalingServer
 
 
@@ -27,11 +28,14 @@ def test_ui_definitions_are_complete_for_all_item_types() -> None:
         "directional",
         "emitSoundSpeed",
         "emitSoundTempo",
+        "emitInitialDelay",
+        "emitLoopDelay",
     }
     required_system_metadata_keys = {
         "type",
         "x",
         "y",
+        "z",
         "carrierId",
         "version",
         "createdBy",
@@ -53,16 +57,23 @@ def test_ui_definitions_are_complete_for_all_item_types() -> None:
         capabilities = entry["capabilities"]
         property_metadata = entry["propertyMetadata"]
         global_properties = entry["globalProperties"]
+        item_type = entry["type"]
 
         assert capabilities
         assert required_global_property_keys.issubset(set(global_properties.keys()))
         assert required_system_metadata_keys.issubset(set(property_metadata.keys()))
-        for property_key in editable_properties:
-            if property_key == "title":
-                continue
+        exposed_properties = (
+            required_system_metadata_keys
+            | set(global_properties)
+            | set(editable_properties)
+            | set(get_item_definition(item_type).default_params)
+        )
+        for property_key in exposed_properties:
             assert property_key in property_metadata
             metadata = property_metadata[property_key]
             assert isinstance(metadata, dict)
+            assert isinstance(metadata.get("tooltip"), str)
+            assert metadata["tooltip"].strip()
             if metadata.get("valueType") == "list":
                 options = metadata.get("options")
                 assert isinstance(options, list)

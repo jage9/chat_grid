@@ -43,6 +43,26 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "label": "Current Z",
         "tooltip": "Current elevator car elevation.",
     },
+    "floorZs": {
+        "valueType": "text",
+        "label": "Floors",
+        "tooltip": "Floor elevations served by this elevator.",
+    },
+    "targetZ": {
+        "valueType": "text",
+        "label": "Target Z",
+        "tooltip": "Destination elevation while the elevator is moving.",
+    },
+    "queuedZ": {
+        "valueType": "text",
+        "label": "Queued Z",
+        "tooltip": "Landing elevation waiting for the current trip to finish.",
+    },
+    "departOnCloseZ": {
+        "valueType": "text",
+        "label": "Departure Z",
+        "tooltip": "Destination elevation selected when the open door closes.",
+    },
     "state": {
         "valueType": "text",
         "label": "State",

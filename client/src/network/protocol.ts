@@ -333,6 +333,7 @@ export const itemElevatorStatusSchema = z.object({
   itemId: z.string(),
   event: z.enum(['entered', 'moving', 'arrived', 'exited']),
   z: z.number().int(),
+  message: z.string().optional(),
 });
 
 export const authPermissionsSchema = z.object({

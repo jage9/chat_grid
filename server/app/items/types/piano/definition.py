@@ -78,6 +78,11 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "tooltip": "Display name spoken and shown for this item.",
         "maxLength": 80,
     },
+    "songId": {
+        "valueType": "text",
+        "label": "Song id",
+        "tooltip": "Server-managed reference for the piano's recorded or demonstration song.",
+    },
     "instrument": {
         "valueType": "list",
         "tooltip": "Instrument voice used when playing this piano.",

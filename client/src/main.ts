@@ -989,14 +989,31 @@ function getItemsAtPosition(x: number, y: number): WorldItem[] {
   );
 }
 
-/** Returns the server-provided display name for one floor elevation. */
-function floorName(z: number): string {
-  return worldFloors.get(z) ?? `z ${formatCoordinate(z)}`;
+/** Returns whether a height lies strictly between configured floor elevations. */
+function isBetweenFloors(z: number): boolean {
+  const elevations = Array.from(worldFloors.keys());
+  if (elevations.length < 2) return false;
+  return z > Math.min(...elevations) && z < Math.max(...elevations);
 }
 
 /** Formats a complete world location for speech and lists. */
 function locationPhrase(x: number, y: number, z: number): string {
-  return `${formatCoordinate(x)}, ${formatCoordinate(y)}, ${formatCoordinate(z)}, ${floorName(z)}`;
+  if (isBetweenFloors(z)) {
+    return `${formatCoordinate(x)}, ${formatCoordinate(y)}, between floors at height ${formatCoordinate(z)}`;
+  }
+  const configuredFloor = worldFloors.get(z);
+  if (configuredFloor) {
+    return `${formatCoordinate(x)}, ${formatCoordinate(y)}, ${formatCoordinate(z)}, ${configuredFloor}`;
+  }
+  return `${formatCoordinate(x)}, ${formatCoordinate(y)}, height ${formatCoordinate(z)}`;
+}
+
+/** Formats a user's floor for cross-floor teleport feedback. */
+function floorPositionPhrase(z: number): string {
+  const configuredFloor = worldFloors.get(z);
+  if (configuredFloor) return `on ${configuredFloor}`;
+  if (isBetweenFloors(z)) return `between floors at height ${formatCoordinate(z)}`;
+  return `at height ${formatCoordinate(z)}`;
 }
 
 /** Returns the item currently carried by the local player, if any. */
@@ -2451,7 +2468,7 @@ function handleListModeInput(code: string, key: string): void {
     const entry = state.peers.get(state.sortedPeerIds[state.listIndex]);
     if (!entry) return;
     if (entry.z !== state.player.z) {
-      updateStatus(`${entry.nickname} is on ${floorName(entry.z)}.`);
+      updateStatus(`${entry.nickname} is ${floorPositionPhrase(entry.z)}.`);
       audio.sfxUiCancel();
       return;
     }

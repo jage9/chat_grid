@@ -12,7 +12,11 @@ from websockets.asyncio.server import ServerConnection
 
 from app.client import ClientConnection
 from app.item_service import ItemService
-from app.models import BroadcastPositionPacket, ItemElevatorStatusPacket
+from app.models import (
+    BroadcastPositionPacket,
+    ItemElevatorStatusPacket,
+    ItemUseSoundPacket,
+)
 from app.server import SignalingServer
 
 
@@ -207,6 +211,7 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
     server.item_service.add_item(carried)
 
     sent: list[object] = []
+    broadcast: list[object] = []
 
     async def immediate_sleep(_seconds: float) -> None:
         return None
@@ -215,7 +220,7 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
         sent.append(packet)
 
     async def fake_broadcast(packet: object, exclude=None) -> None:
-        return None
+        broadcast.append(packet)
 
     monkeypatch.setattr(asyncio, "sleep", immediate_sleep)
     monkeypatch.setattr(server, "_send", fake_send)
@@ -227,10 +232,42 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
     assert elevator.params["state"] == "idle"
     assert client.z == 40
     assert carried.z == 40
-    assert any(
-        isinstance(packet, ItemElevatorStatusPacket) and packet.event == "arrived"
+    arrival = next(
+        packet
         for packet in sent
+        if isinstance(packet, ItemElevatorStatusPacket) and packet.event == "arrived"
     )
+    assert arrival.message == "Elevator arrives on Second floor. The door opens."
+    arrival_sound = next(
+        packet for packet in broadcast if isinstance(packet, ItemUseSoundPacket)
+    )
+    assert arrival_sound.sound == "/sounds/elevator_up.ogg"
+    assert (arrival_sound.x, arrival_sound.y, arrival_sound.z) == (10, 10, 40)
+
+
+@pytest.mark.asyncio
+async def test_elevator_arrival_sound_matches_downward_travel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A downward arrival should use the matching destination cue."""
+
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    client = ClientConnection(
+        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=40
+    )
+    elevator = server.item_service.default_item(client, "elevator")
+    broadcast: list[object] = []
+
+    async def fake_broadcast(packet: object, exclude=None) -> None:
+        broadcast.append(packet)
+
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+
+    await server._broadcast_elevator_arrival_sound(elevator, 40, 0)
+
+    arrival_sound = cast(ItemUseSoundPacket, broadcast[0])
+    assert arrival_sound.sound == "/sounds/elevator_down.ogg"
+    assert arrival_sound.z == 0
 
 
 @pytest.mark.asyncio
