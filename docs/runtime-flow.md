@@ -47,6 +47,8 @@ Each frame:
 - Update spatial item emit audio.
 - Draw canvas scene.
 
+Radio metadata polling is limited to stations near a listener, deduplicated by stream URL, and isolates upstream failures so one station cannot stop updates for the others.
+
 ## Message Handling
 
 Core incoming message effects:

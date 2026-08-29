@@ -318,10 +318,11 @@ export class RadioStationRuntime {
     }
     const audioCtx = this.audio.context;
     if (!audioCtx) return null;
-    const element = new Audio(freshRadioPlaybackUrl(streamUrl));
+    const element = new Audio();
     element.crossOrigin = 'anonymous';
     element.loop = true;
     element.preload = 'none';
+    element.src = freshRadioPlaybackUrl(streamUrl);
     const source = audioCtx.createMediaElementSource(element);
     const shared: SharedRadioSource = {
       streamUrl,

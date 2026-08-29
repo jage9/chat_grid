@@ -236,6 +236,44 @@ async def test_radio_metadata_refresh_skips_when_no_listener_in_range(
 
 
 @pytest.mark.asyncio
+async def test_radio_metadata_refresh_continues_after_one_stream_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = ClientConnection(websocket=ws, id="u1", nickname="tester", x=10, y=10)
+    server.clients[ws] = client
+
+    failed_radio = server.item_service.default_item(client, "radio_station")
+    failed_radio.params["streamUrl"] = "https://failed.example/stream"
+    failed_radio.params["enabled"] = True
+    failed_radio.params["emitRange"] = 10
+    server.item_service.add_item(failed_radio)
+
+    working_radio = server.item_service.default_item(client, "radio_station")
+    working_radio.params["streamUrl"] = "https://working.example/stream"
+    working_radio.params["enabled"] = True
+    working_radio.params["emitRange"] = 10
+    server.item_service.add_item(working_radio)
+
+    async def fake_broadcast_item(item: object) -> None:
+        return None
+
+    def fake_fetch(url: str) -> tuple[str, str]:
+        if url == "https://failed.example/stream":
+            raise RuntimeError("upstream disconnected")
+        return ("Working Station", "Working Song")
+
+    monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server, "_fetch_stream_metadata", fake_fetch)
+
+    await server._refresh_radio_metadata_once()
+
+    assert working_radio.params["stationName"] == "Working Station"
+    assert working_radio.params["nowPlaying"] == "Working Song"
+
+
+@pytest.mark.asyncio
 async def test_item_secondary_use_radio_reports_now_playing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
