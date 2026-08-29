@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .helpers import parse_bool_like
 from .sound_policy import enforce_max_length, normalize_sound_reference
 
 EMIT_EFFECT_OPTIONS: tuple[str, ...] = (
@@ -154,3 +155,21 @@ def validate_emit_properties(current_params: dict, next_params: dict) -> dict:
             field_name="emitSound",
         ),
     }
+
+
+def validate_emit_direction(current_params: dict, next_params: dict) -> dict:
+    """Validate and normalize directional emitter controls."""
+
+    directional = parse_bool_like(
+        next_params.get("directional", current_params.get("directional", False)),
+        default=False,
+    )
+    facing = _number_in_range(
+        current_params,
+        next_params,
+        "facing",
+        default=0,
+        minimum=0,
+        maximum=360,
+    )
+    return {"directional": directional, "facing": int(round(facing))}

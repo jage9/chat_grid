@@ -234,6 +234,8 @@
   "departOnCloseZ": null,
   "state": "idle",
   "doorOpen": false,
+  "directional": false,
+  "facing": 0,
   "emitRange": 15,
   "emitVolume": 100,
   "emitSoundSpeed": 50,
@@ -246,7 +248,7 @@
 }
 ```
 
-- The server owns the floor, movement, queue, and door fields. The display title and standard `emit*` properties are editable.
+- The server owns the floor, movement, queue, and door fields. The display title and standard emitter properties, including direction and facing, are editable.
 - Each elevator is an independent object; more than one may be placed.
 - The shaft occupies its single anchor square on both configured floors.
 - The full standard emitter control set is editable. Its spatial source follows the car's current `z`.

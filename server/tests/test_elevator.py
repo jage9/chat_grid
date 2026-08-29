@@ -73,6 +73,8 @@ def test_elevator_emitter_is_editable_but_runtime_state_is_not() -> None:
         elevator,
         {
             **elevator.params,
+            "directional": True,
+            "facing": 123.4,
             "emitRange": 12,
             "emitVolume": 65,
             "emitSoundSpeed": 40.5,
@@ -89,6 +91,8 @@ def test_elevator_emitter_is_editable_but_runtime_state_is_not() -> None:
     assert {
         key: params[key]
         for key in (
+            "directional",
+            "facing",
             "emitRange",
             "emitVolume",
             "emitSoundSpeed",
@@ -100,6 +104,8 @@ def test_elevator_emitter_is_editable_but_runtime_state_is_not() -> None:
             "emitSound",
         )
     } == {
+        "directional": True,
+        "facing": 123,
         "emitRange": 12,
         "emitVolume": 65,
         "emitSoundSpeed": 40.5,

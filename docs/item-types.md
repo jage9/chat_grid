@@ -221,7 +221,7 @@ This is behavior-focused documentation for item types and their defaults.
 - Footprint: one square, present at the same coordinate on both landings
 - Door-open time: 5 seconds
 - Travel time: 5 seconds
-- Emitter defaults: range `15`, volume `100`, normal speed/tempo, no delays, effect off, and empty sound
+- Emitter defaults: nondirectional at facing `0`, range `15`, volume `100`, normal speed/tempo, no delays, effect off, and empty sound
 - Door-open direction cue: `/sounds/elevator_up.ogg` for the next upward trip or `/sounds/elevator_down.ogg` for the next downward trip
 
 ### Use
@@ -241,6 +241,7 @@ This is behavior-focused documentation for item types and their defaults.
 - A configured emitted sound follows the car's `z`, including during travel, and remains subject to the normal item-audio range and floor gate.
 
 ### Validation
+- `directional`: boolean; `facing`: degrees `0..360`
 - `emitRange`: integer `1..20`
 - `emitVolume`: integer `0..100`
 - `emitSoundSpeed`, `emitSoundTempo`, `emitEffectValue`: number `0..100`

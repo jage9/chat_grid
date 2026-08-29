@@ -8,6 +8,8 @@ LABEL = "elevator"
 TOOLTIP = "A two-floor elevator with a shared shaft and timed doors."
 EDITABLE_PROPERTIES: tuple[str, ...] = (
     "title",
+    "directional",
+    "facing",
     "emitRange",
     "emitVolume",
     "emitSoundSpeed",
@@ -34,6 +36,8 @@ DEFAULT_PARAMS: dict = {
     "departOnCloseZ": None,
     "state": "idle",
     "doorOpen": False,
+    "directional": False,
+    "facing": 0,
     "emitRange": 15,
     "emitVolume": 100,
     "emitSoundSpeed": 50,
@@ -52,6 +56,8 @@ PARAM_KEYS: tuple[str, ...] = (
     "departOnCloseZ",
     "state",
     "doorOpen",
+    "directional",
+    "facing",
     "emitRange",
     "emitVolume",
     "emitSoundSpeed",
@@ -103,6 +109,16 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "boolean",
         "label": "Door open",
         "tooltip": "Whether the elevator door is open.",
+    },
+    "directional": {
+        "valueType": "boolean",
+        "tooltip": "If on, emitted sound favors the elevator's facing direction.",
+    },
+    "facing": {
+        "valueType": "number",
+        "tooltip": "Facing direction in degrees used when directional sound is on.",
+        "range": {"min": 0, "max": 360, "step": 1},
+        "visibleWhen": {"directional": True},
     },
     "emitRange": {
         "valueType": "number",
