@@ -161,7 +161,7 @@ describe('mobile controls', () => {
 
     element<HTMLButtonElement>('up').click();
     expect(harness.dispatched).toContain('ArrowUp');
-    expect(element<HTMLButtonElement>('up').getAttribute('aria-label')).toBe('Move up');
+    expect(element<HTMLButtonElement>('up').getAttribute('aria-label')).toBe('Up');
     expect(element<HTMLButtonElement>('use').textContent).toBe('Select');
     expect(element<HTMLButtonElement>('commands').disabled).toBe(true);
   });

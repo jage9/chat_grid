@@ -199,10 +199,10 @@ export function setupMobileControls(deps: MobileControllerDeps): MobileControlle
     for (const [button] of directionButtons) {
       button.disabled = editingText;
     }
-    deps.dom.up.setAttribute('aria-label', 'Move up');
-    deps.dom.down.setAttribute('aria-label', 'Move down');
-    deps.dom.left.setAttribute('aria-label', 'Move left');
-    deps.dom.right.setAttribute('aria-label', 'Move right');
+    deps.dom.up.setAttribute('aria-label', 'Up');
+    deps.dom.down.setAttribute('aria-label', 'Down');
+    deps.dom.left.setAttribute('aria-label', 'Left');
+    deps.dom.right.setAttribute('aria-label', 'Right');
     deps.dom.use.textContent = inNormalMode ? 'Use' : 'Select';
     deps.dom.use.disabled = editingText;
     deps.dom.back.disabled = inNormalMode || editingText;
