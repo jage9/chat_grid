@@ -8,7 +8,7 @@ Date: 2026-08-29
 * The ground floor is at `z = 0`; the second floor is at `z = 40`.
 * Sound never crosses between floors.
 * The item list, item selection, interaction, rendering, and nearby-item commands only use the player's current floor.
-* The user list contains users on every floor and identifies each user's floor. I.E. 0,12,40, Ground floor
+* The user list contains users on every floor and identifies each user's floor, for example `0, 12, 40, Ground floor`.
 * Teleporting to a user is allowed only when that user is on the current floor.
 * Initially, ordinary player and item positions use `z = 0` or `z = 40`. Intermediate heights are reserved for server-controlled elevator travel and later jumping/flying.
 * Elevator is a new item type. Each elevator object owns one car, and that car can exist at only one height at a time. Multiple independent elevator objects are allowed.
@@ -38,7 +38,7 @@ second: name "Second floor", elevation 40
 
 Floor membership must not be calculated by simply rounding `z`. In this first floor-only phase, an exact landing height identifies the floor, and an elevator's intermediate travel height belongs to neither floor. Add a stable floor id when jumping or flying introduces intermediate heights that still belong to a landing.
 
-Items are anchored to one floor. A carried item uses its carrier's current position and floor.
+Ordinary items are anchored to one floor. A carried item uses its carrier's current position and height. An elevator is the exception: one item exposes the same anchor square on both configured floors.
 
 ## Visibility, Lists, and Teleporting
 
@@ -48,7 +48,7 @@ Items are anchored to one floor. A carried item uses its carrier's current posit
 * The item list and every item candidate search filter by current floor before distance sorting.
 * Enter on a user from another floor does not teleport; report that the user is on a different floor.
 * The server also rejects any cross-floor teleport request. Client filtering is usability, not authority and of course a user could move while in that menu so server is the final call.
-* Item pickup, drop, use, transfer, collision, and same-square checks compare `x`, `y`, and floor.
+* Item pickup, drop, use, transfer, and same-square checks compare `x`, `y`, and floor. General wall and collision rules are deferred.
 
 ## Audio Rules
 
@@ -60,27 +60,27 @@ Items are anchored to one floor. A carried item uses its carrier's current posit
 
 ## Multi-Square Objects
 
-Do not create one persisted item per occupied square. Add an optional server-owned footprint to placeable definitions:
+The implemented item model supports a server-owned footprint on each placeable definition:
 
 ```text
 anchor: { x, y, z }
 occupiedOffsets: \[{ x: 0, y: 0 }, { x: 1, y: 0 }, ...]
 ```
 
-The item remains one entity with one id. The server expands the offsets for occupancy, collision, placement validation, interaction range, and rendering. Rotation can transform offsets later. Ordinary items keep the implicit one-cell footprint `\[{0, 0}]`.
+The item remains one entity with one id. The server uses offsets for occupancy, placement bounds, and interaction. The client uses them for rendering and nearest-item location. Rotation, overlap policy, and collision are deferred. Existing item types, including the elevator, currently use the one-cell footprint `\[{0, 0}]`.
 
 The elevator is an assembly, not duplicated floor items:
 
 * One single-square shaft anchor shared by both floors.
-* One car state with `currentZ`, `targetZ`, direction, door state, occupants, and timers.
-* One linked landing control on each floor. Landing controls may be lightweight child fixtures of the elevator rather than independent persisted items.
+* One car state with `currentZ`, `targetZ`, queued destination, door state, occupants, and timers.
+* The elevator item itself is the use/call target at its anchor square on either floor. There are no separate landing-control items.
 * The shaft's anchor square is reserved on both floors even though the car is present at only one elevation.
 
 This footprint model is also useful for tables, stages, large instruments, and vehicles. Walls should still use a separate edge-based geometry model later; footprints are not a replacement for walls.
 
 ## Elevator Interaction
 
-Recommended two-floor behavior:
+Implemented two-floor behavior:
 
 1. Use the landing control to call the elevator.
 2. The car travels to that floor and opens its door.
@@ -96,7 +96,7 @@ The automatic other-floor destination is the simplest accessible behavior for tw
 
 ## Implementation Phases
 
-### Phase 1: Vertical Coordinate Foundation
+### Phase 1: Vertical Coordinate Foundation - Complete
 
 * Add `z` to Python and TypeScript world models. Add stable floor ids later with jumping or flying.
 * Update every world-space packet and helper that carries `x/y`.
@@ -105,7 +105,7 @@ The automatic other-floor destination is the simplest accessible behavior for tw
 * Make normal movement preserve `z` and reject client attempts to change floors.
 * Update protocol and persistence tests together.
 
-### Phase 2: Floor-Aware Client and Rules
+### Phase 2: Floor-Aware Client and Rules - Complete
 
 * Render the current floor only.
 * Filter item lists, selection, interaction, and nearest-item logic by floor.
@@ -113,29 +113,29 @@ The automatic other-floor destination is the simplest accessible behavior for tw
 * Apply the hard same-floor gate to every audio domain, including LiveKit voice.
 * Clean up audio runtimes immediately on a floor change and rebuild them for the destination floor.
 
-### Phase 3: Generic Footprints
+### Phase 3: Generic Footprints - Complete
 
 * Add occupied offsets to item definitions and outbound UI metadata.
 * Centralize occupied-cell calculation on the server.
 * Use it for placement bounds, interaction, rendering, and locating. Item stacking keeps the grid's existing behavior; wall and collision rules remain a separate future feature.
 * Keep one-cell behavior as the default for existing item types.
 
-### Phase 4: Elevator Assembly
+### Phase 4: Elevator Assembly - Complete Except Sounds
 
-* Add the elevator type, single-square shaft, two landing controls, independent car state machine, and persisted resting state.
+* Add the elevator type, single-square shaft shared by both landings, independent car state machine, and persisted resting state.
 * Add call, enter, travel, arrive, door-open, exit, and timeout actions.
 * Move riders and carried items authoritatively with the car.
 * Broadcast explicit elevator state packets so sounds and UI do not infer state from messages.
 * Add elevator motor, arrival, and door sounds later, after the sound assets are supplied.
 
-## Important Tests
+## Verification Coverage
 
 * Protocol schemas reject missing/invalid `z` after the clean cut.
 * Horizontal movement cannot alter floor or height.
 * Same `x/y` on different floors does not count as collision, interaction, or pickup range.
-* Items and audio from the other floor never enter current-floor results.
-* User list includes both floors; cross-floor teleport is rejected by the server.
-* Every positional audio path is silent across floors.
+* Client item and user searches filter by floor as designed.
+* Cross-floor height changes are rejected by the server.
+* Positional audio paths gate on `z`; LiveKit also unsubscribes other-floor publications before download.
 * A footprint reserves every occupied cell but appears as one item.
 * Multiple elevator objects operate independently.
 * Calls queue correctly while moving.
@@ -145,4 +145,21 @@ The automatic other-floor destination is the simplest accessible behavior for tw
 
 ## Current Delivery Status
 
-Phases 1 through 4 are implemented together because the elevator is the only initial way to change floors. Elevator sound assets remain intentionally deferred. Stable floor ids also remain deferred until jumping or flying needs an intermediate `z` that still belongs to a floor.
+Shipped on `main`:
+
+* Floor/elevator implementation: commit `f4ec622`.
+* Elevator changed to one square: commit `3c1dc53`.
+* Current versions: client `R369`, server `S366`.
+* Ground floor is `z=0`; second floor is `z=40`.
+* Multiple independent elevator items are allowed. Each appears at one anchor coordinate on both floors, while its car remains at one completed landing or an intermediate travel height.
+* Door-open delay is five seconds. Travel is five seconds after the door closes.
+* Server restart clears unfinished elevator timers and restores a closed, idle car at its last completed landing.
+* A mid-trip disconnect restores the rider and carried item to the last completed landing rather than persisting the intermediate height.
+
+Deferred:
+
+* Elevator motor, door, and arrival sounds. The user will provide assets later.
+* Stable floor ids, jumping, flying, and other intermediate-height movement.
+* Walls, doors, collision, sound dampening, and item overlap policy.
+* Actual multi-square item types. The generic footprint model is ready, but the elevator and current catalog remain one square.
+* More than two elevator destinations and an in-car destination menu.
