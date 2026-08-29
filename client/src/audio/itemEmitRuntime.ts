@@ -440,6 +440,9 @@ export class ItemEmitRuntime {
     currentlyActive: boolean,
   ): boolean {
     if (listenerPositions.length === 0) return false;
+    if (currentlyActive && item.type === 'elevator' && item.params.state === 'moving') {
+      return true;
+    }
     const spatialConfig = this.getSpatialConfig(item);
     const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
     const threshold = baseRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);

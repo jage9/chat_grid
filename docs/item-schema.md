@@ -233,13 +233,15 @@
   "queuedZ": null,
   "departOnCloseZ": null,
   "state": "idle",
-  "doorOpen": false
+  "doorOpen": false,
+  "emitSound": ""
 }
 ```
 
 - The server owns every field except the display title.
 - Each elevator is an independent object; more than one may be placed.
 - The shaft occupies its single anchor square on both configured floors.
+- `emitSound` is editable and uses the standard sound-reference format. Its spatial source follows the car's current `z`.
 - Whenever the door opens, the landing plays `/sounds/elevator_up.ogg` or `/sounds/elevator_down.ogg` spatially to announce the elevator's next travel direction.
 - Elevator runtime timers are not resumed after a server restart. A loaded elevator returns to a closed, idle state at its last completed floor.
 

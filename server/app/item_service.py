@@ -180,7 +180,7 @@ class ItemService:
                     current_z = int(item.params.get("currentZ", 0))
                     if current_z not in floor_zs:
                         current_z = min(floor_zs, default=0)
-                    item.z = 0
+                    item.z = current_z
                     item.params.update(
                         {
                             "currentZ": current_z,

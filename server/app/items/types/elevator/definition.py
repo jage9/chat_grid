@@ -4,7 +4,7 @@ from __future__ import annotations
 
 LABEL = "elevator"
 TOOLTIP = "A two-floor elevator with a shared shaft and timed doors."
-EDITABLE_PROPERTIES: tuple[str, ...] = ("title",)
+EDITABLE_PROPERTIES: tuple[str, ...] = ("title", "emitSound")
 CAPABILITIES: tuple[str, ...] = ("editable", "deletable", "usable")
 USE_SOUND: str | None = None
 EMIT_SOUND: str | None = None
@@ -21,6 +21,7 @@ DEFAULT_PARAMS: dict = {
     "departOnCloseZ": None,
     "state": "idle",
     "doorOpen": False,
+    "emitSound": "",
 }
 PARAM_KEYS: tuple[str, ...] = (
     "floorZs",
@@ -30,6 +31,7 @@ PARAM_KEYS: tuple[str, ...] = (
     "departOnCloseZ",
     "state",
     "doorOpen",
+    "emitSound",
 )
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
@@ -72,5 +74,11 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "boolean",
         "label": "Door open",
         "tooltip": "Whether the elevator door is open.",
+    },
+    "emitSound": {
+        "valueType": "sound",
+        "label": "Emitted sound",
+        "tooltip": "Looping sound emitted by the elevator car. Filename assumes sounds folder, or use a full URL.",
+        "maxLength": 2048,
     },
 }

@@ -12,9 +12,13 @@ from websockets.asyncio.server import ServerConnection
 
 from app.client import ClientConnection
 from app.item_service import ItemService
+from app.items.types.elevator.actions import secondary_use_item
+from app.items.types.elevator.validator import validate_update
 from app.models import (
     BroadcastPositionPacket,
+    ItemActionResultPacket,
     ItemElevatorStatusPacket,
+    ItemUpsertPacket,
     ItemUseSoundPacket,
 )
 from app.server import SignalingServer
@@ -54,6 +58,63 @@ def test_same_xy_on_another_floor_is_not_the_same_item_square() -> None:
     item.z = 0
 
     assert not server._item_is_on_client_square(item, client)
+
+
+def test_elevator_emit_sound_is_editable_but_runtime_state_is_not() -> None:
+    """Elevator edits should accept audio without exposing state mutation."""
+
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    client = ClientConnection(
+        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=0
+    )
+    elevator = server.item_service.default_item(client, "elevator")
+
+    params = validate_update(
+        elevator,
+        {**elevator.params, "emitSound": "elevator_motor.ogg", "state": "moving"},
+    )
+
+    assert params["emitSound"] == "sounds/elevator_motor.ogg"
+    assert params["state"] == "idle"
+
+
+@pytest.mark.parametrize(
+    ("params", "expected"),
+    [
+        (
+            {"currentZ": 0, "state": "door_open", "doorOpen": True},
+            "Elevator is on Ground floor, door open.",
+        ),
+        (
+            {"currentZ": 40, "state": "idle", "doorOpen": False},
+            "Elevator is on Second floor, door closed.",
+        ),
+        (
+            {"currentZ": 0, "targetZ": 40, "state": "moving"},
+            "Elevator is headed to Second floor, traveling up.",
+        ),
+        (
+            {"currentZ": 40, "targetZ": 0, "state": "moving"},
+            "Elevator is headed to Ground floor, traveling down.",
+        ),
+    ],
+)
+def test_elevator_secondary_use_reports_simple_car_state(
+    params: dict[str, object], expected: str
+) -> None:
+    """Secondary use should report only landing/door or destination/direction."""
+
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    client = ClientConnection(
+        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=0
+    )
+    elevator = server.item_service.default_item(client, "elevator")
+    elevator.params.update(params)
+
+    result = secondary_use_item(elevator, client.nickname, lambda _: "")
+
+    assert result.self_message == expected
+    assert result.others_message == ""
 
 
 @pytest.mark.asyncio
@@ -329,6 +390,47 @@ async def test_stopped_rider_exits_with_one_use_after_door_closes(
 
 
 @pytest.mark.asyncio
+async def test_rider_cannot_exit_while_elevator_is_moving(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rider must remain in the car until it reaches a landing."""
+
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    websocket = _fake_ws()
+    client = ClientConnection(
+        websocket=websocket,
+        id="u1",
+        nickname="tester",
+        x=10,
+        y=10,
+        z=20,
+        elevator_id="elevator-1",
+    )
+    elevator = server.item_service.default_item(client, "elevator")
+    elevator.id = "elevator-1"
+    elevator.params.update({"state": "moving", "targetZ": 40})
+    server.item_service.add_item(elevator)
+    sent: list[object] = []
+
+    async def fake_send(_websocket: ServerConnection, packet: object) -> None:
+        sent.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+
+    await server._use_elevator(client, elevator)
+
+    assert client.elevator_id == elevator.id
+    assert not any(
+        isinstance(packet, ItemElevatorStatusPacket) and packet.event == "exited"
+        for packet in sent
+    )
+    result = next(
+        packet for packet in sent if isinstance(packet, ItemActionResultPacket)
+    )
+    assert result.message == "The elevator is moving."
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("origin_z", "destination_z", "first_height", "last_height"),
     [(0, 40, 1, 38), (40, 0, 39, 2)],
@@ -396,6 +498,11 @@ async def test_elevator_travel_height_progresses_between_acoustic_floors(
         if isinstance(packet, ItemElevatorStatusPacket) and packet.event == "moving"
     ]
     assert status_heights == heights
+    item_heights = [
+        packet.item.z for packet in broadcast if isinstance(packet, ItemUpsertPacket)
+    ]
+    assert item_heights == heights
+    assert elevator.z == heights[-1]
 
 
 def test_disconnecting_rider_returns_to_last_landing() -> None:
@@ -436,7 +543,7 @@ def test_persisted_elevator_resets_to_resting_state(tmp_path: Path) -> None:
                     "title": "Elevator",
                     "x": 10,
                     "y": 10,
-                    "z": 0,
+                    "z": 20,
                     "createdBy": "u1",
                     "createdAt": 1,
                     "updatedAt": 2,
@@ -464,6 +571,7 @@ def test_persisted_elevator_resets_to_resting_state(tmp_path: Path) -> None:
     assert elevator.params["departOnCloseZ"] is None
     assert elevator.params["state"] == "idle"
     assert elevator.params["doorOpen"] is False
+    assert elevator.z == 0
 
 
 def test_persisted_transient_carried_item_is_dropped_safely(tmp_path: Path) -> None:

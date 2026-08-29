@@ -221,6 +221,7 @@ This is behavior-focused documentation for item types and their defaults.
 - Footprint: one square, present at the same coordinate on both landings
 - Door-open time: 5 seconds
 - Travel time: 5 seconds
+- Emitted sound: empty by default; configurable as a filename or full URL
 - Door-open direction cue: `/sounds/elevator_up.ogg` for the next upward trip or `/sounds/elevator_down.ogg` for the next downward trip
 
 ### Use
@@ -229,6 +230,7 @@ This is behavior-focused documentation for item types and their defaults.
 - The door closes five seconds after the latest open or entry, then the car travels for five seconds.
 - On arrival, the door opens automatically, riders receive a floor-and-door announcement, and the landing plays the next-direction cue.
 - Use once after arrival to exit. If the five-second timer closes the door first, the rider remains inside; one use then opens the stopped car and exits.
+- Secondary use reports the current landing and door state, or the destination and travel direction while moving.
 - Calls made while the car is moving are queued.
 
 ### Rules
@@ -236,6 +238,10 @@ This is behavior-focused documentation for item types and their defaults.
 - Elevators cannot be carried. They cannot be deleted while moving or occupied.
 - Riders cannot move or teleport while inside.
 - During travel, rider `z` advances progressively between the two floors. Every intermediate height is hidden from both floors and blocks all floor audio.
+- A configured emitted sound follows the car's `z`, including during travel, and remains subject to the normal item-audio range and floor gate.
+
+### Validation
+- `emitSound`: empty, filename (assumed under `sounds/`), or full URL
 
 ## Adding A New Item Type (Plugin Discovery)
 
