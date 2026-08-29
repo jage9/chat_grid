@@ -11,6 +11,14 @@ export type MobileTextEntry = {
   submitLabel: string;
 };
 
+export type MobileCommand = {
+  id: string;
+  label: string;
+  section: string;
+  tooltip: string;
+  run: () => void | Promise<void>;
+};
+
 type MobileControllerDeps = {
   dom: {
     container: HTMLElement;
@@ -26,6 +34,9 @@ type MobileControllerDeps = {
     chat: HTMLButtonElement;
     commands: HTMLButtonElement;
     mute: HTMLButtonElement;
+    commandDialog: HTMLDialogElement;
+    commandList: HTMLElement;
+    commandClose: HTMLButtonElement;
     textForm: HTMLFormElement;
     textLabel: HTMLLabelElement;
     textInput: HTMLInputElement;
@@ -35,12 +46,11 @@ type MobileControllerDeps = {
   getRunning: () => boolean;
   getMode: () => GameMode;
   getMuted: () => boolean;
-  canOpenCommands: (mode: GameMode) => boolean;
+  getCommands: () => MobileCommand[];
   dispatchInput: (input: ModeInput) => void;
   pressDirection: (code: DirectionCode) => void;
   releaseDirection: (code: DirectionCode) => void;
   openChat: () => void;
-  openCommands: () => void;
   toggleMute: () => void;
   getTextEntry: () => MobileTextEntry | null;
   setTextEntry: (value: string, cursor: number) => void;
@@ -90,6 +100,42 @@ export function setupMobileControls(deps: MobileControllerDeps): MobileControlle
       deps.releaseDirection(code);
     }
     activeDirections.clear();
+  }
+
+  function closeCommandDialog(): void {
+    if (deps.dom.commandDialog.open) deps.dom.commandDialog.close();
+  }
+
+  function openCommandDialog(): void {
+    const commands = deps.getCommands();
+    if (commands.length === 0) return;
+    deps.dom.commandList.replaceChildren();
+    const sections = new Map<string, MobileCommand[]>();
+    for (const command of commands) {
+      const sectionCommands = sections.get(command.section) ?? [];
+      sectionCommands.push(command);
+      sections.set(command.section, sectionCommands);
+    }
+    for (const [section, sectionCommands] of sections) {
+      const heading = document.createElement('h3');
+      heading.textContent = section;
+      deps.dom.commandList.appendChild(heading);
+      for (const command of sectionCommands) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = command.label;
+        button.title = command.tooltip;
+        button.dataset['commandId'] = command.id;
+        button.addEventListener('click', () => {
+          closeCommandDialog();
+          void command.run();
+          sync();
+        });
+        deps.dom.commandList.appendChild(button);
+      }
+    }
+    deps.dom.commandDialog.showModal();
+    deps.dom.commandList.querySelector<HTMLButtonElement>('button')?.focus();
   }
 
   function syncTextEntry(config: MobileTextEntry | null): boolean {
@@ -143,6 +189,7 @@ export function setupMobileControls(deps: MobileControllerDeps): MobileControlle
 
     if (!running || !enabled) {
       releaseAllDirections();
+      closeCommandDialog();
       return;
     }
 
@@ -152,15 +199,15 @@ export function setupMobileControls(deps: MobileControllerDeps): MobileControlle
     for (const [button] of directionButtons) {
       button.disabled = editingText;
     }
-    deps.dom.up.setAttribute('aria-label', inNormalMode ? 'Move up' : 'Previous option');
-    deps.dom.down.setAttribute('aria-label', inNormalMode ? 'Move down' : 'Next option');
-    deps.dom.left.setAttribute('aria-label', inNormalMode ? 'Move left' : 'Previous value');
-    deps.dom.right.setAttribute('aria-label', inNormalMode ? 'Move right' : 'Next value');
+    deps.dom.up.setAttribute('aria-label', 'Move up');
+    deps.dom.down.setAttribute('aria-label', 'Move down');
+    deps.dom.left.setAttribute('aria-label', 'Move left');
+    deps.dom.right.setAttribute('aria-label', 'Move right');
     deps.dom.use.textContent = inNormalMode ? 'Use' : 'Select';
     deps.dom.use.disabled = editingText;
     deps.dom.back.disabled = inNormalMode || editingText;
     deps.dom.chat.disabled = !inNormalMode;
-    deps.dom.commands.disabled = mode === 'commandPalette' || !deps.canOpenCommands(mode) || editingText;
+    deps.dom.commands.disabled = deps.getCommands().length === 0 || editingText;
     deps.dom.mute.textContent = muted ? 'Unmute' : 'Mute';
     deps.dom.mute.setAttribute('aria-pressed', String(muted));
   }
@@ -219,8 +266,7 @@ export function setupMobileControls(deps: MobileControllerDeps): MobileControlle
   });
   deps.dom.commands.addEventListener('click', () => {
     if (!deps.getRunning()) return;
-    deps.openCommands();
-    sync();
+    openCommandDialog();
   });
   deps.dom.mute.addEventListener('click', () => {
     if (!deps.getRunning()) return;
@@ -245,6 +291,13 @@ export function setupMobileControls(deps: MobileControllerDeps): MobileControlle
     if (!deps.getRunning()) return;
     deps.dispatchInput(inputFor('Escape'));
     sync();
+  });
+  deps.dom.commandClose.addEventListener('click', () => {
+    closeCommandDialog();
+    deps.dom.commands.focus();
+  });
+  deps.dom.commandDialog.addEventListener('cancel', () => {
+    requestAnimationFrame(() => deps.dom.commands.focus());
   });
 
   window.addEventListener('blur', releaseAllDirections);

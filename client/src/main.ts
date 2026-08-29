@@ -29,7 +29,12 @@ import { dispatchModeInput } from './input/modeDispatcher';
 import { handleListControlKey } from './input/listController';
 import { createAdminController, type AdminMenuAction } from './input/adminController';
 import { setupKeyboardInputHandlers } from './input/keyboardController';
-import { setupMobileControls, type MobileController, type MobileTextEntry } from './input/mobileController';
+import {
+  setupMobileControls,
+  type MobileCommand,
+  type MobileController,
+  type MobileTextEntry,
+} from './input/mobileController';
 import { getEditSessionAction } from './input/editSession';
 import { formatSteppedNumber, snapNumberToStep } from './input/numeric';
 import { type IncomingMessage, type OutgoingMessage } from './network/protocol';
@@ -144,6 +149,9 @@ type Dom = {
   mobileChat: HTMLButtonElement;
   mobileCommands: HTMLButtonElement;
   mobileMute: HTMLButtonElement;
+  mobileCommandDialog: HTMLDialogElement;
+  mobileCommandList: HTMLElement;
+  mobileCommandClose: HTMLButtonElement;
   mobileTextEntry: HTMLFormElement;
   mobileTextEntryLabel: HTMLLabelElement;
   mobileTextInput: HTMLInputElement;
@@ -200,6 +208,9 @@ const dom: Dom = {
   mobileChat: requiredById('mobileChat'),
   mobileCommands: requiredById('mobileCommands'),
   mobileMute: requiredById('mobileMute'),
+  mobileCommandDialog: requiredById('mobileCommandDialog'),
+  mobileCommandList: requiredById('mobileCommandList'),
+  mobileCommandClose: requiredById('mobileCommandClose'),
   mobileTextEntry: requiredById('mobileTextEntry'),
   mobileTextEntryLabel: requiredById('mobileTextEntryLabel'),
   mobileTextInput: requiredById('mobileTextInput'),
@@ -334,7 +345,6 @@ let suppressItemPropertyEchoUntilMs = 0;
 let activeTeleportLoopStop: (() => void) | null = null;
 let activeTeleportLoopToken = 0;
 let mobileControls: MobileController | null = null;
-let queuedMobileDirection: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight' | null = null;
 let activeTeleport:
   | {
       startX: number;
@@ -1244,10 +1254,7 @@ function gameLoop(): void {
 
 /** Applies held-arrow movement with bounds checks, tile cues, and server position sync. */
 function handleMovement(): void {
-  if (state.mode !== 'normal') {
-    queuedMobileDirection = null;
-    return;
-  }
+  if (state.mode !== 'normal') return;
   if (activeTeleport) return;
   const now = Date.now();
   if (now - state.player.lastMoveTime < movementTickMs) return;
@@ -1259,13 +1266,6 @@ function handleMovement(): void {
   if (state.keysPressed.ArrowLeft) dx = -1;
   if (state.keysPressed.ArrowRight) dx = 1;
 
-  if (dx === 0 && dy === 0 && queuedMobileDirection) {
-    if (queuedMobileDirection === 'ArrowUp') dy = 1;
-    if (queuedMobileDirection === 'ArrowDown') dy = -1;
-    if (queuedMobileDirection === 'ArrowLeft') dx = -1;
-    if (queuedMobileDirection === 'ArrowRight') dx = 1;
-  }
-
   if (dx === 0 && dy === 0) {
     lastWallCollisionDirection = null;
     return;
@@ -1275,7 +1275,6 @@ function handleMovement(): void {
   const nextY = state.player.y + dy;
   const attemptedDirection = `${dx},${dy}`;
   if (nextX < 0 || nextY < 0 || nextX >= worldGridSize || nextY >= worldGridSize) {
-    queuedMobileDirection = null;
     state.player.lastMoveTime = now;
     if (lastWallCollisionDirection !== attemptedDirection) {
       void audio.playSample(WALL_SOUND_URL, 1);
@@ -1286,7 +1285,6 @@ function handleMovement(): void {
 
   state.player.x = nextX;
   state.player.y = nextY;
-  queuedMobileDirection = null;
   lastWallCollisionDirection = null;
   state.player.lastMoveTime = now;
   void refreshAudioSubscriptions(true);
@@ -2725,13 +2723,21 @@ function getMobileTextEntry(): MobileTextEntry | null {
 
 function pressMobileDirection(code: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight'): void {
   if (!state.running || state.mode !== 'normal' || activeTeleport) return;
-  queuedMobileDirection = code;
   state.keysPressed[code] = true;
-  handleMovement();
 }
 
 function releaseMobileDirection(code: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight'): void {
   state.keysPressed[code] = false;
+}
+
+function getMobileCommands(): MobileCommand[] {
+  return getAvailableCommandPaletteEntriesForMode(state.mode).map((command) => ({
+    id: command.id,
+    label: command.label,
+    section: command.section,
+    tooltip: command.tooltip,
+    run: command.run,
+  }));
 }
 
 setupKeyboardInputHandlers({
@@ -2774,6 +2780,9 @@ mobileControls = setupMobileControls({
     chat: dom.mobileChat,
     commands: dom.mobileCommands,
     mute: dom.mobileMute,
+    commandDialog: dom.mobileCommandDialog,
+    commandList: dom.mobileCommandList,
+    commandClose: dom.mobileCommandClose,
     textForm: dom.mobileTextEntry,
     textLabel: dom.mobileTextEntryLabel,
     textInput: dom.mobileTextInput,
@@ -2783,12 +2792,11 @@ mobileControls = setupMobileControls({
   getRunning: () => state.running,
   getMode: () => state.mode,
   getMuted: () => state.isMuted,
-  canOpenCommands: canOpenCommandPaletteInMode,
+  getCommands: getMobileCommands,
   dispatchInput: handleModeInput,
   pressDirection: pressMobileDirection,
   releaseDirection: releaseMobileDirection,
   openChat: openChatCommand,
-  openCommands: openCommandPalette,
   toggleMute,
   getTextEntry: getMobileTextEntry,
   setTextEntry: (value, cursor) => {

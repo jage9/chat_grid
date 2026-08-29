@@ -384,6 +384,67 @@ canvas {
   font: inherit;
 }
 
+.mobile-command-dialog {
+  width: min(520px, calc(100% - 1.25rem));
+  max-height: min(80dvh, 680px);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #64748b;
+  border-radius: 8px;
+  background: #111827;
+  color: #f9fafb;
+}
+
+.mobile-command-dialog::backdrop {
+  background: rgb(0 0 0 / 72%);
+}
+
+.mobile-command-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid #475569;
+  background: #243247;
+}
+
+.mobile-command-header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.mobile-command-header button {
+  min-height: 44px;
+}
+
+.mobile-command-list {
+  display: grid;
+  gap: 0.4rem;
+  max-height: calc(min(80dvh, 680px) - 66px);
+  padding: 0.65rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.mobile-command-list h3 {
+  margin: 0.45rem 0 0;
+  color: #bfdbfe;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.mobile-command-list h3:first-child {
+  margin-top: 0;
+}
+
+.mobile-command-list button {
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  touch-action: manipulation;
+}
+
 button:focus-visible,
 select:focus-visible,
 input:focus-visible {
@@ -462,5 +523,13 @@ input:focus-visible {
   .mobile-dpad-button {
     min-width: 40px;
     min-height: 40px;
+  }
+
+  .mobile-command-dialog {
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .mobile-command-list {
+    max-height: calc(100dvh - 82px);
   }
 }

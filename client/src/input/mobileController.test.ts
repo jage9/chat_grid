@@ -31,6 +31,10 @@ function setupHarness() {
         <button id="chat" type="button"></button>
         <button id="commands" type="button"></button>
         <button id="mute" type="button"></button>
+        <dialog id="commandDialog">
+          <button id="commandClose" type="button"></button>
+          <div id="commandList"></div>
+        </dialog>
       </div>
     </section>
   `;
@@ -41,6 +45,9 @@ function setupHarness() {
   const dispatched: string[] = [];
   const savedEnabled: boolean[] = [];
   const savedExpanded: boolean[] = [];
+  const commandDialog = element<HTMLDialogElement>('commandDialog');
+  commandDialog.showModal = () => commandDialog.setAttribute('open', '');
+  commandDialog.close = () => commandDialog.removeAttribute('open');
 
   const controller = setupMobileControls({
     dom: {
@@ -57,6 +64,9 @@ function setupHarness() {
       chat: element('chat'),
       commands: element('commands'),
       mute: element('mute'),
+      commandDialog,
+      commandList: element('commandList'),
+      commandClose: element('commandClose'),
       textForm: element('textForm'),
       textLabel: element('textLabel'),
       textInput: element('textInput'),
@@ -66,7 +76,18 @@ function setupHarness() {
     getRunning: () => true,
     getMode: () => mode,
     getMuted: () => muted,
-    canOpenCommands: (activeMode) => activeMode === 'normal',
+    getCommands: () =>
+      mode === 'normal'
+        ? [
+            {
+              id: 'test-command',
+              label: 'Test command',
+              section: 'Testing',
+              tooltip: 'Run the test command.',
+              run: () => dispatched.push('run:test-command'),
+            },
+          ]
+        : [],
     dispatchInput: (input) => {
       dispatched.push(input.code);
       if (mode === 'chat' && (input.code === 'Enter' || input.code === 'Escape')) mode = 'normal';
@@ -75,9 +96,6 @@ function setupHarness() {
     releaseDirection: (code) => dispatched.push(`release:${code}`),
     openChat: () => {
       mode = 'chat';
-    },
-    openCommands: () => {
-      mode = 'commandPalette';
     },
     toggleMute: () => {
       muted = !muted;
@@ -143,9 +161,37 @@ describe('mobile controls', () => {
 
     element<HTMLButtonElement>('up').click();
     expect(harness.dispatched).toContain('ArrowUp');
-    expect(element<HTMLButtonElement>('up').getAttribute('aria-label')).toBe('Previous option');
+    expect(element<HTMLButtonElement>('up').getAttribute('aria-label')).toBe('Move up');
     expect(element<HTMLButtonElement>('use').textContent).toBe('Select');
     expect(element<HTMLButtonElement>('commands').disabled).toBe(true);
+  });
+
+  it('holds and releases the shared movement key state for pointer input', () => {
+    const harness = setupHarness();
+    const up = element<HTMLButtonElement>('up');
+    up.setPointerCapture = vi.fn();
+    const pointerDown = new Event('pointerdown', { bubbles: true, cancelable: true });
+    const pointerUp = new Event('pointerup', { bubbles: true });
+    Object.defineProperty(pointerDown, 'pointerId', { value: 7 });
+    Object.defineProperty(pointerUp, 'pointerId', { value: 7 });
+
+    up.dispatchEvent(pointerDown);
+    expect(harness.dispatched).toEqual(['press:ArrowUp']);
+    up.dispatchEvent(pointerUp);
+    expect(harness.dispatched).toEqual(['press:ArrowUp', 'release:ArrowUp']);
+  });
+
+  it('opens available commands as a visual list and runs a selected command', () => {
+    const harness = setupHarness();
+
+    element<HTMLButtonElement>('commands').click();
+    expect(element<HTMLDialogElement>('commandDialog').open).toBe(true);
+    expect(element('commandList').textContent).toContain('Testing');
+    expect(element('commandList').textContent).toContain('Test command');
+
+    element('commandList').querySelector<HTMLButtonElement>('button')?.click();
+    expect(element<HTMLDialogElement>('commandDialog').open).toBe(false);
+    expect(harness.dispatched).toContain('run:test-command');
   });
 
   it('persists dock visibility and expansion choices', () => {

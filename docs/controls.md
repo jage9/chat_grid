@@ -6,10 +6,10 @@ This document is the authoritative keymap for the client.
 
 - Touch controls appear automatically on coarse-pointer devices and can be shown or hidden from Settings.
 - Tap a direction for one movement step; press and hold to continue moving.
-- In menus, the directional pad navigates options and values.
+- The directional buttons remain Up, Down, Left, and Right; menu screens may use those same directions for navigation.
 - `Use` performs the current primary action; in menus it becomes `Select`.
 - `Back` cancels or exits the current menu.
-- `Chat` opens a native mobile text field and `Commands` opens the command palette.
+- `Chat` opens a native mobile text field and `Commands` opens a visual popup list of available commands.
 - `Mute` and `Unmute` show and change the current microphone state.
 - The control dock can be collapsed without covering the grid.
 
