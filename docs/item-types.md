@@ -14,6 +14,7 @@ This is behavior-focused documentation for item types and their defaults.
   - `directional` (directional attenuation enabled)
 - Instance fields are persisted in `server/runtime/items.json`.
 - Read-only inspect fields include `createdBy` and `updatedBy` for ownership/change tracking.
+- Every item has a server-owned `z` height and footprint. Item interaction compares the full `x`, `y`, `z` position.
 
 ## `radio_station`
 
@@ -211,6 +212,29 @@ This is behavior-focused documentation for item types and their defaults.
 - `brightness`: integer `0..100`
 - `emitRange`: integer `5..20`
 - Instrument changes reset `voiceMode`/`octave`/`attack`/`decay`/`release`/`brightness` to instrument defaults.
+
+## `elevator`
+
+### Defaults
+- Title: `Elevator`
+- Floors: ground at `z=0`, second at `z=40`
+- Footprint: 2 by 2 squares, present on both landings
+- Door-open time: 5 seconds
+- Travel time: 5 seconds
+- No built-in sounds until elevator assets are supplied
+
+### Use
+- Use once to call the car or open its door when it is already present.
+- Use again while the door is open to enter. With two floors, entering selects the other floor.
+- The door closes five seconds after the latest open or entry, then the car travels for five seconds.
+- Use after arrival to exit. Use inside a closed, stopped car to reopen its door.
+- Calls made while the car is moving are queued.
+
+### Rules
+- Each placed elevator has its own car and state machine; multiple elevators are allowed.
+- Elevators cannot be carried. They cannot be deleted while moving or occupied.
+- Riders cannot move or teleport while inside.
+- During travel, riders use an intermediate `z`, so they are hidden from both floors and all floor audio is blocked.
 
 ## Adding A New Item Type (Plugin Discovery)
 

@@ -132,12 +132,40 @@ async def test_update_position_rejects_out_of_bounds(
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
     await server._handle_message(
-        client, json.dumps({"type": "update_position", "x": 200, "y": -5})
+        client, json.dumps({"type": "update_position", "x": 200, "y": -5, "z": 0})
     )
 
     assert client.x == 5
     assert client.y == 6
     assert broadcast_payloads == []
+
+
+@pytest.mark.asyncio
+async def test_update_position_cannot_change_floor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Horizontal movement packets must preserve the server-owned floor."""
+
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6, z=0)
+    )
+    server.clients[ws] = client
+    sent: list[object] = []
+
+    async def fake_send(_websocket: ServerConnection, packet: object) -> None:
+        sent.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+
+    await server._handle_message(
+        client, json.dumps({"type": "update_position", "x": 6, "y": 6, "z": 40})
+    )
+
+    assert (client.x, client.y, client.z) == (5, 6, 0)
+    correction = _last_packet_of_type(sent, BroadcastPositionPacket)
+    assert (correction.x, correction.y, correction.z) == (5, 6, 0)
 
 
 @pytest.mark.asyncio
@@ -669,7 +697,10 @@ async def test_item_drop_rejects_out_of_bounds(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(server, "_send", fake_send)
 
     await server._handle_message(
-        client, json.dumps({"type": "item_drop", "itemId": item.id, "x": 999, "y": 999})
+        client,
+        json.dumps(
+            {"type": "item_drop", "itemId": item.id, "x": 999, "y": 999, "z": 0}
+        ),
     )
 
     assert item.carrierId == client.id
@@ -1253,15 +1284,15 @@ async def test_update_position_enforces_cumulative_budget_per_tick(
 
     # First 1-step move in this tick: allowed.
     await server._handle_message(
-        client, json.dumps({"type": "update_position", "x": 6, "y": 5})
+        client, json.dumps({"type": "update_position", "x": 6, "y": 5, "z": 0})
     )
     # Second 1-step move in the same tick: allowed (budget now exhausted at 2).
     await server._handle_message(
-        client, json.dumps({"type": "update_position", "x": 7, "y": 5})
+        client, json.dumps({"type": "update_position", "x": 7, "y": 5, "z": 0})
     )
     # Third 1-step move in the same tick: must be rejected.
     await server._handle_message(
-        client, json.dumps({"type": "update_position", "x": 8, "y": 5})
+        client, json.dumps({"type": "update_position", "x": 8, "y": 5, "z": 0})
     )
 
     assert client.x == 7
@@ -1294,7 +1325,8 @@ async def test_teleport_complete_broadcasts_spatial_event(
     monkeypatch.setattr(server, "_send", fake_send)
 
     await server._handle_message(
-        client, json.dumps({"type": "teleport_complete", "x": 12, "y": 13})
+        client,
+        json.dumps({"type": "teleport_complete", "x": 12, "y": 13, "z": 0}),
     )
 
     position_packets = _packets_of_type(broadcast_payloads, BroadcastPositionPacket)
@@ -1342,7 +1374,7 @@ async def test_update_position_rate_reject_sends_self_correction(
 
     # 2-tile move exceeds per-window budget and should be rejected with correction.
     await server._handle_message(
-        client, json.dumps({"type": "update_position", "x": 7, "y": 5})
+        client, json.dumps({"type": "update_position", "x": 7, "y": 5, "z": 0})
     )
 
     assert client.x == 5

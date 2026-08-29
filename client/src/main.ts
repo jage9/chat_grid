@@ -43,11 +43,15 @@ import { SignalingClient } from './network/signalingClient';
 import { CanvasRenderer } from './render/canvasRenderer';
 import {
   GRID_SIZE,
+  HEARING_RADIUS,
   MOVE_COOLDOWN_MS,
   createInitialState,
   getDirection,
   getNearestItem,
+  getNearestItemPosition,
   getNearestPeer,
+  isItemOnFloor,
+  itemOccupiesPosition,
   type GameMode,
   type WorldItem,
 } from './state/gameState';
@@ -300,6 +304,10 @@ const audio = new AudioEngine();
 const settings = new SettingsStore();
 let worldGridSize = GRID_SIZE;
 let movementTickMs = MOVE_COOLDOWN_MS;
+let worldFloors = new Map<number, string>([
+  [0, 'Ground floor'],
+  [40, 'Second floor'],
+]);
 let lastWallCollisionDirection: string | null = null;
 let statusTimeout: number | null = null;
 let lastFocusedElement: Element | null = null;
@@ -312,7 +320,7 @@ const messageBuffer: string[] = [];
 let messageCursor = -1;
 const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig);
 const itemEmitRuntime = new ItemEmitRuntime(audio, resolveIncomingSoundUrl, getItemSpatialConfig);
-const clockAnnouncer = new ClockAnnouncer(audio, () => ({ x: state.player.x, y: state.player.y }));
+const clockAnnouncer = new ClockAnnouncer(audio, () => ({ x: state.player.x, y: state.player.y, z: state.player.z }));
 let replaceTextOnNextType = false;
 let pendingEscapeDisconnect = false;
 let micGainLoopbackRestoreState: boolean | null = null;
@@ -339,6 +347,7 @@ let audioLayers: AudioLayerState = {
 let lastSubscriptionRefreshAt = 0;
 let lastSubscriptionRefreshTileX = Math.round(state.player.x);
 let lastSubscriptionRefreshTileY = Math.round(state.player.y);
+let lastSubscriptionRefreshTileZ = state.player.z;
 let subscriptionRefreshInFlight = false;
 let subscriptionRefreshPending = false;
 let suppressItemPropertyEchoUntilMs = 0;
@@ -748,19 +757,19 @@ async function applyAudioLayerState(): Promise<void> {
   } else {
     peerManager.suspendRemoteAudio();
   }
-  const listenerPosition = { x: state.player.x, y: state.player.y };
+  const listenerPosition = { x: state.player.x, y: state.player.y, z: state.player.z };
   await radioRuntime.setLayerEnabled(audioLayers.media, state.items.values(), listenerPosition);
   await itemEmitRuntime.setLayerEnabled(audioLayers.item, state.items.values(), listenerPosition);
 }
 
 /** Refreshes distance-gated radio/item stream subscriptions for a listener position. */
-async function refreshAudioSubscriptionsAt(listenerPosition: { x: number; y: number }, force = false): Promise<void> {
+async function refreshAudioSubscriptionsAt(listenerPosition: { x: number; y: number; z: number }, force = false): Promise<void> {
   await refreshAudioSubscriptionsForListeners([listenerPosition], force);
 }
 
 /** Refreshes distance-gated radio/item stream subscriptions for one or more listener positions. */
 async function refreshAudioSubscriptionsForListeners(
-  listenerPositions: Array<{ x: number; y: number }>,
+  listenerPositions: Array<{ x: number; y: number; z: number }>,
   force = false,
 ): Promise<void> {
   if (!state.running) return;
@@ -769,7 +778,8 @@ async function refreshAudioSubscriptionsForListeners(
   const anchorListener = listenerPositions[listenerPositions.length - 1];
   const tileX = Math.round(anchorListener.x);
   const tileY = Math.round(anchorListener.y);
-  const moved = tileX !== lastSubscriptionRefreshTileX || tileY !== lastSubscriptionRefreshTileY;
+  const tileZ = Math.round(anchorListener.z);
+  const moved = tileX !== lastSubscriptionRefreshTileX || tileY !== lastSubscriptionRefreshTileY || tileZ !== lastSubscriptionRefreshTileZ;
   if (!force && !moved && now - lastSubscriptionRefreshAt < AUDIO_SUBSCRIPTION_REFRESH_MS) {
     return;
   }
@@ -781,6 +791,7 @@ async function refreshAudioSubscriptionsForListeners(
   lastSubscriptionRefreshAt = now;
   lastSubscriptionRefreshTileX = tileX;
   lastSubscriptionRefreshTileY = tileY;
+  lastSubscriptionRefreshTileZ = tileZ;
   try {
     await radioRuntime.sync(state.items.values(), listenerPositions);
     await itemEmitRuntime.sync(state.items.values(), listenerPositions);
@@ -798,14 +809,14 @@ async function refreshAudioSubscriptions(force = false): Promise<void> {
   if (activeTeleport) {
     await refreshAudioSubscriptionsForListeners(
       [
-        { x: activeTeleport.startX, y: activeTeleport.startY },
-        { x: activeTeleport.targetX, y: activeTeleport.targetY },
+        { x: activeTeleport.startX, y: activeTeleport.startY, z: state.player.z },
+        { x: activeTeleport.targetX, y: activeTeleport.targetY, z: state.player.z },
       ],
       force,
     );
     return;
   }
-  await refreshAudioSubscriptionsAt({ x: state.player.x, y: state.player.y }, force);
+  await refreshAudioSubscriptionsAt({ x: state.player.x, y: state.player.y, z: state.player.z }, force);
 }
 
 /** Toggles a single audio layer and applies the change immediately. */
@@ -934,7 +945,7 @@ function updateDeviceSummary(): void {
 /** Returns peer nicknames currently occupying the given grid cell. */
 function getPeerNamesAtPosition(x: number, y: number): string[] {
   return Array.from(state.peers.values())
-    .filter((peer) => peer.x === x && peer.y === y)
+    .filter((peer) => peer.x === x && peer.y === y && peer.z === state.player.z)
     .map((peer) => peer.nickname);
 }
 
@@ -973,7 +984,19 @@ function openHelpViewer(lines: string[], returnMode: GameMode = 'normal'): void 
 
 /** Returns non-carried items occupying a given grid position. */
 function getItemsAtPosition(x: number, y: number): WorldItem[] {
-  return Array.from(state.items.values()).filter((item) => !item.carrierId && item.x === x && item.y === y);
+  return Array.from(state.items.values()).filter(
+    (item) => !item.carrierId && itemOccupiesPosition(item, x, y, state.player.z),
+  );
+}
+
+/** Returns the server-provided display name for one floor elevation. */
+function floorName(z: number): string {
+  return worldFloors.get(z) ?? `z ${formatCoordinate(z)}`;
+}
+
+/** Formats a complete world location for speech and lists. */
+function locationPhrase(x: number, y: number, z: number): string {
+  return `${formatCoordinate(x)}, ${formatCoordinate(y)}, ${formatCoordinate(z)}, ${floorName(z)}`;
 }
 
 /** Returns the item currently carried by the local player, if any. */
@@ -1184,8 +1207,8 @@ function startTeleportTo(targetX: number, targetY: number, completionStatus: str
   });
   void refreshAudioSubscriptionsForListeners(
     [
-      { x: startX, y: startY },
-      { x: targetX, y: targetY },
+      { x: startX, y: startY, z: state.player.z },
+      { x: targetX, y: targetY, z: state.player.z },
     ],
     true,
   );
@@ -1216,7 +1239,7 @@ function updateTeleport(): void {
     if (syncX !== activeTeleport.lastSentX || syncY !== activeTeleport.lastSentY) {
       activeTeleport.lastSentX = syncX;
       activeTeleport.lastSentY = syncY;
-      signaling.send({ type: 'update_position', x: syncX, y: syncY });
+      signaling.send({ type: 'update_position', x: syncX, y: syncY, z: state.player.z });
     }
   }
 
@@ -1226,7 +1249,7 @@ function updateTeleport(): void {
   const completionStatus = activeTeleport.completionStatus;
   state.player.x = activeTeleport.targetX;
   state.player.y = activeTeleport.targetY;
-  signaling.send({ type: 'teleport_complete', x: activeTeleport.targetX, y: activeTeleport.targetY });
+  signaling.send({ type: 'teleport_complete', x: activeTeleport.targetX, y: activeTeleport.targetY, z: state.player.z });
   activeTeleport = null;
   stopTeleportLoopAudio();
   void refreshAudioSubscriptions(true);
@@ -1243,10 +1266,11 @@ function gameLoop(): void {
   if (!activeTeleport) {
     void refreshAudioSubscriptions();
   }
-  audio.updateSpatialAudio(peerManager.getPeers(), { x: state.player.x, y: state.player.y });
-  audio.updateSpatialSamples({ x: state.player.x, y: state.player.y });
-  radioRuntime.updateSpatialAudio(state.items, { x: state.player.x, y: state.player.y });
-  itemEmitRuntime.updateSpatialAudio(state.items, { x: state.player.x, y: state.player.y });
+  const listenerPosition = { x: state.player.x, y: state.player.y, z: state.player.z };
+  audio.updateSpatialAudio(peerManager.getPeers(), listenerPosition);
+  audio.updateSpatialSamples(listenerPosition);
+  radioRuntime.updateSpatialAudio(state.items, listenerPosition);
+  itemEmitRuntime.updateSpatialAudio(state.items, listenerPosition);
   state.cursorVisible = Math.floor(Date.now() / 500) % 2 === 0;
   renderer.draw(state);
   requestAnimationFrame(gameLoop);
@@ -1256,6 +1280,7 @@ function gameLoop(): void {
 function handleMovement(): void {
   if (state.mode !== 'normal') return;
   if (activeTeleport) return;
+  if (state.elevatorItemId) return;
   const now = Date.now();
   if (now - state.player.lastMoveTime < movementTickMs) return;
 
@@ -1289,7 +1314,7 @@ function handleMovement(): void {
   state.player.lastMoveTime = now;
   void refreshAudioSubscriptions(true);
   void audio.playSample(randomFootstepUrl(), FOOTSTEP_GAIN, movementTickMs);
-  signaling.send({ type: 'update_position', x: nextX, y: nextY });
+  signaling.send({ type: 'update_position', x: nextX, y: nextY, z: state.player.z });
 
   const namesOnTile = getPeerNamesAtPosition(nextX, nextY);
   const itemsOnTile = getItemsAtPosition(nextX, nextY);
@@ -1555,6 +1580,9 @@ const onAppMessage = createOnMessageHandler({
   setWorldGridSize: (size) => {
     worldGridSize = size;
   },
+  setWorldFloors: (floors) => {
+    worldFloors = new Map(floors.map((floor) => [floor.z, floor.name]));
+  },
   setMovementTickMs: (value) => {
     movementTickMs = Math.max(1, value);
   },
@@ -1577,12 +1605,12 @@ const onAppMessage = createOnMessageHandler({
   gameLoop,
   sanitizeName,
   randomFootstepUrl,
-  playRemoteSpatialStepOrTeleport: (url, peerX, peerY) => {
+  playRemoteSpatialStepOrTeleport: (url, peerX, peerY, peerZ) => {
     const gain = url === TELEPORT_START_SOUND_URL ? TELEPORT_START_GAIN : FOOTSTEP_GAIN;
     void audio.playSpatialSample(
       url,
-      { x: peerX, y: peerY },
-      { x: state.player.x, y: state.player.y },
+      { x: peerX, y: peerY, z: peerZ },
+      { x: state.player.x, y: state.player.y, z: state.player.z },
       gain,
     );
   },
@@ -1611,11 +1639,11 @@ const onAppMessage = createOnMessageHandler({
   shouldAnnounceItemPropertyEcho: () => Date.now() >= suppressItemPropertyEchoUntilMs,
   playLocateToneAt: (x, y) => audio.sfxLocate({ x: x - state.player.x, y: y - state.player.y }),
   resolveIncomingSoundUrl,
-  playIncomingItemUseSound: (url, x, y, range) => {
-    void audio.playSpatialSample(url, { x, y }, { x: state.player.x, y: state.player.y }, 1, range ?? HEARING_RADIUS);
+  playIncomingItemUseSound: (url, x, y, z, range) => {
+    void audio.playSpatialSample(url, { x, y, z }, { x: state.player.x, y: state.player.y, z: state.player.z }, 1, range ?? HEARING_RADIUS);
   },
-  playClockAnnouncement: (sounds, x, y, range) => {
-    void clockAnnouncer.playSequence(sounds.map(resolveIncomingSoundUrl), x, y, range);
+  playClockAnnouncement: (sounds, x, y, z, range) => {
+    void clockAnnouncer.playSequence(sounds.map(resolveIncomingSoundUrl), x, y, z, range);
   },
   handleAuthRequired,
   handleAuthResult,
@@ -1791,7 +1819,7 @@ function adjustEffectValueCommand(step: number): void {
 }
 
 function speakCoordinatesCommand(): void {
-  updateStatus(`${formatCoordinate(state.player.x)}, ${formatCoordinate(state.player.y)}`);
+  updateStatus(locationPhrase(state.player.x, state.player.y, state.player.z));
   audio.sfxUiBlip();
 }
 
@@ -1882,12 +1910,13 @@ function addItemCommand(): void {
 
 function listItemsCommand(): void {
   state.sortedItemIds = Array.from(state.items.entries())
-    .filter(([, item]) => !item.carrierId)
-    .sort(
-      (a, b) =>
-        Math.hypot(a[1].x - state.player.x, a[1].y - state.player.y) -
-        Math.hypot(b[1].x - state.player.x, b[1].y - state.player.y),
-    )
+    .filter(([, item]) => !item.carrierId && isItemOnFloor(item, state.player.z))
+    .sort((a, b) => {
+      const positionA = getNearestItemPosition(a[1], state.player.x, state.player.y);
+      const positionB = getNearestItemPosition(b[1], state.player.x, state.player.y);
+      return Math.hypot(positionA.x - state.player.x, positionA.y - state.player.y)
+        - Math.hypot(positionB.x - state.player.x, positionB.y - state.player.y);
+    })
     .map(([id]) => id);
   if (state.sortedItemIds.length === 0) {
     updateStatus('No items to list.');
@@ -1901,11 +1930,12 @@ function listItemsCommand(): void {
     audio.sfxUiCancel();
     return;
   }
+  const firstPosition = getNearestItemPosition(first, state.player.x, state.player.y);
   const itemCount = state.sortedItemIds.length;
   const itemLabelText = itemCount === 1 ? 'item' : 'items';
   announceMenuEntry(
     `${itemCount} ${itemLabelText}`,
-    `${itemLabel(first)}, ${distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y)}, ${first.x}, ${first.y}`,
+    `${itemLabel(first)}, ${distanceDirectionPhrase(state.player.x, state.player.y, firstPosition.x, firstPosition.y)}, ${locationPhrase(firstPosition.x, firstPosition.y, state.player.z)}`,
   );
 }
 
@@ -1918,14 +1948,15 @@ function locateNearestItemCommand(): void {
   }
   const item = state.items.get(nearest.itemId);
   if (!item) return;
-  audio.sfxLocate({ x: item.x - state.player.x, y: item.y - state.player.y });
-  updateStatus(`${itemLabel(item)}, ${distanceDirectionPhrase(state.player.x, state.player.y, item.x, item.y)}, ${item.x}, ${item.y}`);
+  const position = getNearestItemPosition(item, state.player.x, state.player.y);
+  audio.sfxLocate({ x: position.x - state.player.x, y: position.y - state.player.y });
+  updateStatus(`${itemLabel(item)}, ${distanceDirectionPhrase(state.player.x, state.player.y, position.x, position.y)}, ${locationPhrase(position.x, position.y, state.player.z)}`);
 }
 
 function pickupDropItemCommand(): void {
   const carried = getCarriedItem();
   if (carried) {
-    signaling.send({ type: 'item_drop', itemId: carried.id, x: state.player.x, y: state.player.y });
+    signaling.send({ type: 'item_drop', itemId: carried.id, x: state.player.x, y: state.player.y, z: state.player.z });
     return;
   }
   const squareItems = getCurrentSquareItems();
@@ -2024,7 +2055,7 @@ function listUsersCommand(): void {
   const gainPhrase = `volume ${formatSteppedNumber(getPeerListenGainForNickname(first.nickname), MIC_INPUT_GAIN_STEP)}`;
   announceMenuEntry(
     `${userCount} ${userLabelText}`,
-    `${first.nickname}, ${gainPhrase}, ${distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y)}, ${first.x}, ${first.y}`,
+    `${first.nickname}, ${gainPhrase}, ${first.z === state.player.z ? distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y) : 'different floor'}, ${locationPhrase(first.x, first.y, first.z)}`,
   );
 }
 
@@ -2038,7 +2069,7 @@ function locateNearestUserCommand(): void {
   const peer = state.peers.get(nearest.peerId);
   if (!peer) return;
   audio.sfxLocate({ x: peer.x - state.player.x, y: peer.y - state.player.y });
-  updateStatus(`${peer.nickname}, ${distanceDirectionPhrase(state.player.x, state.player.y, peer.x, peer.y)}, ${peer.x}, ${peer.y}`);
+  updateStatus(`${peer.nickname}, ${distanceDirectionPhrase(state.player.x, state.player.y, peer.x, peer.y)}, ${locationPhrase(peer.x, peer.y, peer.z)}`);
 }
 
 function openHelpCommand(): void {
@@ -2408,7 +2439,7 @@ function handleListModeInput(code: string, key: string): void {
     if (!entry) return;
     const gainPhrase = `volume ${formatSteppedNumber(getPeerListenGainForNickname(entry.nickname), MIC_INPUT_GAIN_STEP)}`;
     updateStatus(
-      `${entry.nickname}, ${gainPhrase}, ${distanceDirectionPhrase(state.player.x, state.player.y, entry.x, entry.y)}, ${entry.x}, ${entry.y}`,
+      `${entry.nickname}, ${gainPhrase}, ${entry.z === state.player.z ? distanceDirectionPhrase(state.player.x, state.player.y, entry.x, entry.y) : 'different floor'}, ${locationPhrase(entry.x, entry.y, entry.z)}`,
     );
     if (control.reason === 'initial') {
       audio.sfxUiBlip();
@@ -2419,6 +2450,11 @@ function handleListModeInput(code: string, key: string): void {
   if (control.type === 'select') {
     const entry = state.peers.get(state.sortedPeerIds[state.listIndex]);
     if (!entry) return;
+    if (entry.z !== state.player.z) {
+      updateStatus(`${entry.nickname} is on ${floorName(entry.z)}.`);
+      audio.sfxUiCancel();
+      return;
+    }
     if (state.player.x === entry.x && state.player.y === entry.y) {
       updateStatus('Already here.');
       return;
@@ -2450,8 +2486,9 @@ function handleListItemsModeInput(code: string, key: string): void {
     state.itemListIndex = control.index;
     const item = state.items.get(state.sortedItemIds[state.itemListIndex]);
     if (!item) return;
+    const position = getNearestItemPosition(item, state.player.x, state.player.y);
     updateStatus(
-      `${itemLabel(item)}, ${distanceDirectionPhrase(state.player.x, state.player.y, item.x, item.y)}, ${item.x}, ${item.y}`,
+      `${itemLabel(item)}, ${distanceDirectionPhrase(state.player.x, state.player.y, position.x, position.y)}, ${locationPhrase(position.x, position.y, state.player.z)}`,
     );
     if (control.reason === 'initial') {
       audio.sfxUiBlip();
@@ -2461,7 +2498,7 @@ function handleListItemsModeInput(code: string, key: string): void {
   if (control.type === 'select') {
     const item = state.items.get(state.sortedItemIds[state.itemListIndex]);
     if (!item) return;
-    if (state.player.x === item.x && state.player.y === item.y) {
+    if (itemOccupiesPosition(item, state.player.x, state.player.y, state.player.z)) {
       updateStatus('Already here.');
       return;
     }

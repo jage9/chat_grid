@@ -1,4 +1,4 @@
-import { GRID_SIZE, type GameState, type PeerState, type WorldItem } from '../state/gameState';
+import { GRID_SIZE, isItemOnFloor, type GameState, type PeerState, type WorldItem } from '../state/gameState';
 
 export class CanvasRenderer {
   private readonly ctx: CanvasRenderingContext2D;
@@ -35,11 +35,15 @@ export class CanvasRenderer {
     }
 
     for (const peer of state.peers.values()) {
+      if (peer.z !== state.player.z) continue;
       this.drawObject(peer, '#f87171', peer.nickname);
     }
     for (const item of state.items.values()) {
       if (item.carrierId) continue;
-      this.drawItem(item);
+      if (!isItemOnFloor(item, state.player.z)) continue;
+      for (const offset of item.occupiedOffsets) {
+        this.drawItem(item, offset.x, offset.y);
+      }
     }
     this.drawObject(state.player, '#34d399', state.player.nickname);
 
@@ -81,9 +85,9 @@ export class CanvasRenderer {
     }
   }
 
-  private drawItem(item: WorldItem): void {
-    const drawX = item.x * this.squarePixelSize;
-    const drawY = this.canvas.height - (item.y * this.squarePixelSize) - this.squarePixelSize;
+  private drawItem(item: WorldItem, offsetX: number, offsetY: number): void {
+    const drawX = (item.x + offsetX) * this.squarePixelSize;
+    const drawY = this.canvas.height - ((item.y + offsetY) * this.squarePixelSize) - this.squarePixelSize;
     this.ctx.fillStyle =
       item.type === 'radio_station'
         ? '#fbbf24'
@@ -93,6 +97,8 @@ export class CanvasRenderer {
             ? '#c4b5fd'
           : item.type === 'clock'
             ? '#86efac'
+            : item.type === 'elevator'
+              ? '#9ca3af'
             : item.type === 'widget'
               ? '#22d3ee'
               : '#60a5fa';
@@ -109,6 +115,8 @@ export class CanvasRenderer {
             ? 'P'
           : item.type === 'clock'
             ? 'C'
+            : item.type === 'elevator'
+              ? 'E'
             : item.type === 'widget'
               ? 'B'
               : 'D',

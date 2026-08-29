@@ -220,6 +220,7 @@ export function getInspectItemPropertyKeys(item: WorldItem): string[] {
     'type',
     'x',
     'y',
+    'z',
     'carrierId',
     'version',
     'createdBy',

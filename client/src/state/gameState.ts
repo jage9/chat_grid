@@ -10,6 +10,7 @@ export type WorldItem = {
   title: string;
   x: number;
   y: number;
+  z: number;
   createdBy: string;
   updatedBy: string;
   createdAt: number;
@@ -21,6 +22,7 @@ export type WorldItem = {
   params: Record<string, unknown>;
   carrierId?: string | null;
   display?: Record<string, string>;
+  occupiedOffsets: Array<{ x: number; y: number }>;
 };
 
 export type SelectionContext = 'pickup' | 'drop' | 'delete' | 'edit' | 'use' | 'secondaryUse' | 'inspect' | 'manage' | null;
@@ -58,6 +60,7 @@ export type Player = {
   nickname: string;
   x: number;
   y: number;
+  z: number;
   lastMoveTime: number;
 };
 
@@ -67,6 +70,7 @@ export type PeerState = {
   nickname: string;
   x: number;
   y: number;
+  z: number;
 };
 
 export type GameState = {
@@ -96,6 +100,7 @@ export type GameState = {
   peers: Map<string, PeerState>;
   items: Map<string, WorldItem>;
   carriedItemId: string | null;
+  elevatorItemId: string | null;
 };
 
 export function createInitialState(): GameState {
@@ -127,11 +132,13 @@ export function createInitialState(): GameState {
       nickname: 'anon',
       x: 20,
       y: 20,
+      z: 0,
       lastMoveTime: 0,
     },
     peers: new Map(),
     items: new Map(),
     carriedItemId: null,
+    elevatorItemId: null,
   };
 }
 
@@ -139,6 +146,7 @@ export function getNearestPeer(state: GameState): { peerId: string | null; dista
   let nearest: string | null = null;
   let minDist = Infinity;
   for (const [id, peer] of state.peers.entries()) {
+    if (peer.z !== state.player.z) continue;
     const dist = Math.hypot(peer.x - state.player.x, peer.y - state.player.y);
     if (dist < minDist) {
       minDist = dist;
@@ -167,11 +175,42 @@ export function getNearestItem(state: GameState): { itemId: string | null; dista
   let minDist = Infinity;
   for (const [id, item] of state.items.entries()) {
     if (item.carrierId) continue;
-    const dist = Math.hypot(item.x - state.player.x, item.y - state.player.y);
+    if (!isItemOnFloor(item, state.player.z)) continue;
+    const nearestPosition = getNearestItemPosition(item, state.player.x, state.player.y);
+    const dist = Math.hypot(nearestPosition.x - state.player.x, nearestPosition.y - state.player.y);
     if (dist < minDist) {
       minDist = dist;
       nearest = id;
     }
   }
   return { itemId: nearest, distance: minDist };
+}
+
+/** Returns whether an item occupies the requested floor. */
+export function isItemOnFloor(item: WorldItem, z: number): boolean {
+  const floorZs = item.params.floorZs;
+  return Array.isArray(floorZs)
+    ? floorZs.some((floorZ) => Number(floorZ) === z)
+    : item.z === z;
+}
+
+/** Returns whether an item footprint occupies a world cell on a floor. */
+export function itemOccupiesPosition(item: WorldItem, x: number, y: number, z: number): boolean {
+  if (!isItemOnFloor(item, z)) return false;
+  return item.occupiedOffsets.some((offset) => item.x + offset.x === x && item.y + offset.y === y);
+}
+
+/** Returns the occupied item cell nearest to a listener position. */
+export function getNearestItemPosition(item: WorldItem, x: number, y: number): { x: number; y: number } {
+  let nearest = { x: item.x, y: item.y };
+  let nearestDistance = Infinity;
+  for (const offset of item.occupiedOffsets) {
+    const candidate = { x: item.x + offset.x, y: item.y + offset.y };
+    const distance = Math.hypot(candidate.x - x, candidate.y - y);
+    if (distance < nearestDistance) {
+      nearest = candidate;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
 }

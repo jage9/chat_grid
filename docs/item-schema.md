@@ -5,10 +5,11 @@
 ```json
 {
   "id": "string",
-  "type": "radio_station | dice | wheel | clock | widget | piano",
+  "type": "radio_station | dice | wheel | clock | widget | piano | elevator",
   "title": "string",
   "x": 0,
   "y": 0,
+  "z": 0,
   "createdBy": "user-id",
   "createdByName": "username",
   "updatedBy": "user-id",
@@ -20,7 +21,8 @@
   "useSound": "sounds/roll.ogg",
   "emitSound": "sounds/clock.ogg",
   "params": {},
-  "carrierId": null
+  "carrierId": null,
+  "occupiedOffsets": [{"x": 0, "y": 0}]
 }
 ```
 
@@ -33,16 +35,19 @@
 - `emitRange`: global spatial range default per item type (`radio_station=10`, `dice=15`, `wheel=15`, `clock=10`, `widget=15`, `piano=15`).
   - `radio_station` can override this per instance via `params.emitRange` (`5..20`).
 - `directional`: global directional attenuation flag per item type (`radio_station=true`, others `false`); `widget` can override per instance via `params.directional`.
+- `z`: authoritative floor height. Ordinary items use `0` or `40`.
+- `occupiedOffsets`: server-owned horizontal footprint relative to the item anchor. Existing items use one cell; elevators use a 2 by 2 footprint.
 
 ## Persisted Item State (`server/runtime/items.json`)
 
 ```json
 {
   "id": "string",
-  "type": "radio_station | dice | wheel | clock | widget | piano",
+  "type": "radio_station | dice | wheel | clock | widget | piano | elevator",
   "title": "string",
   "x": 0,
   "y": 0,
+  "z": 0,
   "createdBy": "user-id",
   "createdByName": "username",
   "updatedBy": "user-id",
@@ -57,6 +62,7 @@
 
 - Persisted state stores only instance data.
 - Global/type-level properties are loaded from server registry in `server/app/item_catalog.py`.
+- Footprints are derived from the item type when state loads and are not duplicated in persisted state.
 - Per-type use/update validation and message behavior are implemented in per-item modules under `server/app/items/types/*/definition.py`, `validator.py`, and `actions.py`, discovered via plugins in `server/app/items/types/*/plugin.py`.
 - Client-side add/edit metadata is consumed from `welcome.uiDefinitions` via `client/src/items/itemRegistry.ts` (no local fallback definitions).
 - End-to-end add-item template: `docs/item-type-template.md`.
@@ -217,6 +223,25 @@
   - `states`: parameter-state dictionary (for mid-song instrument/param changes)
   - `events`: `[t, keyIndex, midi, on, stateIndex]`
 
+### `elevator`
+
+```json
+{
+  "floorZs": [0, 40],
+  "currentZ": 0,
+  "targetZ": null,
+  "queuedZ": null,
+  "departOnCloseZ": null,
+  "state": "idle",
+  "doorOpen": false
+}
+```
+
+- The server owns every field except the display title.
+- Each elevator is an independent object; more than one may be placed.
+- The shaft occupies a 2 by 2 footprint on both configured floors.
+- Elevator runtime timers are not resumed after a server restart. A loaded elevator returns to a closed, idle state at its last completed floor.
+
 ## Packet Shapes
 
 - `item_upsert`:
@@ -257,7 +282,8 @@
   "itemId": "item-id",
   "sound": "sounds/roll.ogg",
   "x": 12,
-  "y": 8
+  "y": 8,
+  "z": 0
 }
 ```
 
@@ -269,7 +295,8 @@
   "itemId": "item-id",
   "sounds": ["/sounds/clock/el640/its.ogg", "/sounds/clock/el640/2.ogg", "/sounds/clock/el640/PM.ogg"],
   "x": 12,
-  "y": 8
+  "y": 8,
+  "z": 0
 }
 ```
 
@@ -292,6 +319,9 @@
   "brightness": 55,
   "x": 12,
   "y": 8,
+  "z": 0,
   "emitRange": 15
 }
 ```
+
+- `item_elevator_status` is sent only to a rider and reports `entered`, `moving`, `arrived`, or `exited`, with the current or intermediate `z`.

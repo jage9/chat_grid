@@ -5,7 +5,9 @@ from app.models import ClientPacket
 
 def test_update_position_validates() -> None:
     adapter: TypeAdapter[ClientPacket] = TypeAdapter(ClientPacket)
-    packet = adapter.validate_python({"type": "update_position", "x": 10, "y": 12})
+    packet = adapter.validate_python(
+        {"type": "update_position", "x": 10, "y": 12, "z": 0}
+    )
     assert packet.type == "update_position"
 
 

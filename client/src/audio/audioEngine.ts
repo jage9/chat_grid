@@ -13,6 +13,7 @@ export type SpatialPeerRuntime = {
   nickname: string;
   x: number;
   y: number;
+  z: number;
   listenGain?: number;
   gain?: GainNode;
   panner?: StereoPannerNode;
@@ -33,6 +34,7 @@ const ONE_SHOT_ATTACK_SECONDS = 0.02;
 type ActiveSpatialSampleRuntime = {
   sourceX: number;
   sourceY: number;
+  sourceZ: number;
   range: number;
   baseGain: number;
   gainNode: GainNode;
@@ -296,18 +298,18 @@ export class AudioEngine {
     peer.panner = pannerNode;
   }
 
-  updateSpatialAudio(peers: Iterable<SpatialPeerRuntime>, playerPosition: { x: number; y: number }): void {
+  updateSpatialAudio(peers: Iterable<SpatialPeerRuntime>, playerPosition: { x: number; y: number; z: number }): void {
     if (!this.audioCtx) return;
 
     for (const peer of peers) {
       if (!peer.gain) continue;
-      const mix = resolveSpatialMix({
+      const mix = peer.z === playerPosition.z ? resolveSpatialMix({
         dx: peer.x - playerPosition.x,
         dy: peer.y - playerPosition.y,
         range: HEARING_RADIUS,
         nearFieldDistance: 1.5,
         nearFieldGain: 1,
-      });
+      }) : null;
       const listenGain = Number.isFinite(peer.listenGain) ? Math.max(0, peer.listenGain as number) : 1;
       const scaledMix = mix ? { ...mix, gain: mix.gain * listenGain } : null;
       applySpatialMixToNodes({
@@ -322,7 +324,7 @@ export class AudioEngine {
   }
 
   /** Updates active one-shot spatial sample gain/pan against current listener position. */
-  updateSpatialSamples(playerPosition: { x: number; y: number }): void {
+  updateSpatialSamples(playerPosition: { x: number; y: number; z: number }): void {
     if (!this.audioCtx) return;
     for (const sample of Array.from(this.activeSpatialSamples)) {
       this.applySpatialSampleRuntime(sample, playerPosition);
@@ -359,8 +361,8 @@ export class AudioEngine {
 
   async playSpatialSample(
     url: string,
-    sourcePosition: { x: number; y: number },
-    playerPosition: { x: number; y: number },
+    sourcePosition: { x: number; y: number; z: number },
+    playerPosition: { x: number; y: number; z: number },
     gain = 1,
     range = HEARING_RADIUS,
   ): Promise<void> {
@@ -385,6 +387,7 @@ export class AudioEngine {
       const runtime: ActiveSpatialSampleRuntime = {
         sourceX: sourcePosition.x,
         sourceY: sourcePosition.y,
+        sourceZ: sourcePosition.z,
         range: Math.max(1, range),
         baseGain: gain,
         gainNode,
@@ -412,8 +415,8 @@ export class AudioEngine {
   /** Plays one spatial sample and resolves when playback finishes. */
   async playSpatialSampleAndWait(
     url: string,
-    sourcePosition: { x: number; y: number },
-    playerPosition: { x: number; y: number },
+    sourcePosition: { x: number; y: number; z: number },
+    playerPosition: { x: number; y: number; z: number },
     gain = 1,
     range = HEARING_RADIUS,
   ): Promise<void> {
@@ -438,6 +441,7 @@ export class AudioEngine {
       const runtime: ActiveSpatialSampleRuntime = {
         sourceX: sourcePosition.x,
         sourceY: sourcePosition.y,
+        sourceZ: sourcePosition.z,
         range: Math.max(1, range),
         baseGain: gain,
         gainNode,
@@ -617,16 +621,16 @@ export class AudioEngine {
 
   private applySpatialSampleRuntime(
     sample: ActiveSpatialSampleRuntime,
-    playerPosition: { x: number; y: number },
+    playerPosition: { x: number; y: number; z: number },
     initial = false,
   ): void {
     if (!this.audioCtx) return;
-    const mix = resolveSpatialMix({
+    const mix = sample.sourceZ === playerPosition.z ? resolveSpatialMix({
       dx: sample.sourceX - playerPosition.x,
       dy: sample.sourceY - playerPosition.y,
       range: sample.range,
       baseGain: sample.baseGain,
-    });
+    }) : null;
     if (initial) {
       const gainValue = mix?.gain ?? 0;
       sample.gainNode.gain.setTargetAtTime(gainValue, this.audioCtx.currentTime, ONE_SHOT_ATTACK_SECONDS);

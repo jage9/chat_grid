@@ -16,12 +16,14 @@ class UpdatePositionPacket(BasePacket):
     type: Literal["update_position"]
     x: int
     y: int
+    z: int
 
 
 class TeleportCompletePacket(BasePacket):
     type: Literal["teleport_complete"]
     x: int
     y: int
+    z: int
 
 
 class UpdateNicknamePacket(BasePacket):
@@ -127,6 +129,7 @@ class ItemDropPacket(BasePacket):
     itemId: str
     x: int
     y: int
+    z: int
 
 
 class ItemDeletePacket(BasePacket):
@@ -216,6 +219,7 @@ class RemoteUser(BaseModel):
     nickname: str
     x: int
     y: int
+    z: int
 
 
 class WelcomePacket(BasePacket):
@@ -271,6 +275,7 @@ class BroadcastPositionPacket(BasePacket):
     id: str
     x: int
     y: int
+    z: int
 
 
 class BroadcastTeleportCompletePacket(BasePacket):
@@ -278,6 +283,7 @@ class BroadcastTeleportCompletePacket(BasePacket):
     id: str
     x: int
     y: int
+    z: int
 
 
 class BroadcastNicknamePacket(BasePacket):
@@ -322,6 +328,7 @@ class WorldItem(BaseModel):
     title: str
     x: int
     y: int
+    z: int
     createdBy: str
     createdByName: str
     updatedBy: str
@@ -335,6 +342,9 @@ class WorldItem(BaseModel):
     params: dict
     carrierId: str | None = None
     display: dict[str, str] | None = None
+    occupiedOffsets: list[dict[str, int]] = Field(
+        default_factory=lambda: [{"x": 0, "y": 0}]
+    )
 
 
 class PersistedWorldItem(BaseModel):
@@ -344,6 +354,7 @@ class PersistedWorldItem(BaseModel):
     title: str
     x: int
     y: int
+    z: int = 0
     createdBy: str
     createdByName: str | None = None
     updatedBy: str | None = None
@@ -393,6 +404,7 @@ class ItemUseSoundPacket(BasePacket):
     sound: str
     x: int
     y: int
+    z: int
     range: int | None = None
 
 
@@ -402,6 +414,7 @@ class ItemClockAnnouncePacket(BasePacket):
     sounds: list[str]
     x: int
     y: int
+    z: int
     range: int | None = None
 
 
@@ -421,6 +434,7 @@ class ItemPianoNoteBroadcastPacket(BasePacket):
     brightness: int
     x: int
     y: int
+    z: int
     emitRange: int
 
 
@@ -437,6 +451,15 @@ class ItemPianoStatusPacket(BasePacket):
         "playback_stopped",
     ]
     recordingState: Literal["idle", "recording", "paused", "playback"] | None = None
+
+
+class ItemElevatorStatusPacket(BasePacket):
+    """Targeted elevator occupancy/travel state for one rider."""
+
+    type: Literal["item_elevator_status"]
+    itemId: str
+    event: Literal["entered", "moving", "arrived", "exited"]
+    z: int
 
 
 class AdminRoleSummary(BaseModel):

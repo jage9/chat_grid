@@ -7,7 +7,7 @@ export type ItemBehaviorDeps = {
   state: {
     mode: GameMode;
     items: Map<string, WorldItem>;
-    player: { id: string | null; x: number; y: number };
+    player: { id: string | null; x: number; y: number; z: number };
   };
   audio: {
     ensureContext: () => Promise<void>;

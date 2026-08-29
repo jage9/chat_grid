@@ -25,6 +25,7 @@ export class PeerManager {
   private room: Room | null = null;
   private localTrack: LocalAudioTrack | null = null;
   private outboundTrack: MediaStreamTrack | null = null;
+  private listenerZ = 0;
 
   constructor(
     private readonly audio: AudioEngine,
@@ -50,9 +51,22 @@ export class PeerManager {
     });
     room.on(
       RoomEvent.TrackSubscribed,
-      (track: RemoteTrack, _publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+      (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
         if (track.kind !== Track.Kind.Audio || !track.mediaStreamTrack) return;
+        const peer = this.peers.get(participant.identity);
+        if (peer && peer.z !== this.listenerZ) {
+          publication.setSubscribed(false);
+          return;
+        }
         this.setRemoteStream(participant.identity, new MediaStream([track.mediaStreamTrack]));
+      },
+    );
+    room.on(
+      RoomEvent.TrackPublished,
+      (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+        if (publication.kind !== Track.Kind.Audio) return;
+        const peer = this.peers.get(participant.identity);
+        publication.setSubscribed(Boolean(peer && peer.z === this.listenerZ));
       },
     );
     room.on(
@@ -70,6 +84,7 @@ export class PeerManager {
 
     await room.connect(url, token);
     this.room = room;
+    this.syncFloorSubscriptions();
     await this.publishOutboundTrack();
   }
 
@@ -82,14 +97,18 @@ export class PeerManager {
       nickname: userData.nickname ?? 'user...',
       x: userData.x ?? 20,
       y: userData.y ?? 20,
+      z: userData.z ?? 0,
       listenGain: 1,
     };
     this.peers.set(targetId, peer);
     const pending = this.pendingRemoteStreams.get(targetId);
     if (pending) {
       this.pendingRemoteStreams.delete(targetId);
-      this.attachRemoteStream(peer, pending);
+      if (peer.z === this.listenerZ) {
+        this.attachRemoteStream(peer, pending);
+      }
     }
+    this.syncParticipantFloorSubscription(targetId);
     return peer;
   }
 
@@ -117,12 +136,21 @@ export class PeerManager {
     this.outboundTrack = null;
   }
 
-  setPeerPosition(id: string, x: number, y: number): void {
+  setPeerPosition(id: string, x: number, y: number, z: number): void {
     const peer = this.peers.get(id);
     if (peer) {
       peer.x = x;
       peer.y = y;
+      peer.z = z;
     }
+    this.syncParticipantFloorSubscription(id);
+  }
+
+  /** Unsubscribe from remote voice tracks outside the listener's floor. */
+  setListenerFloor(z: number): void {
+    if (this.listenerZ === z) return;
+    this.listenerZ = z;
+    this.syncFloorSubscriptions();
   }
 
   setPeerNickname(id: string, nickname: string): void {
@@ -171,6 +199,7 @@ export class PeerManager {
 
   private setRemoteStream(participantId: string, stream: MediaStream): void {
     const peer = this.peers.get(participantId);
+    if (peer && peer.z !== this.listenerZ) return;
     if (!peer) {
       this.pendingRemoteStreams.set(participantId, stream);
       return;
@@ -192,5 +221,24 @@ export class PeerManager {
     if (!peer) return;
     this.audio.cleanupPeerAudio(peer);
     peer.remoteStream = undefined;
+  }
+
+  private syncFloorSubscriptions(): void {
+    for (const participantId of this.peers.keys()) {
+      this.syncParticipantFloorSubscription(participantId);
+    }
+  }
+
+  private syncParticipantFloorSubscription(participantId: string): void {
+    const peer = this.peers.get(participantId);
+    const participant = this.room?.remoteParticipants.get(participantId);
+    if (!peer || !participant) return;
+    const subscribed = peer.z === this.listenerZ;
+    for (const publication of participant.audioTrackPublications.values()) {
+      publication.setSubscribed(subscribed);
+    }
+    if (!subscribed) {
+      this.clearRemoteStream(participantId);
+    }
   }
 }

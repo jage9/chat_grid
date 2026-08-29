@@ -99,7 +99,7 @@ export class ItemEmitRuntime {
   private readonly nextEmitStartAtMs = new Map<string, number>();
   private readonly emitStartFailureCount = new Map<string, number>();
   private layerEnabled = true;
-  private listenerPositions: Array<{ x: number; y: number }> = [];
+  private listenerPositions: Array<{ x: number; y: number; z: number }> = [];
 
   constructor(
     private readonly audio: AudioEngine,
@@ -151,7 +151,7 @@ export class ItemEmitRuntime {
   async setLayerEnabled(
     enabled: boolean,
     items: Iterable<WorldItem>,
-    listenerPosition: { x: number; y: number } | null = null,
+    listenerPosition: { x: number; y: number; z: number } | null = null,
   ): Promise<void> {
     this.layerEnabled = enabled;
     this.listenerPositions = listenerPosition ? [{ ...listenerPosition }] : [];
@@ -164,7 +164,7 @@ export class ItemEmitRuntime {
 
   async sync(
     items: Iterable<WorldItem>,
-    listenerPositions: Array<{ x: number; y: number }> | { x: number; y: number } | null = null,
+    listenerPositions: Array<{ x: number; y: number; z: number }> | { x: number; y: number; z: number } | null = null,
   ): Promise<void> {
     if (!this.layerEnabled) {
       this.cleanupAll();
@@ -366,7 +366,7 @@ export class ItemEmitRuntime {
     }
   }
 
-  updateSpatialAudio(items: Map<string, WorldItem>, playerPosition: { x: number; y: number }): void {
+  updateSpatialAudio(items: Map<string, WorldItem>, playerPosition: { x: number; y: number; z: number }): void {
     if (!this.layerEnabled) return;
     const audioCtx = this.audio.context;
     if (!audioCtx) return;
@@ -405,7 +405,7 @@ export class ItemEmitRuntime {
         output.element.playbackRate = nextPlaybackRate;
       }
       const spatialConfig = this.getSpatialConfig(item);
-      const mix = resolveSpatialMix({
+      const mix = item.z === playerPosition.z ? resolveSpatialMix({
         dx: item.x - playerPosition.x,
         dy: item.y - playerPosition.y,
         range: Math.max(1, spatialConfig.range || HEARING_RADIUS),
@@ -419,7 +419,7 @@ export class ItemEmitRuntime {
           coneDeg: 120,
           rearGain: 0.4,
         },
-      });
+      }) : null;
       const emitVolume = volumePercentToGain(item.params.emitVolume, 100);
       const scaledMix = mix ? { ...mix, gain: mix.gain * emitVolume } : null;
       applySpatialMixToNodes({
@@ -436,7 +436,7 @@ export class ItemEmitRuntime {
 
   private shouldKeepRuntime(
     item: WorldItem,
-    listenerPositions: Array<{ x: number; y: number }>,
+    listenerPositions: Array<{ x: number; y: number; z: number }>,
     currentlyActive: boolean,
   ): boolean {
     if (listenerPositions.length === 0) return false;
@@ -444,7 +444,8 @@ export class ItemEmitRuntime {
     const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
     const threshold = baseRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);
     return listenerPositions.some((listenerPosition) =>
-      Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold,
+      item.z === listenerPosition.z
+      && Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold,
     );
   }
 

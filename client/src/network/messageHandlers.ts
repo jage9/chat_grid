@@ -7,21 +7,23 @@ import { type WorldItem } from '../state/gameState';
 type MessageHandlerDeps = {
   getWorldGridSize: () => number;
   setWorldGridSize: (size: number) => void;
+  setWorldFloors: (floors: Array<{ id: string; name: string; z: number }>) => void;
   setMovementTickMs: (value: number) => void;
   setConnecting: (value: boolean) => void;
   rendererSetGridSize: (size: number) => void;
   applyServerItemUiDefinitions: (defs: unknown) => boolean;
   state: {
     addItemTypeIndex: number;
-    player: { id: string | null; nickname: string; x: number; y: number };
+    player: { id: string | null; nickname: string; x: number; y: number; z: number };
     running: boolean;
-    peers: Map<string, { id: string; userId?: string | null; nickname: string; x: number; y: number }>;
+    peers: Map<string, { id: string; userId?: string | null; nickname: string; x: number; y: number; z: number }>;
     items: Map<string, WorldItem>;
     mode: string;
     selectedItemId: string | null;
     itemPropertyKeys: string[];
     itemPropertyIndex: number;
     carriedItemId: string | null;
+    elevatorItemId: string | null;
   };
   dom: {
     connectButton: HTMLElement;
@@ -32,8 +34,9 @@ type MessageHandlerDeps = {
   };
   signalingSend: (message: unknown) => void;
   peerManager: {
-    ensurePeer: (id: string, user: { id: string; nickname: string; x: number; y: number }) => unknown;
-    setPeerPosition: (id: string, x: number, y: number) => void;
+    ensurePeer: (id: string, user: { id: string; nickname: string; x: number; y: number; z: number }) => unknown;
+    setPeerPosition: (id: string, x: number, y: number, z: number) => void;
+    setListenerFloor: (z: number) => void;
     setPeerNickname: (id: string, nickname: string) => void;
     removePeer: (id: string) => void;
   };
@@ -43,7 +46,7 @@ type MessageHandlerDeps = {
   gameLoop: () => void;
   sanitizeName: (value: string) => string;
   randomFootstepUrl: () => string;
-  playRemoteSpatialStepOrTeleport: (url: string, peerX: number, peerY: number) => void;
+  playRemoteSpatialStepOrTeleport: (url: string, peerX: number, peerY: number, peerZ: number) => void;
   handleItemActionResultStatus: (message: Extract<IncomingMessage, { type: 'item_action_result' }>) => boolean;
   handleItemBehaviorIncomingMessage: (message: IncomingMessage) => boolean;
   handleItemBehaviorPeerLeft: (senderId: string) => void;
@@ -67,8 +70,8 @@ type MessageHandlerDeps = {
   shouldAnnounceItemPropertyEcho: () => boolean;
   playLocateToneAt: (x: number, y: number) => void;
   resolveIncomingSoundUrl: (url: string) => string;
-  playIncomingItemUseSound: (url: string, x: number, y: number, range?: number) => void;
-  playClockAnnouncement: (sounds: string[], x: number, y: number, range?: number) => void;
+  playIncomingItemUseSound: (url: string, x: number, y: number, z: number, range?: number) => void;
+  playClockAnnouncement: (sounds: string[], x: number, y: number, z: number, range?: number) => void;
   handleAuthRequired: (message: Extract<IncomingMessage, { type: 'auth_required' }>) => void;
   handleAuthResult: (message: Extract<IncomingMessage, { type: 'auth_result' }>) => Promise<void>;
   handleAuthPermissions: (message: Extract<IncomingMessage, { type: 'auth_permissions' }>) => void;
@@ -115,6 +118,9 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         if (message.worldConfig?.movementTickMs && Number.isInteger(message.worldConfig.movementTickMs) && message.worldConfig.movementTickMs > 0) {
           deps.setMovementTickMs(message.worldConfig.movementTickMs);
         }
+        if (message.worldConfig?.floors) {
+          deps.setWorldFloors(message.worldConfig.floors);
+        }
         deps.rendererSetGridSize(deps.getWorldGridSize());
         const schemaReady = deps.applyServerItemUiDefinitions(message.uiDefinitions);
         if (!schemaReady) {
@@ -126,6 +132,8 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.setConnecting(false);
         deps.state.player.x = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.x));
         deps.state.player.y = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.y));
+        deps.state.player.z = message.player.z;
+        deps.peerManager.setListenerFloor(message.player.z);
         deps.dom.connectButton.classList.add('hidden');
         deps.dom.disconnectButton.classList.remove('hidden');
         deps.dom.focusGridButton.classList.remove('hidden');
@@ -133,7 +141,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.dom.instructions.classList.remove('hidden');
         deps.dom.canvas.focus();
 
-        deps.signalingSend({ type: 'update_position', x: deps.state.player.x, y: deps.state.player.y });
+        deps.signalingSend({ type: 'update_position', x: deps.state.player.x, y: deps.state.player.y, z: deps.state.player.z });
         deps.signalingSend({ type: 'update_nickname', nickname: deps.state.player.nickname });
 
         for (const user of message.users) {
@@ -159,8 +167,14 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
 
       case 'update_position': {
         if (message.id === deps.state.player.id) {
+          const floorChanged = deps.state.player.z !== message.z;
           deps.state.player.x = message.x;
           deps.state.player.y = message.y;
+          deps.state.player.z = message.z;
+          if (floorChanged) {
+            deps.peerManager.setListenerFloor(message.z);
+            await deps.refreshAudioSubscriptions(true);
+          }
           break;
         }
         const peer = deps.state.peers.get(message.id);
@@ -169,6 +183,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         if (peer) {
           peer.x = message.x;
           peer.y = message.y;
+          peer.z = message.z;
         } else {
           deps.state.peers.set(message.id, {
             id: message.id,
@@ -176,22 +191,27 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
             nickname: 'user...',
             x: message.x,
             y: message.y,
+            z: message.z,
           });
         }
         deps.peerManager.ensurePeer(message.id, deps.state.peers.get(message.id)!);
-        deps.peerManager.setPeerPosition(message.id, message.x, message.y);
+        deps.peerManager.setPeerPosition(message.id, message.x, message.y, message.z);
         if (peer) {
           const movementDelta = Math.hypot(message.x - prevX, message.y - prevY);
-          if (movementDelta <= 1.5 && deps.getAudioLayers().world) {
-            deps.playRemoteSpatialStepOrTeleport(deps.randomFootstepUrl(), peer.x, peer.y);
+          if (
+            movementDelta <= 1.5
+            && peer.z === deps.state.player.z
+            && deps.getAudioLayers().world
+          ) {
+            deps.playRemoteSpatialStepOrTeleport(deps.randomFootstepUrl(), peer.x, peer.y, peer.z);
           }
         }
         break;
       }
 
       case 'teleport_complete': {
-        if (deps.getAudioLayers().world) {
-          deps.playIncomingItemUseSound(deps.TELEPORT_SOUND_URL, message.x, message.y);
+        if (message.z === deps.state.player.z && deps.getAudioLayers().world) {
+          deps.playIncomingItemUseSound(deps.TELEPORT_SOUND_URL, message.x, message.y, message.z);
         }
         break;
       }
@@ -271,6 +291,11 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         break;
       }
 
+      case 'item_elevator_status': {
+        deps.state.elevatorItemId = message.event === 'exited' ? null : message.itemId;
+        break;
+      }
+
       case 'item_remove': {
         deps.state.items.delete(message.itemId);
         deps.state.carriedItemId = deps.getCarriedItemId();
@@ -312,8 +337,8 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
       case 'item_use_sound': {
         const soundUrl = deps.resolveIncomingSoundUrl(message.sound);
         if (!soundUrl) break;
-        if (deps.getAudioLayers().world) {
-          deps.playIncomingItemUseSound(soundUrl, message.x, message.y, message.range);
+        if (message.z === deps.state.player.z && deps.getAudioLayers().world) {
+          deps.playIncomingItemUseSound(soundUrl, message.x, message.y, message.z, message.range);
         }
         break;
       }
@@ -325,8 +350,8 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
       }
 
       case 'item_clock_announce': {
-        if (!deps.getAudioLayers().world) break;
-        deps.playClockAnnouncement(message.sounds, message.x, message.y, message.range);
+        if (message.z !== deps.state.player.z || !deps.getAudioLayers().world) break;
+        deps.playClockAnnouncement(message.sounds, message.x, message.y, message.z, message.range);
         break;
       }
 

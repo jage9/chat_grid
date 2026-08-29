@@ -81,6 +81,7 @@ from .models import (
     ItemAddPacket,
     ItemClockAnnouncePacket,
     ItemDeletePacket,
+    ItemElevatorStatusPacket,
     ItemDropPacket,
     ItemPianoNoteBroadcastPacket,
     ItemPianoNotePacket,
@@ -137,6 +138,13 @@ RADIO_METADATA_POLL_INTERVAL_S = 10.0
 RADIO_METADATA_TIMEOUT_S = 6.0
 RADIO_METADATA_MAX_CONCURRENCY = 4
 CLOCK_ANNOUNCE_POLL_INTERVAL_S = 1.0
+FLOOR_DEFINITIONS: tuple[dict[str, str | int], ...] = (
+    {"id": "ground", "name": "Ground floor", "z": 0},
+    {"id": "second", "name": "Second floor", "z": 40},
+)
+FLOOR_ELEVATIONS = frozenset(int(floor["z"]) for floor in FLOOR_DEFINITIONS)
+ELEVATOR_DOOR_OPEN_SECONDS = 5.0
+ELEVATOR_TRAVEL_SECONDS = 5.0
 AUTH_SESSION_COOKIE_NAME = "chgrid_session_token"
 AUTH_SESSION_COOKIE_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
 AUTH_SESSION_COOKIE_SET_PATH = "auth/session/set"
@@ -299,6 +307,7 @@ class SignalingServer:
             RADIO_METADATA_MAX_CONCURRENCY
         )
         self._clock_announce_task: asyncio.Task[None] | None = None
+        self._elevator_tasks: dict[str, asyncio.Task[None]] = {}
         self._clock_top_of_hour_markers: dict[str, str] = {}
         self._clock_alarm_markers: dict[str, str] = {}
         self._started_at_monotonic = time.monotonic()
@@ -394,7 +403,9 @@ class SignalingServer:
             )
             if now_ms - last_saved_ms < POSITION_PERSIST_DEBOUNCE_MS:
                 return
-        self.auth_service.set_last_position(client.user_id, client.x, client.y)
+        self.auth_service.set_last_position(
+            client.user_id, client.x, client.y, client.z
+        )
         self._last_position_persist_ms_by_user[client.user_id] = now_ms
 
     def _auth_policy(self) -> dict[str, int]:
@@ -879,6 +890,7 @@ class SignalingServer:
             "type": item.type,
             "x": str(item.x),
             "y": str(item.y),
+            "z": str(item.z),
             "carrierId": carrier_label,
             "version": str(item.version),
             "createdBy": item.createdByName or item.createdBy,
@@ -937,6 +949,13 @@ class SignalingServer:
 
         emit_range = self._get_item_emit_range(item)
         for client in self.clients.values():
+            elevator = (
+                self.items.get(client.elevator_id) if client.elevator_id else None
+            )
+            if elevator is not None and elevator.params.get("state") == "moving":
+                continue
+            if client.z != item.z:
+                continue
             if max(abs(client.x - item.x), abs(client.y - item.y)) <= emit_range:
                 return True
         return False
@@ -1113,7 +1132,7 @@ class SignalingServer:
     ) -> None:
         """Broadcast one server-authoritative clock speech sequence from item position."""
 
-        sound_x, sound_y = self._get_item_sound_source_position(item)
+        sound_x, sound_y, sound_z = self._get_item_sound_source_position(item)
         sound_range = self._get_item_emit_range(item)
         sounds = self._build_clock_announcement_sounds(
             item.params, top_of_hour=top_of_hour, alarm=alarm
@@ -1127,6 +1146,7 @@ class SignalingServer:
                 sounds=sounds,
                 x=sound_x,
                 y=sound_y,
+                z=sound_z,
                 range=sound_range,
             )
         )
@@ -1184,14 +1204,14 @@ class SignalingServer:
         except asyncio.CancelledError:
             return
 
-    def _get_item_sound_source_position(self, item: WorldItem) -> tuple[int, int]:
+    def _get_item_sound_source_position(self, item: WorldItem) -> tuple[int, int, int]:
         """Resolve source position for item-emitted one-shot sounds."""
 
         if item.carrierId:
             carrier = self._get_client_by_id(item.carrierId)
             if carrier is not None:
-                return carrier.x, carrier.y
-        return item.x, item.y
+                return carrier.x, carrier.y, carrier.z
+        return item.x, item.y, item.z
 
     def _get_client_by_id(self, client_id: str) -> ClientConnection | None:
         """Resolve one connected client by id."""
@@ -1201,14 +1221,14 @@ class SignalingServer:
                 return connected
         return None
 
-    def _get_piano_source_position(self, item: WorldItem) -> tuple[int, int]:
+    def _get_piano_source_position(self, item: WorldItem) -> tuple[int, int, int]:
         """Resolve world position used for piano note spatial broadcasts."""
 
         if item.carrierId:
             carrier = self._get_client_by_id(item.carrierId)
             if carrier is not None:
-                return carrier.x, carrier.y
-        return item.x, item.y
+                return carrier.x, carrier.y, carrier.z
+        return item.x, item.y, item.z
 
     async def _broadcast_item_piano_note(
         self,
@@ -1289,7 +1309,7 @@ class SignalingServer:
             if isinstance(item.params.get("emitRange", 15), (int, float))
             else 15
         )
-        source_x, source_y = self._get_piano_source_position(item)
+        source_x, source_y, source_z = self._get_piano_source_position(item)
         await self._broadcast(
             ItemPianoNoteBroadcastPacket(
                 type="item_piano_note",
@@ -1307,6 +1327,7 @@ class SignalingServer:
                 brightness=max(0, min(100, brightness)),
                 x=source_x,
                 y=source_y,
+                z=source_z,
                 emitRange=max(5, min(20, emit_range)),
             ),
             exclude=exclude,
@@ -1725,6 +1746,306 @@ class SignalingServer:
 
         return 0 <= x < self.grid_size and 0 <= y < self.grid_size
 
+    @staticmethod
+    def _is_supported_floor(z: int) -> bool:
+        """Return whether a height is a configured floor elevation."""
+
+        return z in FLOOR_ELEVATIONS
+
+    def _item_is_on_client_square(
+        self, item: WorldItem, client: ClientConnection
+    ) -> bool:
+        """Return whether one non-carried item shares the client's world cell."""
+
+        if client.elevator_id == item.id:
+            return True
+        return self.item_service.item_occupies_position(
+            item,
+            x=client.x,
+            y=client.y,
+            z=client.z,
+        )
+
+    def _item_footprint_in_bounds(self, item: WorldItem) -> bool:
+        """Return whether every occupied cell is inside the horizontal grid."""
+
+        return all(
+            self._is_in_bounds(
+                item.x + int(offset.get("x", 0)),
+                item.y + int(offset.get("y", 0)),
+            )
+            for offset in item.occupiedOffsets
+        )
+
+    def _touch_elevator(self, item: WorldItem) -> None:
+        """Mark elevator state changed and schedule persistence."""
+
+        item.updatedAt = self.item_service.now_ms()
+        item.updatedBy = "system"
+        item.updatedByName = "system"
+        item.version += 1
+        self._request_state_save()
+
+    def _restart_elevator_task(self, item_id: str) -> None:
+        """Restart the timer/state-machine task for one elevator."""
+
+        existing = self._elevator_tasks.get(item_id)
+        if existing is not None and existing is not asyncio.current_task():
+            existing.cancel()
+        self._elevator_tasks[item_id] = asyncio.create_task(
+            self._run_elevator_cycle(item_id)
+        )
+
+    async def _move_elevator_occupants(
+        self, item: WorldItem, destination_z: int
+    ) -> None:
+        """Move elevator riders and carried items to an arrived floor."""
+
+        for rider in self.clients.values():
+            if rider.elevator_id != item.id:
+                continue
+            rider.x = item.x
+            rider.y = item.y
+            rider.z = destination_z
+            rider.last_position_update_ms = self.item_service.now_ms()
+            self._persist_client_position(rider, force=True)
+            await self._broadcast(
+                BroadcastPositionPacket(
+                    type="update_position",
+                    id=rider.id,
+                    x=rider.x,
+                    y=rider.y,
+                    z=rider.z,
+                )
+            )
+            await self._send(
+                rider.websocket,
+                ItemElevatorStatusPacket(
+                    type="item_elevator_status",
+                    itemId=item.id,
+                    event="arrived",
+                    z=destination_z,
+                ),
+            )
+            carried = self.item_service.find_carried_item(rider.id)
+            if carried is not None:
+                carried.x = rider.x
+                carried.y = rider.y
+                carried.z = rider.z
+                carried.updatedAt = self.item_service.now_ms()
+                carried.updatedBy = rider.user_id or rider.id
+                carried.updatedByName = rider.username or rider.nickname
+                await self._broadcast_item(carried)
+
+    async def _broadcast_elevator_travel_positions(
+        self, item: WorldItem, destination_z: int
+    ) -> None:
+        """Move riders into an intermediate height that is isolated from both floors."""
+
+        current_z = int(item.params.get("currentZ", 0))
+        travel_z = current_z + ((destination_z - current_z) // 2)
+        for rider in self.clients.values():
+            if rider.elevator_id != item.id:
+                continue
+            rider.x = item.x
+            rider.y = item.y
+            rider.z = travel_z
+            carried = self.item_service.find_carried_item(rider.id)
+            if carried is not None:
+                carried.x = rider.x
+                carried.y = rider.y
+                carried.z = rider.z
+                await self._broadcast_item(carried)
+            await self._broadcast(
+                BroadcastPositionPacket(
+                    type="update_position",
+                    id=rider.id,
+                    x=item.x,
+                    y=item.y,
+                    z=travel_z,
+                )
+            )
+            await self._send(
+                rider.websocket,
+                ItemElevatorStatusPacket(
+                    type="item_elevator_status",
+                    itemId=item.id,
+                    event="moving",
+                    z=travel_z,
+                ),
+            )
+
+    async def _run_elevator_cycle(self, item_id: str) -> None:
+        """Advance one elevator through travel, arrival, and door timing."""
+
+        try:
+            while True:
+                item = self.items.get(item_id)
+                if item is None or item.type != "elevator":
+                    return
+                state = str(item.params.get("state", "idle"))
+                if state == "moving":
+                    await asyncio.sleep(ELEVATOR_TRAVEL_SECONDS)
+                    target_z = int(item.params.get("targetZ", item.params["currentZ"]))
+                    item.params["currentZ"] = target_z
+                    item.params["targetZ"] = None
+                    item.params["state"] = "door_open"
+                    item.params["doorOpen"] = True
+                    self._touch_elevator(item)
+                    await self._move_elevator_occupants(item, target_z)
+                    await self._broadcast_item(item)
+                    continue
+                if state == "door_open":
+                    await asyncio.sleep(ELEVATOR_DOOR_OPEN_SECONDS)
+                    current_z = int(item.params.get("currentZ", 0))
+                    depart_z = item.params.get("departOnCloseZ")
+                    queued_z = item.params.get("queuedZ")
+                    next_z = (
+                        int(depart_z)
+                        if isinstance(depart_z, int) and depart_z != current_z
+                        else int(queued_z)
+                        if isinstance(queued_z, int) and queued_z != current_z
+                        else None
+                    )
+                    item.params["doorOpen"] = False
+                    item.params["departOnCloseZ"] = None
+                    item.params["queuedZ"] = None
+                    if next_z is None:
+                        item.params["state"] = "idle"
+                        item.params["targetZ"] = None
+                    else:
+                        item.params["state"] = "moving"
+                        item.params["targetZ"] = next_z
+                    self._touch_elevator(item)
+                    await self._broadcast_item(item)
+                    if next_z is None:
+                        return
+                    await self._broadcast_elevator_travel_positions(item, next_z)
+                    continue
+                return
+        except asyncio.CancelledError:
+            return
+        finally:
+            current = self._elevator_tasks.get(item_id)
+            if current is asyncio.current_task():
+                self._elevator_tasks.pop(item_id, None)
+
+    async def _use_elevator(self, client: ClientConnection, item: WorldItem) -> None:
+        """Apply one context-sensitive elevator call, enter, open, or exit action."""
+
+        state = str(item.params.get("state", "idle"))
+        current_z = int(item.params.get("currentZ", 0))
+        if client.elevator_id == item.id:
+            if state == "moving":
+                await self._send_item_result(
+                    client, True, "use", "The elevator is moving.", item.id
+                )
+                return
+            if not bool(item.params.get("doorOpen", False)):
+                item.params["state"] = "door_open"
+                item.params["doorOpen"] = True
+                self._touch_elevator(item)
+                await self._broadcast_item(item)
+                self._restart_elevator_task(item.id)
+                await self._send_item_result(
+                    client, True, "use", "The elevator door opens.", item.id
+                )
+                return
+            client.elevator_id = None
+            await self._send(
+                client.websocket,
+                ItemElevatorStatusPacket(
+                    type="item_elevator_status",
+                    itemId=item.id,
+                    event="exited",
+                    z=current_z,
+                ),
+            )
+            await self._send_item_result(
+                client,
+                True,
+                "use",
+                f"You exit {item.title} on {self._floor_name(current_z)}.",
+                item.id,
+            )
+            return
+
+        if state == "moving":
+            item.params["queuedZ"] = client.z
+            self._touch_elevator(item)
+            await self._broadcast_item(item)
+            await self._send_item_result(
+                client, True, "use", f"You call {item.title}.", item.id
+            )
+            return
+
+        if current_z != client.z:
+            item.params["targetZ"] = client.z
+            item.params["state"] = "moving"
+            item.params["doorOpen"] = False
+            self._touch_elevator(item)
+            await self._broadcast_item(item)
+            self._restart_elevator_task(item.id)
+            await self._send_item_result(
+                client, True, "use", f"You call {item.title}.", item.id
+            )
+            return
+
+        if not bool(item.params.get("doorOpen", False)):
+            item.params["state"] = "door_open"
+            item.params["doorOpen"] = True
+            self._touch_elevator(item)
+            await self._broadcast_item(item)
+            self._restart_elevator_task(item.id)
+            await self._send_item_result(
+                client, True, "use", "The elevator door opens.", item.id
+            )
+            return
+
+        client.elevator_id = item.id
+        destination_z = next(z for z in sorted(FLOOR_ELEVATIONS) if z != current_z)
+        item.params["departOnCloseZ"] = destination_z
+        self._touch_elevator(item)
+        await self._broadcast_item(item)
+        self._restart_elevator_task(item.id)
+        await self._send(
+            client.websocket,
+            ItemElevatorStatusPacket(
+                type="item_elevator_status",
+                itemId=item.id,
+                event="entered",
+                z=current_z,
+            ),
+        )
+        await self._send_item_result(
+            client,
+            True,
+            "use",
+            f"You enter {item.title}. The door will close in five seconds.",
+            item.id,
+        )
+
+    @staticmethod
+    def _floor_name(z: int) -> str:
+        """Return the configured user-facing floor name for an elevation."""
+
+        for floor in FLOOR_DEFINITIONS:
+            if int(floor["z"]) == z:
+                return str(floor["name"])
+        return f"z {z}"
+
+    def _restore_elevator_rider_to_landing(self, client: ClientConnection) -> None:
+        """Return a disconnecting rider to the elevator's last completed landing."""
+
+        if not client.elevator_id:
+            return
+        item = self.items.get(client.elevator_id)
+        if item is not None and item.type == "elevator":
+            client.x = item.x
+            client.y = item.y
+            client.z = int(item.params.get("currentZ", 0))
+        client.elevator_id = None
+
     def _movement_window_index(self, now_ms: int) -> int:
         """Return current movement rate-limit window index for a server timestamp."""
 
@@ -1875,6 +2196,13 @@ class SignalingServer:
             ):
                 await asyncio.Future()
         finally:
+            for task in self._elevator_tasks.values():
+                task.cancel()
+            if self._elevator_tasks:
+                await asyncio.gather(
+                    *self._elevator_tasks.values(), return_exceptions=True
+                )
+            self._elevator_tasks.clear()
             if self._pending_reboot_task is not None:
                 self._pending_reboot_task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -1939,6 +2267,7 @@ class SignalingServer:
             if websocket in self.clients:
                 disconnected = self.clients.pop(websocket)
                 self.active_piano_keys_by_client.pop(disconnected.id, None)
+                self._restore_elevator_rider_to_landing(disconnected)
                 self._persist_client_position(disconnected, force=True)
                 if disconnected.user_id:
                     self._last_position_persist_ms_by_user.pop(
@@ -1984,6 +2313,7 @@ class SignalingServer:
                 nickname=other.nickname,
                 x=other.x,
                 y=other.y,
+                z=other.z,
             )
             for ws, other in self.clients.items()
             if ws is not client.websocket
@@ -1997,6 +2327,7 @@ class SignalingServer:
                 nickname=client.nickname,
                 x=client.x,
                 y=client.y,
+                z=client.z,
             ),
             users=users,
             items=[
@@ -2007,6 +2338,7 @@ class SignalingServer:
                 "gridSize": self.grid_size,
                 "movementTickMs": self.movement_tick_ms,
                 "movementMaxStepsPerTick": self.movement_max_steps_per_tick,
+                "floors": [dict(floor) for floor in FLOOR_DEFINITIONS],
             },
             uiDefinitions=self._build_ui_definitions(client),
             serverInfo={
@@ -2042,16 +2374,21 @@ class SignalingServer:
 
         saved_x = getattr(client, "saved_x", None)
         saved_y = getattr(client, "saved_y", None)
+        saved_z = getattr(client, "saved_z", None)
         if (
             isinstance(saved_x, int)
             and isinstance(saved_y, int)
+            and isinstance(saved_z, int)
             and self._is_in_bounds(saved_x, saved_y)
+            and self._is_supported_floor(saved_z)
         ):
             client.x = saved_x
             client.y = saved_y
+            client.z = saved_z
         else:
             client.x = random.randrange(self.grid_size)  # nosec B311
             client.y = random.randrange(self.grid_size)  # nosec B311
+            client.z = 0
         now_ms = self.item_service.now_ms()
         self._refresh_client_permissions(client)
         client.last_position_update_ms = now_ms
@@ -2246,6 +2583,7 @@ class SignalingServer:
         client.nickname = session.user.last_nickname or client.nickname
         client.saved_x = session.user.last_x
         client.saved_y = session.user.last_y
+        client.saved_z = session.user.last_z
         await self._send(
             client.websocket,
             AuthResultPacket(
@@ -2809,7 +3147,19 @@ class SignalingServer:
             return
 
         if isinstance(packet, UpdatePositionPacket):
-            if not self._is_in_bounds(packet.x, packet.y):
+            if client.elevator_id is not None:
+                await self._send(
+                    client.websocket,
+                    BroadcastPositionPacket(
+                        type="update_position",
+                        id=client.id,
+                        x=client.x,
+                        y=client.y,
+                        z=client.z,
+                    ),
+                )
+                return
+            if not self._is_in_bounds(packet.x, packet.y) or packet.z != client.z:
                 PACKET_LOGGER.warning(
                     "out-of-bounds position ignored id=%s x=%d y=%d grid_size=%d",
                     client.id,
@@ -2820,7 +3170,11 @@ class SignalingServer:
                 await self._send(
                     client.websocket,
                     BroadcastPositionPacket(
-                        type="update_position", id=client.id, x=client.x, y=client.y
+                        type="update_position",
+                        id=client.id,
+                        x=client.x,
+                        y=client.y,
+                        z=client.z,
                     ),
                 )
                 return
@@ -2846,7 +3200,11 @@ class SignalingServer:
                 await self._send(
                     client.websocket,
                     BroadcastPositionPacket(
-                        type="update_position", id=client.id, x=client.x, y=client.y
+                        type="update_position",
+                        id=client.id,
+                        x=client.x,
+                        y=client.y,
+                        z=client.z,
                     ),
                 )
                 return
@@ -2857,12 +3215,20 @@ class SignalingServer:
             await self._send(
                 client.websocket,
                 BroadcastPositionPacket(
-                    type="update_position", id=client.id, x=client.x, y=client.y
+                    type="update_position",
+                    id=client.id,
+                    x=client.x,
+                    y=client.y,
+                    z=client.z,
                 ),
             )
             await self._broadcast(
                 BroadcastPositionPacket(
-                    type="update_position", id=client.id, x=client.x, y=client.y
+                    type="update_position",
+                    id=client.id,
+                    x=client.x,
+                    y=client.y,
+                    z=client.z,
                 ),
                 exclude=client.websocket,
             )
@@ -2871,6 +3237,7 @@ class SignalingServer:
                 actor_id, actor_name = self._item_updated_actor(client)
                 carried.x = client.x
                 carried.y = client.y
+                carried.z = client.z
                 carried.updatedAt = self.item_service.now_ms()
                 carried.updatedBy = actor_id
                 carried.updatedByName = actor_name
@@ -2878,7 +3245,19 @@ class SignalingServer:
             return
 
         if isinstance(packet, TeleportCompletePacket):
-            if not self._is_in_bounds(packet.x, packet.y):
+            if client.elevator_id is not None:
+                await self._send(
+                    client.websocket,
+                    BroadcastPositionPacket(
+                        type="update_position",
+                        id=client.id,
+                        x=client.x,
+                        y=client.y,
+                        z=client.z,
+                    ),
+                )
+                return
+            if not self._is_in_bounds(packet.x, packet.y) or packet.z != client.z:
                 PACKET_LOGGER.warning(
                     "out-of-bounds teleport ignored id=%s x=%d y=%d grid_size=%d",
                     client.id,
@@ -2889,7 +3268,11 @@ class SignalingServer:
                 await self._send(
                     client.websocket,
                     BroadcastPositionPacket(
-                        type="update_position", id=client.id, x=client.x, y=client.y
+                        type="update_position",
+                        id=client.id,
+                        x=client.x,
+                        y=client.y,
+                        z=client.z,
                     ),
                 )
                 return
@@ -2901,12 +3284,20 @@ class SignalingServer:
             await self._send(
                 client.websocket,
                 BroadcastPositionPacket(
-                    type="update_position", id=client.id, x=client.x, y=client.y
+                    type="update_position",
+                    id=client.id,
+                    x=client.x,
+                    y=client.y,
+                    z=client.z,
                 ),
             )
             await self._broadcast(
                 BroadcastPositionPacket(
-                    type="update_position", id=client.id, x=client.x, y=client.y
+                    type="update_position",
+                    id=client.id,
+                    x=client.x,
+                    y=client.y,
+                    z=client.z,
                 ),
                 exclude=client.websocket,
             )
@@ -2915,6 +3306,7 @@ class SignalingServer:
                 actor_id, actor_name = self._item_updated_actor(client)
                 carried.x = client.x
                 carried.y = client.y
+                carried.z = client.z
                 carried.updatedAt = self.item_service.now_ms()
                 carried.updatedBy = actor_id
                 carried.updatedByName = actor_name
@@ -2925,6 +3317,7 @@ class SignalingServer:
                     id=client.id,
                     x=client.x,
                     y=client.y,
+                    z=client.z,
                 ),
                 exclude=client.websocket,
             )
@@ -3074,23 +3467,35 @@ class SignalingServer:
                 await self._send_item_result(client, False, "add", "Unknown item type.")
                 return
             item = self.item_service.default_item(client, packet.itemType)
+            if item.type == "elevator":
+                item.z = 0
+                item.params["currentZ"] = client.z
+            if not self._item_footprint_in_bounds(item):
+                await self._send_item_result(
+                    client,
+                    False,
+                    "add",
+                    "The item footprint does not fit at this position.",
+                )
+                return
             self.item_service.add_item(item)
             await self._broadcast_item(item)
             self._request_state_save()
             LOGGER.info(
-                "item created by=%s item_id=%s type=%s title=%s x=%d y=%d",
+                "item created by=%s item_id=%s type=%s title=%s x=%d y=%d z=%d",
                 client.nickname,
                 item.id,
                 item.type,
                 item.title,
                 item.x,
                 item.y,
+                item.z,
             )
             item_text = f"{item.title} ({self._item_type_label(item)})"
             await self._broadcast(
                 BroadcastChatMessagePacket(
                     type="chat_message",
-                    message=f"{client.nickname} placed {item_text} at {item.x}, {item.y}.",
+                    message=f"{client.nickname} placed {item_text} at {item.x}, {item.y}, {item.z}, {self._floor_name(item.z)}.",
                     system=True,
                 ),
                 exclude=client.websocket,
@@ -3099,7 +3504,7 @@ class SignalingServer:
                 client,
                 True,
                 "add",
-                f"You placed {item_text} at {item.x}, {item.y}.",
+                f"You placed {item_text} at {item.x}, {item.y}, {item.z}, {self._floor_name(item.z)}.",
                 item.id,
             )
             return
@@ -3108,6 +3513,15 @@ class SignalingServer:
             pickup_item = self.items.get(packet.itemId)
             if not pickup_item:
                 await self._send_item_result(client, False, "pickup", "Item not found.")
+                return
+            if "carryable" not in pickup_item.capabilities:
+                await self._send_item_result(
+                    client,
+                    False,
+                    "pickup",
+                    "That item cannot be carried.",
+                    pickup_item.id,
+                )
                 return
             if pickup_item.carrierId and pickup_item.carrierId != client.id:
                 await self._send_item_result(
@@ -3129,7 +3543,7 @@ class SignalingServer:
                 )
                 return
             if pickup_item.carrierId is None and (
-                pickup_item.x != client.x or pickup_item.y != client.y
+                not self._item_is_on_client_square(pickup_item, client)
             ):
                 await self._send_item_result(
                     client,
@@ -3155,6 +3569,7 @@ class SignalingServer:
             pickup_item.carrierId = client.id
             pickup_item.x = client.x
             pickup_item.y = client.y
+            pickup_item.z = client.z
             pickup_item.updatedAt = self.item_service.now_ms()
             actor_id, actor_name = self._item_updated_actor(client)
             pickup_item.updatedBy = actor_id
@@ -3193,7 +3608,7 @@ class SignalingServer:
                     drop_item.id,
                 )
                 return
-            if not self._is_in_bounds(packet.x, packet.y):
+            if not self._is_in_bounds(packet.x, packet.y) or packet.z != client.z:
                 await self._send_item_result(
                     client,
                     False,
@@ -3218,6 +3633,7 @@ class SignalingServer:
             drop_item.carrierId = None
             drop_item.x = packet.x
             drop_item.y = packet.y
+            drop_item.z = packet.z
             drop_item.updatedAt = self.item_service.now_ms()
             actor_id, actor_name = self._item_updated_actor(client)
             drop_item.updatedBy = actor_id
@@ -3228,7 +3644,7 @@ class SignalingServer:
             await self._broadcast(
                 BroadcastChatMessagePacket(
                     type="chat_message",
-                    message=f"{client.nickname} dropped {item_text} at {drop_item.x}, {drop_item.y}.",
+                    message=f"{client.nickname} dropped {item_text} at {drop_item.x}, {drop_item.y}, {drop_item.z}, {self._floor_name(drop_item.z)}.",
                     system=True,
                 ),
                 exclude=client.websocket,
@@ -3237,7 +3653,7 @@ class SignalingServer:
                 client,
                 True,
                 "drop",
-                f"Dropped {drop_item.title} at {drop_item.x}, {drop_item.y}.",
+                f"Dropped {drop_item.title} at {drop_item.x}, {drop_item.y}, {drop_item.z}, {self._floor_name(drop_item.z)}.",
                 drop_item.id,
             )
             return
@@ -3256,8 +3672,23 @@ class SignalingServer:
                     delete_item.id,
                 )
                 return
+            if delete_item.type == "elevator" and (
+                str(delete_item.params.get("state", "idle")) == "moving"
+                or any(
+                    other.elevator_id == delete_item.id
+                    for other in self.clients.values()
+                )
+            ):
+                await self._send_item_result(
+                    client,
+                    False,
+                    "delete",
+                    "The elevator cannot be deleted while moving or occupied.",
+                    delete_item.id,
+                )
+                return
             if delete_item.carrierId is None and (
-                delete_item.x != client.x or delete_item.y != client.y
+                not self._item_is_on_client_square(delete_item, client)
             ):
                 await self._send_item_result(
                     client,
@@ -3303,6 +3734,9 @@ class SignalingServer:
                 self.item_service.piano_songs.pop(song_id, None)
                 self.item_service.save_piano_songs()
             self.item_service.remove_item(delete_item.id)
+            elevator_task = self._elevator_tasks.pop(delete_item.id, None)
+            if elevator_task is not None:
+                elevator_task.cancel()
             self.item_last_use_ms.pop(delete_item.id, None)
             await self._broadcast(
                 ItemRemovePacket(type="item_remove", itemId=delete_item.id)
@@ -3338,10 +3772,7 @@ class SignalingServer:
                     transfer_targets_item.id,
                 )
                 return
-            if (
-                transfer_targets_item.x != client.x
-                or transfer_targets_item.y != client.y
-            ):
+            if not self._item_is_on_client_square(transfer_targets_item, client):
                 await self._send_item_result(
                     client,
                     False,
@@ -3405,7 +3836,7 @@ class SignalingServer:
                     transfer_item.id,
                 )
                 return
-            if transfer_item.x != client.x or transfer_item.y != client.y:
+            if not self._item_is_on_client_square(transfer_item, client):
                 await self._send_item_result(
                     client,
                     False,
@@ -3507,11 +3938,14 @@ class SignalingServer:
                 )
                 return
             if use_item.carrierId is None and (
-                use_item.x != client.x or use_item.y != client.y
+                not self._item_is_on_client_square(use_item, client)
             ):
                 await self._send_item_result(
                     client, False, "use", "Item is not on your square.", use_item.id
                 )
+                return
+            if use_item.type == "elevator":
+                await self._use_elevator(client, use_item)
                 return
             handler = get_item_type_handler(use_item.type)
             now_ms = self.item_service.now_ms()
@@ -3567,7 +4001,9 @@ class SignalingServer:
                 )
             use_sound = self._resolve_item_use_sound(use_item)
             if use_sound:
-                sound_x, sound_y = self._get_item_sound_source_position(use_item)
+                sound_x, sound_y, sound_z = self._get_item_sound_source_position(
+                    use_item
+                )
                 sound_range = self._get_item_emit_range(use_item)
                 await self._broadcast(
                     ItemUseSoundPacket(
@@ -3576,6 +4012,7 @@ class SignalingServer:
                         sound=use_sound,
                         x=sound_x,
                         y=sound_y,
+                        z=sound_z,
                         range=sound_range,
                     )
                 )
@@ -3628,7 +4065,7 @@ class SignalingServer:
                 )
                 return
             if secondary_item.carrierId is None and (
-                secondary_item.x != client.x or secondary_item.y != client.y
+                not self._item_is_on_client_square(secondary_item, client)
             ):
                 await self._send_item_result(
                     client,
@@ -3710,7 +4147,7 @@ class SignalingServer:
             if piano_item.carrierId not in (None, client.id):
                 return
             if piano_item.carrierId is None and (
-                piano_item.x != client.x or piano_item.y != client.y
+                not self._item_is_on_client_square(piano_item, client)
             ):
                 return
             active_keys = self.active_piano_keys_by_client.setdefault(client.id, set())
@@ -3827,7 +4264,7 @@ class SignalingServer:
                 )
                 return
             if recording_item.carrierId is None and (
-                recording_item.x != client.x or recording_item.y != client.y
+                not self._item_is_on_client_square(recording_item, client)
             ):
                 await self._send_item_result(
                     client,
@@ -3999,7 +4436,7 @@ class SignalingServer:
                 )
                 return
             if update_item.carrierId is None and (
-                update_item.x != client.x or update_item.y != client.y
+                not self._item_is_on_client_square(update_item, client)
             ):
                 await self._send_item_result(
                     client,

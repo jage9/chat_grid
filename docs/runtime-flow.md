@@ -21,6 +21,7 @@
    - Server startup fails with a clear configuration error when any of these values is absent.
 10. Client:
    - applies `welcome.worldConfig.gridSize` for authoritative grid bounds/rendering
+   - applies `welcome.worldConfig.floors` for floor names and elevations
    - applies `welcome.worldConfig.movementTickMs` as movement pacing guidance
    - applies `welcome.worldConfig.movementMaxStepsPerTick` for movement-rate parity
   - uses `welcome.player` as authoritative starting position (restored from server-side account state when available)
@@ -70,6 +71,7 @@ Core incoming message effects:
 - `item_use_sound`: play one-shot spatial sample (world layer gated).
 - `item_piano_note`: start/stop synthesized piano notes from remote users (item layer gated).
 - `item_piano_status`: structured piano mode/record/playback transitions (client runtime state).
+- `item_elevator_status`: track local elevator entry, travel, arrival, and exit state.
 - `pong`:
   - positive `clientSentAt`: user ping response (`P` command)
   - negative `clientSentAt`: internal heartbeat response
@@ -89,6 +91,18 @@ Core incoming message effects:
 - Server enforces item/chat/nickname/voice/admin permissions for each packet.
 - Role and permission changes apply live to connected users without reconnect.
 - `voice.send` revocation is pushed immediately via `auth_permissions`; client mutes outbound voice track.
+
+## Floors And Elevators
+
+- World positions use integer `x`, `y`, and `z`. Ground is `z=0`; the second floor is `z=40`.
+- Normal movement and teleport packets must keep the server-owned `z`. Only the elevator changes floors.
+- The client renders only the current floor. Item lists and interactions are current-floor only; the user list remains global and names each floor.
+- Cross-floor user teleport is blocked in the client, and the server rejects any packet that attempts to change `z` directly.
+- Positional voice, media, item, piano, clock, footstep, teleport, and use audio is gated by `z`.
+- Each elevator is one independent 2 by 2 shaft object shared by both landings. Calls, doors, queueing, travel, rider movement, and carried-item movement are server-owned.
+- A door remains open for five seconds. Travel takes another five seconds. During travel, riders are broadcast at an intermediate height and belong to neither floor.
+- On startup, any incomplete persisted elevator timer is cleared and the car becomes closed and idle at its last completed landing.
+- A process restart also drops items whose connection-scoped carrier no longer exists; a carried item caught at an intermediate travel height returns to the ground floor.
 
 ## Disconnect/Cleanup
 

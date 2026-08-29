@@ -78,6 +78,7 @@ export function createPianoBehavior(deps: ItemBehaviorDeps): ItemBehavior {
             brightness: message.brightness,
             x: message.x,
             y: message.y,
+            z: message.z,
             emitRange: message.emitRange,
           });
         } else {

@@ -12,6 +12,7 @@ export const itemSchema = z.object({
   title: z.string(),
   x: z.number().int(),
   y: z.number().int(),
+  z: z.number().int(),
   createdBy: z.string(),
   updatedBy: z.string(),
   createdAt: z.number().int(),
@@ -23,6 +24,9 @@ export const itemSchema = z.object({
   params: z.record(z.string(), z.unknown()),
   carrierId: z.string().nullable().optional(),
   display: z.record(z.string(), z.string()).optional(),
+  occupiedOffsets: z.array(
+    z.object({ x: z.number().int(), y: z.number().int() }),
+  ),
 });
 
 export const welcomeMessageSchema = z.object({
@@ -34,6 +38,7 @@ export const welcomeMessageSchema = z.object({
     nickname: z.string(),
     x: z.number().int(),
     y: z.number().int(),
+    z: z.number().int(),
   }),
   users: z.array(
     z.object({
@@ -42,6 +47,7 @@ export const welcomeMessageSchema = z.object({
       nickname: z.string(),
       x: z.number().int(),
       y: z.number().int(),
+      z: z.number().int(),
     }),
   ),
   items: z.array(itemSchema).optional(),
@@ -50,6 +56,13 @@ export const welcomeMessageSchema = z.object({
       gridSize: z.number().int().positive(),
       movementTickMs: z.number().int().positive().optional(),
       movementMaxStepsPerTick: z.number().int().positive().optional(),
+      floors: z.array(
+        z.object({
+          id: z.string().min(1),
+          name: z.string().min(1),
+          z: z.number().int(),
+        }),
+      ),
     })
     .optional(),
   serverInfo: z
@@ -186,6 +199,7 @@ export const updatePositionSchema = z.object({
   id: z.string(),
   x: z.number().int(),
   y: z.number().int(),
+  z: z.number().int(),
 });
 
 export const teleportCompleteSchema = z.object({
@@ -193,6 +207,7 @@ export const teleportCompleteSchema = z.object({
   id: z.string(),
   x: z.number().int(),
   y: z.number().int(),
+  z: z.number().int(),
 });
 
 export const updateNicknameSchema = z.object({
@@ -264,6 +279,7 @@ export const itemUseSoundSchema = z.object({
   sound: z.string(),
   x: z.number().int(),
   y: z.number().int(),
+  z: z.number().int(),
   range: z.number().int().positive().optional(),
 });
 
@@ -273,6 +289,7 @@ export const itemClockAnnounceSchema = z.object({
   sounds: z.array(z.string()),
   x: z.number().int(),
   y: z.number().int(),
+  z: z.number().int(),
   range: z.number().int().positive().optional(),
 });
 
@@ -292,6 +309,7 @@ export const itemPianoNoteSchema = z.object({
   brightness: z.number().int().min(0).max(100),
   x: z.number().int(),
   y: z.number().int(),
+  z: z.number().int(),
   emitRange: z.number().int().min(1),
 });
 
@@ -308,6 +326,13 @@ export const itemPianoStatusSchema = z.object({
     'playback_stopped',
   ]),
   recordingState: z.enum(['idle', 'recording', 'paused', 'playback']).optional(),
+});
+
+export const itemElevatorStatusSchema = z.object({
+  type: z.literal('item_elevator_status'),
+  itemId: z.string(),
+  event: z.enum(['entered', 'moving', 'arrived', 'exited']),
+  z: z.number().int(),
 });
 
 export const authPermissionsSchema = z.object({
@@ -379,6 +404,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   itemClockAnnounceSchema,
   itemPianoNoteSchema,
   itemPianoStatusSchema,
+  itemElevatorStatusSchema,
   authPermissionsSchema,
   adminRolesListSchema,
   adminUsersListSchema,
@@ -402,14 +428,14 @@ export type OutgoingMessage =
   | { type: 'admin_user_ban'; username: string }
   | { type: 'admin_user_unban'; username: string }
   | { type: 'admin_user_delete'; username: string }
-  | { type: 'update_position'; x: number; y: number }
-  | { type: 'teleport_complete'; x: number; y: number }
+  | { type: 'update_position'; x: number; y: number; z: number }
+  | { type: 'teleport_complete'; x: number; y: number; z: number }
   | { type: 'update_nickname'; nickname: string }
   | { type: 'chat_message'; message: string }
   | { type: 'ping'; clientSentAt: number }
   | { type: 'item_add'; itemType: string }
   | { type: 'item_pickup'; itemId: string }
-  | { type: 'item_drop'; itemId: string; x: number; y: number }
+  | { type: 'item_drop'; itemId: string; x: number; y: number; z: number }
   | { type: 'item_delete'; itemId: string }
   | { type: 'item_transfer_targets'; itemId: string }
   | { type: 'item_transfer'; itemId: string; targetUserId: string }
@@ -430,4 +456,5 @@ export type RemoteUser = {
   nickname: string;
   x: number;
   y: number;
+  z: number;
 };

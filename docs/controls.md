@@ -47,6 +47,7 @@ This document is the authoritative keymap for the client.
 - `Space` in item management menu: Read tooltip/help for the selected action
 - `Enter`: Use item
 - `Shift+Enter`: Secondary item action
+- For an elevator, `Enter` calls or opens it, enters through an open door, and exits after arrival according to the current elevator state.
 
 ### Audio
 - `P`: Ping server

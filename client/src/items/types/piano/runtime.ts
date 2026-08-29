@@ -91,7 +91,7 @@ type PianoControllerDeps = {
   state: {
     mode: GameMode;
     items: Map<string, WorldItem>;
-    player: { id: string | null; x: number; y: number };
+    player: { id: string | null; x: number; y: number; z: number };
   };
   audio: {
     ensureContext: () => Promise<void>;
@@ -475,8 +475,10 @@ export class PianoController {
     brightness: number;
     x: number;
     y: number;
+    z: number;
     emitRange: number;
   }): void {
+    if (note.z !== this.deps.state.player.z) return;
     const ctx = this.deps.audio.context;
     const destination = this.deps.audio.getOutputDestinationNode();
     if (!ctx || !destination) return;

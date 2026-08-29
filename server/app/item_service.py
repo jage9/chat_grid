@@ -49,6 +49,7 @@ class ItemService:
             title=item_def.default_title,
             x=client.x,
             y=client.y,
+            z=client.z,
             createdBy=actor_id,
             createdByName=actor_name,
             updatedBy=actor_id,
@@ -61,6 +62,10 @@ class ItemService:
             emitSound=item_def.emit_sound,
             params=deepcopy(item_def.default_params),
             carrierId=None,
+            occupiedOffsets=[
+                {"x": offset_x, "y": offset_y}
+                for offset_x, offset_y in item_def.occupied_offsets
+            ],
         )
 
     def add_item(self, item: WorldItem) -> None:
@@ -82,14 +87,29 @@ class ItemService:
                 return item
         return None
 
-    def items_on_square(self, x: int, y: int) -> list[WorldItem]:
+    def items_on_square(self, x: int, y: int, z: int) -> list[WorldItem]:
         """Return non-carried items occupying a specific world coordinate."""
 
         return [
             item
             for item in self.items.values()
-            if item.carrierId is None and item.x == x and item.y == y
+            if item.carrierId is None
+            and self.item_occupies_position(item, x=x, y=y, z=z)
         ]
+
+    @staticmethod
+    def item_occupies_position(item: WorldItem, *, x: int, y: int, z: int) -> bool:
+        """Return whether an item's floor-aware footprint occupies one cell."""
+
+        floor_zs = item.params.get("floorZs")
+        occupies_floor = z in floor_zs if isinstance(floor_zs, list) else item.z == z
+        if not occupies_floor:
+            return False
+        return any(
+            item.x + int(offset.get("x", 0)) == x
+            and item.y + int(offset.get("y", 0)) == y
+            for offset in item.occupiedOffsets
+        )
 
     def drop_carried_items_for_disconnect(
         self, client: ClientConnection
@@ -102,6 +122,7 @@ class ItemService:
                 item.carrierId = None
                 item.x = client.x
                 item.y = client.y
+                item.z = client.z
                 item.updatedAt = self.now_ms()
                 item.updatedBy = "system"
                 item.updatedByName = "system"
@@ -129,6 +150,7 @@ class ItemService:
                     title=persisted.title,
                     x=persisted.x,
                     y=persisted.y,
+                    z=persisted.z,
                     createdBy=persisted.createdBy,
                     createdByName=persisted.createdByName or persisted.createdBy,
                     updatedBy=persisted.updatedBy or persisted.createdBy,
@@ -143,7 +165,36 @@ class ItemService:
                     emitSound=item_def.emit_sound,
                     params=persisted.params,
                     carrierId=persisted.carrierId,
+                    occupiedOffsets=[
+                        {"x": offset_x, "y": offset_y}
+                        for offset_x, offset_y in item_def.occupied_offsets
+                    ],
                 )
+                if item.type == "elevator":
+                    configured_floor_zs = item.params.get("floorZs", [0, 40])
+                    floor_zs = {
+                        int(floor_z)
+                        for floor_z in configured_floor_zs
+                        if isinstance(floor_z, int)
+                    }
+                    current_z = int(item.params.get("currentZ", 0))
+                    if current_z not in floor_zs:
+                        current_z = min(floor_zs, default=0)
+                    item.z = 0
+                    item.params.update(
+                        {
+                            "currentZ": current_z,
+                            "targetZ": None,
+                            "queuedZ": None,
+                            "departOnCloseZ": None,
+                            "state": "idle",
+                            "doorOpen": False,
+                        }
+                    )
+                elif item.carrierId is not None:
+                    item.carrierId = None
+                    if item.z not in (0, 40):
+                        item.z = 0
                 loaded[item.id] = item
             self.items = loaded
             LOGGER.info(
@@ -197,6 +248,7 @@ class ItemService:
                     title=item.title,
                     x=item.x,
                     y=item.y,
+                    z=item.z,
                     createdBy=item.createdBy,
                     createdByName=item.createdByName,
                     updatedBy=item.updatedBy,

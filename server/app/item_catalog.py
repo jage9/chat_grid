@@ -62,6 +62,7 @@ class ItemDefinition:
     use_cooldown_ms: int = 1000
     emit_range: int = 15
     directional: bool = False
+    occupied_offsets: tuple[tuple[int, int], ...] = ((0, 0),)
 
 
 def _build_definition(
@@ -74,6 +75,7 @@ def _build_definition(
     use_cooldown_ms: int,
     emit_range: int,
     directional: bool,
+    occupied_offsets: tuple[tuple[int, int], ...],
 ) -> ItemDefinition:
     """Build one immutable catalog definition from an item module."""
 
@@ -86,6 +88,7 @@ def _build_definition(
         use_cooldown_ms=use_cooldown_ms,
         emit_range=emit_range,
         directional=directional,
+        occupied_offsets=occupied_offsets,
     )
 
 
@@ -99,6 +102,9 @@ ITEM_DEFINITIONS: dict[ItemType, ItemDefinition] = {
         use_cooldown_ms=ITEM_MODULES[item_type].USE_COOLDOWN_MS,
         emit_range=ITEM_MODULES[item_type].EMIT_RANGE,
         directional=ITEM_MODULES[item_type].DIRECTIONAL,
+        occupied_offsets=getattr(
+            ITEM_MODULES[item_type], "OCCUPIED_OFFSETS", ((0, 0),)
+        ),
     )
     for item_type in ITEM_TYPE_SEQUENCE
 }
@@ -122,6 +128,11 @@ GLOBAL_ITEM_PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "number",
         "tooltip": "Item Y coordinate on the grid.",
         "label": "Y",
+    },
+    "z": {
+        "valueType": "number",
+        "tooltip": "Floor elevation of this item.",
+        "label": "Z",
     },
     "carrierId": {
         "valueType": "text",

@@ -135,7 +135,7 @@ export class RadioStationRuntime {
   private readonly sharedStartTimeouts = new Map<string, number>();
   private nextSharedStartAttemptId = 0;
   private layerEnabled = true;
-  private listenerPositions: Array<{ x: number; y: number }> = [];
+  private listenerPositions: Array<{ x: number; y: number; z: number }> = [];
 
   constructor(
     private readonly audio: AudioEngine,
@@ -180,7 +180,7 @@ export class RadioStationRuntime {
   async setLayerEnabled(
     enabled: boolean,
     items: Iterable<WorldItem>,
-    listenerPosition: { x: number; y: number } | null = null,
+    listenerPosition: { x: number; y: number; z: number } | null = null,
   ): Promise<void> {
     this.layerEnabled = enabled;
     this.listenerPositions = listenerPosition ? [{ ...listenerPosition }] : [];
@@ -193,7 +193,7 @@ export class RadioStationRuntime {
 
   async sync(
     items: Iterable<WorldItem>,
-    listenerPositions: Array<{ x: number; y: number }> | { x: number; y: number } | null = null,
+    listenerPositions: Array<{ x: number; y: number; z: number }> | { x: number; y: number; z: number } | null = null,
   ): Promise<void> {
     if (!this.layerEnabled) {
       this.cleanupAll();
@@ -222,7 +222,7 @@ export class RadioStationRuntime {
     }
   }
 
-  updateSpatialAudio(items: Map<string, WorldItem>, playerPosition: { x: number; y: number }): void {
+  updateSpatialAudio(items: Map<string, WorldItem>, playerPosition: { x: number; y: number; z: number }): void {
     if (!this.layerEnabled) return;
     const audioCtx = this.audio.context;
     if (!audioCtx) return;
@@ -243,7 +243,7 @@ export class RadioStationRuntime {
         continue;
       }
       const spatialConfig = this.getSpatialConfig(item);
-      const mix = resolveSpatialMix({
+      const mix = item.z === playerPosition.z ? resolveSpatialMix({
         dx: item.x - playerPosition.x,
         dy: item.y - playerPosition.y,
         range: Math.max(1, spatialConfig.range || HEARING_RADIUS),
@@ -257,7 +257,7 @@ export class RadioStationRuntime {
           coneDeg: 120,
           rearGain: 0.4,
         },
-      });
+      }) : null;
       const isAudible = mix !== null && mix.gain > 0;
       if (isAudible && !output.wasAudible) {
         this.nextSharedStartAtMs.delete(output.streamUrl);
@@ -466,7 +466,7 @@ export class RadioStationRuntime {
 
   private shouldKeepRuntime(
     item: WorldItem,
-    listenerPositions: Array<{ x: number; y: number }>,
+    listenerPositions: Array<{ x: number; y: number; z: number }>,
     currentlyActive: boolean,
   ): boolean {
     const streamUrl = String(item.params.streamUrl ?? '').trim();
@@ -477,7 +477,8 @@ export class RadioStationRuntime {
     const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
     const threshold = baseRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);
     return listenerPositions.some((listenerPosition) =>
-      Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold,
+      item.z === listenerPosition.z
+      && Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold,
     );
   }
 }
