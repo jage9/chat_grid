@@ -11,12 +11,7 @@ EMIT_SOUND: str | None = None
 USE_COOLDOWN_MS = 500
 EMIT_RANGE = 15
 DIRECTIONAL = False
-OCCUPIED_OFFSETS: tuple[tuple[int, int], ...] = (
-    (0, 0),
-    (1, 0),
-    (0, 1),
-    (1, 1),
-)
+OCCUPIED_OFFSETS: tuple[tuple[int, int], ...] = ((0, 0),)
 DEFAULT_TITLE = "Elevator"
 DEFAULT_PARAMS: dict = {
     "floorZs": [0, 40],

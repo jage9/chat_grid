@@ -71,10 +71,10 @@ The item remains one entity with one id. The server expands the offsets for occu
 
 The elevator is an assembly, not duplicated floor items:
 
-* One shaft anchor and footprint shared by both floors.
+* One single-square shaft anchor shared by both floors.
 * One car state with `currentZ`, `targetZ`, direction, door state, occupants, and timers.
 * One linked landing control on each floor. Landing controls may be lightweight child fixtures of the elevator rather than independent persisted items.
-* The shaft footprint is reserved on both floors even though the car is present at only one elevation.
+* The shaft's anchor square is reserved on both floors even though the car is present at only one elevation.
 
 This footprint model is also useful for tables, stages, large instruments, and vehicles. Walls should still use a separate edge-based geometry model later; footprints are not a replacement for walls.
 
@@ -122,7 +122,7 @@ The automatic other-floor destination is the simplest accessible behavior for tw
 
 ### Phase 4: Elevator Assembly
 
-* Add the elevator type, shaft footprint, two landing controls, independent car state machine, and persisted resting state.
+* Add the elevator type, single-square shaft, two landing controls, independent car state machine, and persisted resting state.
 * Add call, enter, travel, arrive, door-open, exit, and timeout actions.
 * Move riders and carried items authoritatively with the car.
 * Broadcast explicit elevator state packets so sounds and UI do not infer state from messages.

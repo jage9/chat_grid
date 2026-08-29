@@ -218,7 +218,7 @@ This is behavior-focused documentation for item types and their defaults.
 ### Defaults
 - Title: `Elevator`
 - Floors: ground at `z=0`, second at `z=40`
-- Footprint: 2 by 2 squares, present on both landings
+- Footprint: one square, present at the same coordinate on both landings
 - Door-open time: 5 seconds
 - Travel time: 5 seconds
 - No built-in sounds until elevator assets are supplied

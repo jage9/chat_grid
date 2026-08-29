@@ -7,11 +7,11 @@ import {
   type WorldItem,
 } from './gameState';
 
-function elevator(): WorldItem {
+function multiSquareItem(): WorldItem {
   return {
-    id: 'elevator-1',
-    type: 'elevator',
-    title: 'Elevator',
+    id: 'large-item-1',
+    type: 'test_large_item',
+    title: 'Large item',
     x: 10,
     y: 10,
     z: 0,
@@ -21,7 +21,7 @@ function elevator(): WorldItem {
     updatedAt: 1,
     version: 1,
     capabilities: ['usable'],
-    params: { floorZs: [0, 40] },
+    params: {},
     occupiedOffsets: [
       { x: 0, y: 0 },
       { x: 1, y: 0 },
@@ -32,17 +32,17 @@ function elevator(): WorldItem {
 }
 
 describe('floor-aware item footprints', () => {
-  it('occupies every shaft cell on each configured floor', () => {
-    const item = elevator();
+  it('occupies every declared cell only on its floor', () => {
+    const item = multiSquareItem();
 
     expect(itemOccupiesPosition(item, 11, 11, 0)).toBe(true);
-    expect(itemOccupiesPosition(item, 11, 11, 40)).toBe(true);
-    expect(itemOccupiesPosition(item, 12, 11, 40)).toBe(false);
+    expect(itemOccupiesPosition(item, 11, 11, 40)).toBe(false);
+    expect(itemOccupiesPosition(item, 12, 11, 0)).toBe(false);
   });
 
   it('uses the nearest occupied cell for locating and distance', () => {
     const state = createInitialState();
-    const item = elevator();
+    const item = multiSquareItem();
     state.player.x = 12;
     state.player.y = 11;
     state.items.set(item.id, item);

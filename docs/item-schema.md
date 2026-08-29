@@ -36,7 +36,7 @@
   - `radio_station` can override this per instance via `params.emitRange` (`5..20`).
 - `directional`: global directional attenuation flag per item type (`radio_station=true`, others `false`); `widget` can override per instance via `params.directional`.
 - `z`: authoritative floor height. Ordinary items use `0` or `40`.
-- `occupiedOffsets`: server-owned horizontal footprint relative to the item anchor. Existing items use one cell; elevators use a 2 by 2 footprint.
+- `occupiedOffsets`: server-owned horizontal footprint relative to the item anchor. Elevators and existing items use one cell; the footprint model remains available for future larger objects.
 
 ## Persisted Item State (`server/runtime/items.json`)
 
@@ -239,7 +239,7 @@
 
 - The server owns every field except the display title.
 - Each elevator is an independent object; more than one may be placed.
-- The shaft occupies a 2 by 2 footprint on both configured floors.
+- The shaft occupies its single anchor square on both configured floors.
 - Elevator runtime timers are not resumed after a server restart. A loaded elevator returns to a closed, idle state at its last completed floor.
 
 ## Packet Shapes

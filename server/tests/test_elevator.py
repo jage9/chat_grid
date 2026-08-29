@@ -22,8 +22,8 @@ def _fake_ws() -> ServerConnection:
     return cast(ServerConnection, object())
 
 
-def test_elevator_footprint_occupies_both_floors() -> None:
-    """One elevator entity should expose its full shaft on both landings."""
+def test_elevator_single_square_occupies_both_floors() -> None:
+    """One elevator entity should expose its anchor square on both landings."""
 
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     client = ClientConnection(
@@ -33,11 +33,9 @@ def test_elevator_footprint_occupies_both_floors() -> None:
     elevator.z = 0
 
     assert server._item_is_on_client_square(elevator, client)
-    client.x = 11
-    client.y = 11
     client.z = 40
     assert server._item_is_on_client_square(elevator, client)
-    client.x = 12
+    client.x = 11
     assert not server._item_is_on_client_square(elevator, client)
 
 

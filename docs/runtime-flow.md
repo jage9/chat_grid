@@ -99,7 +99,7 @@ Core incoming message effects:
 - The client renders only the current floor. Item lists and interactions are current-floor only; the user list remains global and names each floor.
 - Cross-floor user teleport is blocked in the client, and the server rejects any packet that attempts to change `z` directly.
 - Positional voice, media, item, piano, clock, footstep, teleport, and use audio is gated by `z`.
-- Each elevator is one independent 2 by 2 shaft object shared by both landings. Calls, doors, queueing, travel, rider movement, and carried-item movement are server-owned.
+- Each elevator is one independent single-square shaft object at the same coordinate on both landings. Calls, doors, queueing, travel, rider movement, and carried-item movement are server-owned.
 - A door remains open for five seconds. Travel takes another five seconds. During travel, riders are broadcast at an intermediate height and belong to neither floor.
 - On startup, any incomplete persisted elevator timer is cleared and the car becomes closed and idle at its last completed landing.
 - A process restart also drops items whose connection-scoped carrier no longer exists; a carried item caught at an intermediate travel height returns to the ground floor.
