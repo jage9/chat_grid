@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
+from ...emit_validation import EMIT_EFFECT_OPTIONS
+
 LABEL = "elevator"
 TOOLTIP = "A two-floor elevator with a shared shaft and timed doors."
-EDITABLE_PROPERTIES: tuple[str, ...] = ("title", "emitSound")
+EDITABLE_PROPERTIES: tuple[str, ...] = (
+    "title",
+    "emitRange",
+    "emitVolume",
+    "emitSoundSpeed",
+    "emitSoundTempo",
+    "emitInitialDelay",
+    "emitLoopDelay",
+    "emitEffect",
+    "emitEffectValue",
+    "emitSound",
+)
 CAPABILITIES: tuple[str, ...] = ("editable", "deletable", "usable")
 USE_SOUND: str | None = None
 EMIT_SOUND: str | None = None
@@ -21,6 +34,14 @@ DEFAULT_PARAMS: dict = {
     "departOnCloseZ": None,
     "state": "idle",
     "doorOpen": False,
+    "emitRange": 15,
+    "emitVolume": 100,
+    "emitSoundSpeed": 50,
+    "emitSoundTempo": 50,
+    "emitInitialDelay": 0,
+    "emitLoopDelay": 0,
+    "emitEffect": "off",
+    "emitEffectValue": 50,
     "emitSound": "",
 }
 PARAM_KEYS: tuple[str, ...] = (
@@ -31,6 +52,14 @@ PARAM_KEYS: tuple[str, ...] = (
     "departOnCloseZ",
     "state",
     "doorOpen",
+    "emitRange",
+    "emitVolume",
+    "emitSoundSpeed",
+    "emitSoundTempo",
+    "emitInitialDelay",
+    "emitLoopDelay",
+    "emitEffect",
+    "emitEffectValue",
     "emitSound",
 )
 
@@ -74,6 +103,46 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "boolean",
         "label": "Door open",
         "tooltip": "Whether the elevator door is open.",
+    },
+    "emitRange": {
+        "valueType": "number",
+        "tooltip": "Maximum distance in squares for the elevator's emitted sound.",
+        "range": {"min": 1, "max": 20, "step": 1},
+    },
+    "emitVolume": {
+        "valueType": "number",
+        "tooltip": "Elevator emitted sound volume percent.",
+        "range": {"min": 0, "max": 100, "step": 1},
+    },
+    "emitSoundSpeed": {
+        "valueType": "number",
+        "tooltip": "Playback speed and pitch. 50 is normal, 0 is half, and 100 is double.",
+        "range": {"min": 0, "max": 100, "step": 0.1},
+    },
+    "emitSoundTempo": {
+        "valueType": "number",
+        "tooltip": "Playback tempo. 50 is normal, 0 is half, and 100 is double.",
+        "range": {"min": 0, "max": 100, "step": 0.1},
+    },
+    "emitInitialDelay": {
+        "valueType": "number",
+        "tooltip": "Delay in seconds before emitted audio starts.",
+        "range": {"min": 0, "max": 300, "step": 0.1},
+    },
+    "emitLoopDelay": {
+        "valueType": "number",
+        "tooltip": "Delay in seconds between each playing of the emitted audio.",
+        "range": {"min": 0, "max": 300, "step": 0.1},
+    },
+    "emitEffect": {
+        "valueType": "list",
+        "tooltip": "Effect applied to the elevator's emitted sound.",
+        "options": list(EMIT_EFFECT_OPTIONS),
+    },
+    "emitEffectValue": {
+        "valueType": "number",
+        "tooltip": "Amount of the selected emitted sound effect.",
+        "range": {"min": 0, "max": 100, "step": 0.1},
     },
     "emitSound": {
         "valueType": "sound",

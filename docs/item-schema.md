@@ -234,14 +234,22 @@
   "departOnCloseZ": null,
   "state": "idle",
   "doorOpen": false,
+  "emitRange": 15,
+  "emitVolume": 100,
+  "emitSoundSpeed": 50,
+  "emitSoundTempo": 50,
+  "emitInitialDelay": 0,
+  "emitLoopDelay": 0,
+  "emitEffect": "off",
+  "emitEffectValue": 50,
   "emitSound": ""
 }
 ```
 
-- The server owns every field except the display title.
+- The server owns the floor, movement, queue, and door fields. The display title and standard `emit*` properties are editable.
 - Each elevator is an independent object; more than one may be placed.
 - The shaft occupies its single anchor square on both configured floors.
-- `emitSound` is editable and uses the standard sound-reference format. Its spatial source follows the car's current `z`.
+- The full standard emitter control set is editable. Its spatial source follows the car's current `z`.
 - Whenever the door opens, the landing plays `/sounds/elevator_up.ogg` or `/sounds/elevator_down.ogg` spatially to announce the elevator's next travel direction.
 - Elevator runtime timers are not resumed after a server restart. A loaded elevator returns to a closed, idle state at its last completed floor.
 

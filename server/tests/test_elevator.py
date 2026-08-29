@@ -60,8 +60,8 @@ def test_same_xy_on_another_floor_is_not_the_same_item_square() -> None:
     assert not server._item_is_on_client_square(item, client)
 
 
-def test_elevator_emit_sound_is_editable_but_runtime_state_is_not() -> None:
-    """Elevator edits should accept audio without exposing state mutation."""
+def test_elevator_emitter_is_editable_but_runtime_state_is_not() -> None:
+    """Elevator edits should accept emitter controls without exposing state mutation."""
 
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     client = ClientConnection(
@@ -71,10 +71,45 @@ def test_elevator_emit_sound_is_editable_but_runtime_state_is_not() -> None:
 
     params = validate_update(
         elevator,
-        {**elevator.params, "emitSound": "elevator_motor.ogg", "state": "moving"},
+        {
+            **elevator.params,
+            "emitRange": 12,
+            "emitVolume": 65,
+            "emitSoundSpeed": 40.5,
+            "emitSoundTempo": 62.5,
+            "emitInitialDelay": 1.2,
+            "emitLoopDelay": 3.4,
+            "emitEffect": "echo",
+            "emitEffectValue": 44.4,
+            "emitSound": "elevator_motor.ogg",
+            "state": "moving",
+        },
     )
 
-    assert params["emitSound"] == "sounds/elevator_motor.ogg"
+    assert {
+        key: params[key]
+        for key in (
+            "emitRange",
+            "emitVolume",
+            "emitSoundSpeed",
+            "emitSoundTempo",
+            "emitInitialDelay",
+            "emitLoopDelay",
+            "emitEffect",
+            "emitEffectValue",
+            "emitSound",
+        )
+    } == {
+        "emitRange": 12,
+        "emitVolume": 65,
+        "emitSoundSpeed": 40.5,
+        "emitSoundTempo": 62.5,
+        "emitInitialDelay": 1.2,
+        "emitLoopDelay": 3.4,
+        "emitEffect": "echo",
+        "emitEffectValue": 44.4,
+        "emitSound": "sounds/elevator_motor.ogg",
+    }
     assert params["state"] == "idle"
 
 

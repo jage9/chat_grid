@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from ...emit_validation import EMIT_EFFECT_OPTIONS
+
 LABEL = "widget"
 TOOLTIP = "A basic item. Make it a beacon or whatever you want."
 EDITABLE_PROPERTIES: tuple[str, ...] = (
@@ -57,14 +59,7 @@ PARAM_KEYS: tuple[str, ...] = (
     "useSound",
     "emitSound",
 )
-EFFECT_OPTIONS: tuple[str, ...] = (
-    "reverb",
-    "echo",
-    "flanger",
-    "high_pass",
-    "low_pass",
-    "off",
-)
+EFFECT_OPTIONS = EMIT_EFFECT_OPTIONS
 
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
     "title": {
