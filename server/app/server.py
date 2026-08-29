@@ -20,7 +20,6 @@ import time
 import uuid
 from pathlib import Path
 from typing import Literal, TypeAlias, TypedDict
-from urllib.error import URLError
 from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
@@ -136,6 +135,7 @@ AUTH_FAILURE_JITTER_MIN_MS = 0.02
 AUTH_FAILURE_JITTER_MAX_MS = 0.08
 RADIO_METADATA_POLL_INTERVAL_S = 10.0
 RADIO_METADATA_TIMEOUT_S = 6.0
+RADIO_METADATA_MAX_CONCURRENCY = 4
 CLOCK_ANNOUNCE_POLL_INTERVAL_S = 1.0
 AUTH_SESSION_COOKIE_NAME = "chgrid_session_token"
 AUTH_SESSION_COOKIE_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
@@ -295,6 +295,9 @@ class SignalingServer:
         self._auth_failures_by_ip: dict[str, deque[float]] = {}
         self._auth_failures_by_identity: dict[str, deque[float]] = {}
         self._radio_metadata_task: asyncio.Task[None] | None = None
+        self._radio_metadata_semaphore = asyncio.Semaphore(
+            RADIO_METADATA_MAX_CONCURRENCY
+        )
         self._clock_announce_task: asyncio.Task[None] | None = None
         self._clock_top_of_hour_markers: dict[str, str] = {}
         self._clock_alarm_markers: dict[str, str] = {}
@@ -944,36 +947,70 @@ class SignalingServer:
 
         if not stream_url:
             return "", ""
+        with open_validated_public_url(
+            stream_url,
+            headers={"Icy-MetaData": "1", "User-Agent": "ChatGrid"},
+            timeout=RADIO_METADATA_TIMEOUT_S,
+        ) as response:
+            station = str(
+                response.headers.get("icy-name")
+                or response.headers.get("ice-name")
+                or ""
+            ).strip()
+            title = ""
+            metaint_raw = response.headers.get("icy-metaint")
+            if metaint_raw:
+                metaint = int(metaint_raw)
+                if metaint > 0:
+                    response.read(metaint)
+                    meta_len_byte = response.read(1)
+                    if meta_len_byte:
+                        meta_length = meta_len_byte[0] * 16
+                        if meta_length > 0:
+                            meta = response.read(meta_length).decode(errors="ignore")
+                            match = re.search(r"StreamTitle='(.*?)';", meta)
+                            if match:
+                                title = match.group(1).strip()
+            return station[:160], title[:200]
+
+    async def _fetch_stream_metadata_safely(
+        self, stream_url: str
+    ) -> tuple[str, str] | None:
+        """Fetch one stream without allowing upstream failure to escape."""
+
         try:
-            with open_validated_public_url(
-                stream_url,
-                headers={"Icy-MetaData": "1", "User-Agent": "ChatGrid"},
-                timeout=RADIO_METADATA_TIMEOUT_S,
-            ) as response:
-                station = str(
-                    response.headers.get("icy-name")
-                    or response.headers.get("ice-name")
-                    or ""
-                ).strip()
-                title = ""
-                metaint_raw = response.headers.get("icy-metaint")
-                if metaint_raw:
-                    metaint = int(metaint_raw)
-                    if metaint > 0:
-                        response.read(metaint)
-                        meta_len_byte = response.read(1)
-                        if meta_len_byte:
-                            meta_length = meta_len_byte[0] * 16
-                            if meta_length > 0:
-                                meta = response.read(meta_length).decode(
-                                    errors="ignore"
-                                )
-                                match = re.search(r"StreamTitle='(.*?)';", meta)
-                                if match:
-                                    title = match.group(1).strip()
-                return station[:160], title[:200]
-        except (OSError, URLError, ValueError):
-            return "", ""
+            async with self._radio_metadata_semaphore:
+                return await asyncio.to_thread(self._fetch_stream_metadata, stream_url)
+        except Exception:
+            hostname = urlsplit(stream_url).hostname or "invalid"
+            LOGGER.warning(
+                "radio metadata fetch failed host=%s", hostname, exc_info=True
+            )
+            return None
+
+    async def _apply_radio_metadata(
+        self,
+        radios: list[WorldItem],
+        metadata: tuple[str, str] | None,
+    ) -> None:
+        """Apply one successful metadata result to matching radio items."""
+
+        if metadata is None:
+            return
+        station_name, now_playing = metadata
+        for item in radios:
+            current_station = str(item.params.get("stationName", "")).strip()
+            current_playing = str(item.params.get("nowPlaying", "")).strip()
+            if station_name == current_station and now_playing == current_playing:
+                continue
+            item.params["stationName"] = station_name
+            item.params["nowPlaying"] = now_playing
+            item.updatedAt = self.item_service.now_ms()
+            item.updatedBy = "system"
+            item.updatedByName = "system"
+            item.version += 1
+            self._request_state_save()
+            await self._broadcast_item(item)
 
     async def _refresh_radio_metadata_once(self) -> None:
         """Refresh metadata once per stream for radios near an active listener."""
@@ -991,27 +1028,12 @@ class SignalingServer:
             if stream_url:
                 radios_by_stream.setdefault(stream_url, []).append(item)
 
-        for stream_url, radios in radios_by_stream.items():
-            try:
-                station_name, now_playing = await asyncio.to_thread(
-                    self._fetch_stream_metadata, stream_url
-                )
-            except Exception:
-                LOGGER.exception("radio metadata refresh failed")
-                continue
-            for item in radios:
-                current_station = str(item.params.get("stationName", "")).strip()
-                current_playing = str(item.params.get("nowPlaying", "")).strip()
-                if station_name == current_station and now_playing == current_playing:
-                    continue
-                item.params["stationName"] = station_name
-                item.params["nowPlaying"] = now_playing
-                item.updatedAt = self.item_service.now_ms()
-                item.updatedBy = "system"
-                item.updatedByName = "system"
-                item.version += 1
-                self._request_state_save()
-                await self._broadcast_item(item)
+        stream_urls = list(radios_by_stream)
+        results = await asyncio.gather(
+            *(self._fetch_stream_metadata_safely(url) for url in stream_urls)
+        )
+        for stream_url, metadata in zip(stream_urls, results, strict=True):
+            await self._apply_radio_metadata(radios_by_stream[stream_url], metadata)
 
     async def _run_radio_metadata_loop(self) -> None:
         """Background polling loop that refreshes radio now-playing metadata."""
@@ -3626,6 +3648,14 @@ class SignalingServer:
                     secondary_item.id,
                 )
                 return
+            if secondary_item.type == "radio_station" and not (
+                str(secondary_item.params.get("stationName", "")).strip()
+                or str(secondary_item.params.get("nowPlaying", "")).strip()
+            ):
+                stream_url = str(secondary_item.params.get("streamUrl", "")).strip()
+                if stream_url:
+                    metadata = await self._fetch_stream_metadata_safely(stream_url)
+                    await self._apply_radio_metadata([secondary_item], metadata)
             try:
                 secondary_result = handler.secondary_use(
                     secondary_item, client.nickname, self._format_clock_display_time

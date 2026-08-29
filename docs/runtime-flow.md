@@ -47,7 +47,7 @@ Each frame:
 - Update spatial item emit audio.
 - Draw canvas scene.
 
-Radio metadata polling is limited to stations near a listener, deduplicated by stream URL, and isolates upstream failures so one station cannot stop updates for the others.
+Radio metadata polling is limited to stations near a listener, deduplicated by stream URL, and uses bounded concurrent fetches so slow stations do not hold up the others. Failed fetches preserve the last known title. Requesting now-playing triggers one immediate fetch when no metadata has been collected yet.
 
 ## Message Handling
 

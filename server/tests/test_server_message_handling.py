@@ -248,6 +248,8 @@ async def test_radio_metadata_refresh_continues_after_one_stream_fails(
     failed_radio.params["streamUrl"] = "https://failed.example/stream"
     failed_radio.params["enabled"] = True
     failed_radio.params["emitRange"] = 10
+    failed_radio.params["stationName"] = "Previous Station"
+    failed_radio.params["nowPlaying"] = "Previous Song"
     server.item_service.add_item(failed_radio)
 
     working_radio = server.item_service.default_item(client, "radio_station")
@@ -271,6 +273,8 @@ async def test_radio_metadata_refresh_continues_after_one_stream_fails(
 
     assert working_radio.params["stationName"] == "Working Station"
     assert working_radio.params["nowPlaying"] == "Working Song"
+    assert failed_radio.params["stationName"] == "Previous Station"
+    assert failed_radio.params["nowPlaying"] == "Previous Song"
 
 
 @pytest.mark.asyncio
@@ -317,6 +321,54 @@ async def test_item_secondary_use_radio_reports_now_playing(
     assert results[-1].action == "secondary_use"
     assert "Playing Song Y from Station X." in results[-1].message
     assert broadcast_payloads == []
+
+
+@pytest.mark.asyncio
+async def test_item_secondary_use_radio_fetches_missing_now_playing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5),
+        permissions={"item.use"},
+    )
+    server.clients[ws] = client
+
+    radio = server.item_service.default_item(client, "radio_station")
+    radio.x = 5
+    radio.y = 5
+    radio.params["streamUrl"] = "https://radio.example/stream"
+    radio.params["enabled"] = True
+    radio.params["stationName"] = ""
+    radio.params["nowPlaying"] = ""
+    server.item_service.add_item(radio)
+
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
+        return None
+
+    def fake_fetch(url: str) -> tuple[str, str]:
+        assert url == "https://radio.example/stream"
+        return ("Station X", "Song Y")
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+    monkeypatch.setattr(server, "_fetch_stream_metadata", fake_fetch)
+
+    await server._handle_message(
+        client, json.dumps({"type": "item_secondary_use", "itemId": radio.id})
+    )
+
+    result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert result.ok is True
+    assert result.message == "Playing Song Y from Station X."
 
 
 @pytest.mark.asyncio
