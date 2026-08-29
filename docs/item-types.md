@@ -238,7 +238,7 @@ This is behavior-focused documentation for item types and their defaults.
 - Elevators cannot be carried. They cannot be deleted while moving or occupied.
 - Riders cannot move or teleport while inside.
 - During travel, rider `z` advances progressively between the two floors. Every intermediate height is hidden from both floors and blocks all floor audio.
-- A configured emitted sound follows the car's `z`, including during travel, and remains subject to the normal item-audio range and floor gate.
+- A configured emitted sound stays on the elevator object and follows the same range and floor rules as a widget emitter. A rider does not hear that emitter while inside the elevator.
 
 ### Validation
 - `directional`: boolean; `facing`: degrees `0..360`

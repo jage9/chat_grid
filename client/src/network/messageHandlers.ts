@@ -292,9 +292,13 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
       }
 
       case 'item_elevator_status': {
+        const previousElevatorItemId = deps.state.elevatorItemId;
         deps.state.elevatorItemId = message.event === 'exited' ? null : message.itemId;
         if (message.message) {
           deps.updateStatus(message.message);
+        }
+        if (previousElevatorItemId !== deps.state.elevatorItemId) {
+          await deps.refreshAudioSubscriptions(true);
         }
         break;
       }

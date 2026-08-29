@@ -105,6 +105,7 @@ export class ItemEmitRuntime {
     private readonly audio: AudioEngine,
     private readonly resolveSoundUrl: (soundPath: string) => string,
     private readonly getSpatialConfig: (item: WorldItem) => EmitSpatialConfig,
+    private readonly isPlaybackAllowed: (item: WorldItem) => boolean = () => true,
   ) {}
 
   cleanup(itemId: string, options?: { preserveSchedule?: boolean }): void {
@@ -182,6 +183,10 @@ export class ItemEmitRuntime {
 
     for (const item of items) {
       seenItemIds.add(item.id);
+      if (!this.isPlaybackAllowed(item)) {
+        this.cleanup(item.id, { preserveSchedule: true });
+        continue;
+      }
       const emitSound = String(item.params.emitSound ?? item.emitSound ?? '').trim();
       const enabled = item.params.enabled !== false;
       const soundUrl = enabled ? this.resolveSoundUrl(emitSound) : '';
@@ -440,9 +445,6 @@ export class ItemEmitRuntime {
     currentlyActive: boolean,
   ): boolean {
     if (listenerPositions.length === 0) return false;
-    if (currentlyActive && item.type === 'elevator' && item.params.state === 'moving') {
-      return true;
-    }
     const spatialConfig = this.getSpatialConfig(item);
     const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
     const threshold = baseRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);

@@ -1870,8 +1870,6 @@ class SignalingServer:
     ) -> None:
         """Move riders to one intermediate elevator height."""
 
-        item.z = travel_z
-        await self._broadcast_item(item)
         for rider in self.clients.values():
             if rider.elevator_id != item.id:
                 continue
@@ -1949,7 +1947,6 @@ class SignalingServer:
                     origin_z = int(item.params.get("currentZ", 0))
                     target_z = int(item.params.get("targetZ", item.params["currentZ"]))
                     await self._advance_elevator_travel(item, origin_z, target_z)
-                    item.z = target_z
                     item.params["currentZ"] = target_z
                     item.params["targetZ"] = None
                     item.params["state"] = "door_open"
@@ -3529,6 +3526,7 @@ class SignalingServer:
                 return
             item = self.item_service.default_item(client, packet.itemType)
             if item.type == "elevator":
+                item.z = 0
                 item.params["currentZ"] = client.z
             if not self._item_footprint_in_bounds(item):
                 await self._send_item_result(

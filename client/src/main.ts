@@ -319,7 +319,12 @@ let activeWelcomeMessage = DEFAULT_WELCOME_MESSAGE;
 const messageBuffer: string[] = [];
 let messageCursor = -1;
 const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig);
-const itemEmitRuntime = new ItemEmitRuntime(audio, resolveIncomingSoundUrl, getItemSpatialConfig);
+const itemEmitRuntime = new ItemEmitRuntime(
+  audio,
+  resolveIncomingSoundUrl,
+  getItemSpatialConfig,
+  (item) => state.elevatorItemId !== item.id,
+);
 const clockAnnouncer = new ClockAnnouncer(audio, () => ({ x: state.player.x, y: state.player.y, z: state.player.z }));
 let replaceTextOnNextType = false;
 let pendingEscapeDisconnect = false;

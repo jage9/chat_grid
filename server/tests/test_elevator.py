@@ -539,11 +539,8 @@ async def test_elevator_travel_height_progresses_between_acoustic_floors(
         if isinstance(packet, ItemElevatorStatusPacket) and packet.event == "moving"
     ]
     assert status_heights == heights
-    item_heights = [
-        packet.item.z for packet in broadcast if isinstance(packet, ItemUpsertPacket)
-    ]
-    assert item_heights == heights
-    assert elevator.z == heights[-1]
+    assert not any(isinstance(packet, ItemUpsertPacket) for packet in broadcast)
+    assert elevator.z == origin_z
 
 
 def test_disconnecting_rider_returns_to_last_landing() -> None:
