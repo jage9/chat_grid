@@ -235,7 +235,7 @@ This is behavior-focused documentation for item types and their defaults.
 - Each placed elevator has its own car and state machine; multiple elevators are allowed.
 - Elevators cannot be carried. They cannot be deleted while moving or occupied.
 - Riders cannot move or teleport while inside.
-- During travel, riders use an intermediate `z`, so they are hidden from both floors and all floor audio is blocked.
+- During travel, rider `z` advances progressively between the two floors. Every intermediate height is hidden from both floors and blocks all floor audio.
 
 ## Adding A New Item Type (Plugin Discovery)
 

@@ -989,30 +989,19 @@ function getItemsAtPosition(x: number, y: number): WorldItem[] {
   );
 }
 
-/** Returns whether a height lies strictly between configured floor elevations. */
-function isBetweenFloors(z: number): boolean {
-  const elevations = Array.from(worldFloors.keys());
-  if (elevations.length < 2) return false;
-  return z > Math.min(...elevations) && z < Math.max(...elevations);
-}
-
 /** Formats a complete world location for speech and lists. */
 function locationPhrase(x: number, y: number, z: number): string {
-  if (isBetweenFloors(z)) {
-    return `${formatCoordinate(x)}, ${formatCoordinate(y)}, between floors at height ${formatCoordinate(z)}`;
-  }
   const configuredFloor = worldFloors.get(z);
   if (configuredFloor) {
     return `${formatCoordinate(x)}, ${formatCoordinate(y)}, ${formatCoordinate(z)}, ${configuredFloor}`;
   }
-  return `${formatCoordinate(x)}, ${formatCoordinate(y)}, height ${formatCoordinate(z)}`;
+  return `${formatCoordinate(x)}, ${formatCoordinate(y)}, ${formatCoordinate(z)}`;
 }
 
 /** Formats a user's floor for cross-floor teleport feedback. */
 function floorPositionPhrase(z: number): string {
   const configuredFloor = worldFloors.get(z);
   if (configuredFloor) return `on ${configuredFloor}`;
-  if (isBetweenFloors(z)) return `between floors at height ${formatCoordinate(z)}`;
   return `at height ${formatCoordinate(z)}`;
 }
 

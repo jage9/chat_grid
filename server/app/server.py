@@ -145,6 +145,7 @@ FLOOR_DEFINITIONS: tuple[dict[str, str | int], ...] = (
 FLOOR_ELEVATIONS = frozenset(int(floor["z"]) for floor in FLOOR_DEFINITIONS)
 ELEVATOR_DOOR_OPEN_SECONDS = 5.0
 ELEVATOR_TRAVEL_SECONDS = 5.0
+ELEVATOR_TRAVEL_UPDATE_SECONDS = 0.25
 AUTH_SESSION_COOKIE_NAME = "chgrid_session_token"
 AUTH_SESSION_COOKIE_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
 AUTH_SESSION_COOKIE_SET_PATH = "auth/session/set"
@@ -1863,13 +1864,11 @@ class SignalingServer:
             )
         )
 
-    async def _broadcast_elevator_travel_positions(
-        self, item: WorldItem, destination_z: int
+    async def _broadcast_elevator_travel_position(
+        self, item: WorldItem, travel_z: int
     ) -> None:
-        """Move riders into an intermediate height that is isolated from both floors."""
+        """Move riders to one intermediate elevator height."""
 
-        current_z = int(item.params.get("currentZ", 0))
-        travel_z = current_z + ((destination_z - current_z) // 2)
         for rider in self.clients.values():
             if rider.elevator_id != item.id:
                 continue
@@ -1901,6 +1900,39 @@ class SignalingServer:
                 ),
             )
 
+    async def _advance_elevator_travel(
+        self, item: WorldItem, origin_z: int, destination_z: int
+    ) -> None:
+        """Publish progressive rider heights over the elevator travel interval."""
+
+        distance = destination_z - origin_z
+        if distance == 0:
+            await asyncio.sleep(ELEVATOR_TRAVEL_SECONDS)
+            return
+        direction = 1 if distance > 0 else -1
+        update_count = max(
+            1, round(ELEVATOR_TRAVEL_SECONDS / ELEVATOR_TRAVEL_UPDATE_SECONDS)
+        )
+        last_z = origin_z
+
+        if abs(distance) > 1:
+            last_z = origin_z + direction
+            await self._broadcast_elevator_travel_position(item, last_z)
+
+        for update_index in range(1, update_count + 1):
+            await asyncio.sleep(ELEVATOR_TRAVEL_SECONDS / update_count)
+            if update_index == update_count:
+                continue
+            travel_z = round(origin_z + (distance * update_index / update_count))
+            if direction > 0:
+                travel_z = max(origin_z + 1, min(destination_z - 1, travel_z))
+            else:
+                travel_z = max(destination_z + 1, min(origin_z - 1, travel_z))
+            if travel_z == last_z:
+                continue
+            last_z = travel_z
+            await self._broadcast_elevator_travel_position(item, travel_z)
+
     async def _run_elevator_cycle(self, item_id: str) -> None:
         """Advance one elevator through travel, arrival, and door timing."""
 
@@ -1911,9 +1943,9 @@ class SignalingServer:
                     return
                 state = str(item.params.get("state", "idle"))
                 if state == "moving":
-                    await asyncio.sleep(ELEVATOR_TRAVEL_SECONDS)
                     origin_z = int(item.params.get("currentZ", 0))
                     target_z = int(item.params.get("targetZ", item.params["currentZ"]))
+                    await self._advance_elevator_travel(item, origin_z, target_z)
                     item.params["currentZ"] = target_z
                     item.params["targetZ"] = None
                     item.params["state"] = "door_open"
@@ -1950,7 +1982,6 @@ class SignalingServer:
                     await self._broadcast_item(item)
                     if next_z is None:
                         return
-                    await self._broadcast_elevator_travel_positions(item, next_z)
                     continue
                 return
         except asyncio.CancelledError:

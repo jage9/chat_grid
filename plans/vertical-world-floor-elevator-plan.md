@@ -152,12 +152,13 @@ Shipped on `main`:
 
 * Floor/elevator implementation: commit `f4ec622`.
 * Elevator changed to one square: commit `3c1dc53`.
-* Current versions: client `R370`, server `S367`.
+* Current versions: client `R371`, server `S368`.
 * Ground floor is `z=0`; second floor is `z=40`.
 * Multiple independent elevator items are allowed. Each appears at one anchor coordinate on both floors, while its car remains at one completed landing or an intermediate travel height.
 * Door-open delay is five seconds. Travel is five seconds after the door closes.
 * Server restart clears unfinished elevator timers and restores a closed, idle car at its last completed landing.
 * A mid-trip disconnect restores the rider and carried item to the last completed landing rather than persisting the intermediate height.
+* Rider coordinates progress through intermediate `z` heights during the five-second trip instead of remaining at one midpoint.
 * Arrival opens the destination door, announces the floor to riders, and plays a spatial up/down arrival sound.
 
 Deferred:

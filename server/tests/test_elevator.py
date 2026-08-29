@@ -271,10 +271,18 @@ async def test_elevator_arrival_sound_matches_downward_travel(
 
 
 @pytest.mark.asyncio
-async def test_elevator_travel_height_is_between_acoustic_floors(
+@pytest.mark.parametrize(
+    ("origin_z", "destination_z", "first_height", "last_height"),
+    [(0, 40, 1, 38), (40, 0, 39, 2)],
+)
+async def test_elevator_travel_height_progresses_between_acoustic_floors(
     monkeypatch: pytest.MonkeyPatch,
+    origin_z: int,
+    destination_z: int,
+    first_height: int,
+    last_height: int,
 ) -> None:
-    """Travel broadcasts should remove riders from both landing audio zones."""
+    """Travel should progressively move riders without publishing either landing."""
 
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     websocket = _fake_ws()
@@ -284,12 +292,13 @@ async def test_elevator_travel_height_is_between_acoustic_floors(
         nickname="tester",
         x=10,
         y=10,
-        z=0,
+        z=origin_z,
         elevator_id="elevator-1",
     )
     server.clients[websocket] = client
     elevator = server.item_service.default_item(client, "elevator")
     elevator.id = "elevator-1"
+    elevator.params["currentZ"] = origin_z
     server.item_service.add_item(elevator)
     broadcast: list[object] = []
     sent: list[object] = []
@@ -300,27 +309,35 @@ async def test_elevator_travel_height_is_between_acoustic_floors(
     async def fake_send(_websocket: ServerConnection, packet: object) -> None:
         sent.append(packet)
 
+    async def immediate_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", immediate_sleep)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
     monkeypatch.setattr(server, "_send", fake_send)
 
-    await server._broadcast_elevator_travel_positions(elevator, 40)
+    await server._advance_elevator_travel(elevator, origin_z, destination_z)
 
-    position = cast(
-        BroadcastPositionPacket,
-        next(
-            packet
-            for packet in broadcast
-            if getattr(packet, "type", "") == "update_position"
-        ),
+    heights = [
+        cast(BroadcastPositionPacket, packet).z
+        for packet in broadcast
+        if getattr(packet, "type", "") == "update_position"
+    ]
+    assert heights[0] == first_height
+    assert heights[-1] == last_height
+    assert len(set(heights)) == len(heights)
+    assert all(
+        next_height > height if destination_z > origin_z else next_height < height
+        for height, next_height in zip(heights, heights[1:])
     )
-    assert position.z == 20
-    assert client.z == 20
-    assert any(
-        isinstance(packet, ItemElevatorStatusPacket)
-        and packet.event == "moving"
-        and packet.z == 20
+    assert len(heights) > 2
+    assert client.z == heights[-1]
+    status_heights = [
+        packet.z
         for packet in sent
-    )
+        if isinstance(packet, ItemElevatorStatusPacket) and packet.event == "moving"
+    ]
+    assert status_heights == heights
 
 
 def test_disconnecting_rider_returns_to_last_landing() -> None:
