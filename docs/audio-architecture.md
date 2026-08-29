@@ -53,7 +53,7 @@ Current defaults:
 - The ground floor is `z=0` and the second floor is `z=40`; sound never crosses between them.
 - LiveKit remains one room, but the client unsubscribes from audio publications for users on other floors. This preserves the global roster without downloading unheard voice tracks.
 - Elevator riders are published at progressively changing intermediate heights while the car moves, which keeps them unsubscribed from both floor audio groups.
-- Elevator arrival plays `/sounds/elevator_up.ogg` or `/sounds/elevator_down.ogg` as a spatial world cue at the destination floor.
+- Each elevator door opening plays `/sounds/elevator_up.ogg` or `/sounds/elevator_down.ogg` as a spatial world cue for the next direction available from that landing.
 
 ## Stale Stream Mitigation
 

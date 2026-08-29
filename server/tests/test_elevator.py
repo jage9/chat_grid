@@ -71,12 +71,13 @@ async def test_elevator_opens_then_second_use_enters(
     server.item_service.add_item(elevator)
 
     sent: list[object] = []
+    broadcast: list[object] = []
 
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
         sent.append(packet)
 
     async def fake_broadcast(packet: object, exclude=None) -> None:
-        return None
+        broadcast.append(packet)
 
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
@@ -84,6 +85,10 @@ async def test_elevator_opens_then_second_use_enters(
     await server._use_elevator(client, elevator)
     assert elevator.params["doorOpen"] is True
     assert client.elevator_id is None
+    door_sound = next(
+        packet for packet in broadcast if isinstance(packet, ItemUseSoundPacket)
+    )
+    assert door_sound.sound == "/sounds/elevator_up.ogg"
 
     await server._use_elevator(client, elevator)
     assert client.elevator_id == elevator.id
@@ -231,6 +236,7 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
     assert elevator.params["currentZ"] == 40
     assert elevator.params["state"] == "idle"
     assert client.z == 40
+    assert client.elevator_id == elevator.id
     assert carried.z == 40
     arrival = next(
         packet
@@ -241,15 +247,15 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
     arrival_sound = next(
         packet for packet in broadcast if isinstance(packet, ItemUseSoundPacket)
     )
-    assert arrival_sound.sound == "/sounds/elevator_up.ogg"
+    assert arrival_sound.sound == "/sounds/elevator_down.ogg"
     assert (arrival_sound.x, arrival_sound.y, arrival_sound.z) == (10, 10, 40)
 
 
 @pytest.mark.asyncio
-async def test_elevator_arrival_sound_matches_downward_travel(
+async def test_elevator_door_sound_announces_next_upward_trip(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A downward arrival should use the matching destination cue."""
+    """A ground-floor door opening should announce the next upward trip."""
 
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     client = ClientConnection(
@@ -263,11 +269,63 @@ async def test_elevator_arrival_sound_matches_downward_travel(
 
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server._broadcast_elevator_arrival_sound(elevator, 40, 0)
+    await server._broadcast_elevator_door_open_sound(elevator, 0)
 
     arrival_sound = cast(ItemUseSoundPacket, broadcast[0])
-    assert arrival_sound.sound == "/sounds/elevator_down.ogg"
+    assert arrival_sound.sound == "/sounds/elevator_up.ogg"
     assert arrival_sound.z == 0
+
+
+@pytest.mark.asyncio
+async def test_stopped_rider_exits_with_one_use_after_door_closes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rider should not need a separate use to reopen a stopped elevator."""
+
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    websocket = _fake_ws()
+    client = ClientConnection(
+        websocket=websocket,
+        id="u1",
+        nickname="tester",
+        x=10,
+        y=10,
+        z=40,
+        elevator_id="elevator-1",
+    )
+    server.clients[websocket] = client
+    elevator = server.item_service.default_item(client, "elevator")
+    elevator.id = "elevator-1"
+    elevator.params["currentZ"] = 40
+    server.item_service.add_item(elevator)
+    sent: list[object] = []
+    broadcast: list[object] = []
+
+    async def fake_send(_websocket: ServerConnection, packet: object) -> None:
+        sent.append(packet)
+
+    async def fake_broadcast(packet: object, exclude=None) -> None:
+        broadcast.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+
+    await server._use_elevator(client, elevator)
+
+    assert client.elevator_id is None
+    assert elevator.params["doorOpen"] is True
+    assert any(
+        isinstance(packet, ItemElevatorStatusPacket) and packet.event == "exited"
+        for packet in sent
+    )
+    door_sound = next(
+        packet for packet in broadcast if isinstance(packet, ItemUseSoundPacket)
+    )
+    assert door_sound.sound == "/sounds/elevator_down.ogg"
+
+    task = server._elevator_tasks.pop(elevator.id)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
 
 
 @pytest.mark.asyncio

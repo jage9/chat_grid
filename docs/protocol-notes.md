@@ -90,7 +90,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - absolute source coordinates `x`, `y`, `z`
 - `item_upsert.item.occupiedOffsets` contains the server-owned horizontal footprint relative to the item anchor.
 - Elevator travel sends progressive intermediate `update_position.z` values so rider coordinates advance throughout the trip while remaining outside both floor audio and visibility groups until arrival.
-- Elevator arrival sends `item_use_sound` at the destination `z`, using the up or down cue that matches its direction.
+- Every elevator door opening sends `item_use_sound` at the landing `z`; its up or down cue announces the next direction available from that floor.
 
 ## Welcome Metadata
 

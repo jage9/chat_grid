@@ -101,7 +101,7 @@ Core incoming message effects:
 - Positional voice, media, item, piano, clock, footstep, teleport, and use audio is gated by `z`.
 - Each elevator is one independent single-square shaft object at the same coordinate on both landings. Calls, doors, queueing, travel, rider movement, and carried-item movement are server-owned.
 - A door remains open for five seconds. Travel takes another five seconds. During travel, riders are broadcast at progressively changing intermediate heights and belong to neither floor.
-- Arrival opens the door, moves riders to the destination floor, sends them a clear arrival announcement, and plays the appropriate up/down spatial cue at that landing.
+- Arrival opens the door automatically, moves riders to the destination floor, sends them a clear arrival announcement, and plays the next-direction spatial cue at that landing. A rider who does not exit remains inside after the door closes and can later open-and-exit with one use.
 - On startup, any incomplete persisted elevator timer is cleared and the car becomes closed and idle at its last completed landing.
 - A process restart also drops items whose connection-scoped carrier no longer exists; a carried item caught at an intermediate travel height returns to the ground floor.
 

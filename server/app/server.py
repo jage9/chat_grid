@@ -1842,14 +1842,15 @@ class SignalingServer:
                 carried.updatedByName = rider.username or rider.nickname
                 await self._broadcast_item(carried)
 
-    async def _broadcast_elevator_arrival_sound(
-        self, item: WorldItem, origin_z: int, destination_z: int
+    async def _broadcast_elevator_door_open_sound(
+        self, item: WorldItem, current_z: int
     ) -> None:
-        """Play the direction-specific arrival sound at the destination landing."""
+        """Announce the elevator's next travel direction when its door opens."""
 
+        next_z = next(z for z in sorted(FLOOR_ELEVATIONS) if z != current_z)
         sound = (
             "/sounds/elevator_up.ogg"
-            if destination_z > origin_z
+            if next_z > current_z
             else "/sounds/elevator_down.ogg"
         )
         await self._broadcast(
@@ -1859,7 +1860,7 @@ class SignalingServer:
                 sound=sound,
                 x=item.x,
                 y=item.y,
-                z=destination_z,
+                z=current_z,
                 range=self._get_item_emit_range(item),
             )
         )
@@ -1953,9 +1954,7 @@ class SignalingServer:
                     self._touch_elevator(item)
                     await self._move_elevator_occupants(item, target_z)
                     await self._broadcast_item(item)
-                    await self._broadcast_elevator_arrival_sound(
-                        item, origin_z, target_z
-                    )
+                    await self._broadcast_elevator_door_open_sound(item, target_z)
                     continue
                 if state == "door_open":
                     await asyncio.sleep(ELEVATOR_DOOR_OPEN_SECONDS)
@@ -2007,11 +2006,8 @@ class SignalingServer:
                 item.params["doorOpen"] = True
                 self._touch_elevator(item)
                 await self._broadcast_item(item)
+                await self._broadcast_elevator_door_open_sound(item, current_z)
                 self._restart_elevator_task(item.id)
-                await self._send_item_result(
-                    client, True, "use", "The elevator door opens.", item.id
-                )
-                return
             client.elevator_id = None
             await self._send(
                 client.websocket,
@@ -2057,6 +2053,7 @@ class SignalingServer:
             item.params["doorOpen"] = True
             self._touch_elevator(item)
             await self._broadcast_item(item)
+            await self._broadcast_elevator_door_open_sound(item, current_z)
             self._restart_elevator_task(item.id)
             await self._send_item_result(
                 client, True, "use", "The elevator door opens.", item.id

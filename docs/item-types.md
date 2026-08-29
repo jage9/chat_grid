@@ -221,14 +221,14 @@ This is behavior-focused documentation for item types and their defaults.
 - Footprint: one square, present at the same coordinate on both landings
 - Door-open time: 5 seconds
 - Travel time: 5 seconds
-- Arrival sound: `/sounds/elevator_up.ogg` or `/sounds/elevator_down.ogg`, based on travel direction
+- Door-open direction cue: `/sounds/elevator_up.ogg` for the next upward trip or `/sounds/elevator_down.ogg` for the next downward trip
 
 ### Use
 - Use once to call the car or open its door when it is already present.
 - Use again while the door is open to enter. With two floors, entering selects the other floor.
 - The door closes five seconds after the latest open or entry, then the car travels for five seconds.
-- On arrival, riders receive a floor-and-door announcement and the destination landing plays the direction-specific spatial sound.
-- Use after arrival to exit. Use inside a closed, stopped car to reopen its door.
+- On arrival, the door opens automatically, riders receive a floor-and-door announcement, and the landing plays the next-direction cue.
+- Use once after arrival to exit. If the five-second timer closes the door first, the rider remains inside; one use then opens the stopped car and exits.
 - Calls made while the car is moving are queued.
 
 ### Rules

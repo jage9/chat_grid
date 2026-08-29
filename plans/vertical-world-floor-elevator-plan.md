@@ -128,8 +128,8 @@ The automatic other-floor destination is the simplest accessible behavior for tw
 * Add call, enter, travel, arrive, door-open, exit, and timeout actions.
 * Move riders and carried items authoritatively with the car.
 * Broadcast explicit elevator state packets so sounds and UI do not infer state from messages.
-* Play direction-specific spatial arrival sounds and send the rider a destination announcement.
-* Add elevator motor and door sounds later, after those assets are supplied.
+* Play a spatial next-direction cue whenever the door opens and send the rider a destination announcement on arrival.
+* Add elevator motor, door movement, and door-closing sounds later, after those assets are supplied.
 
 ## Verification Coverage
 
@@ -152,18 +152,19 @@ Shipped on `main`:
 
 * Floor/elevator implementation: commit `f4ec622`.
 * Elevator changed to one square: commit `3c1dc53`.
-* Current versions: client `R371`, server `S368`.
+* Current versions: client `R372`, server `S369`.
 * Ground floor is `z=0`; second floor is `z=40`.
 * Multiple independent elevator items are allowed. Each appears at one anchor coordinate on both floors, while its car remains at one completed landing or an intermediate travel height.
 * Door-open delay is five seconds. Travel is five seconds after the door closes.
 * Server restart clears unfinished elevator timers and restores a closed, idle car at its last completed landing.
 * A mid-trip disconnect restores the rider and carried item to the last completed landing rather than persisting the intermediate height.
 * Rider coordinates progress through intermediate `z` heights during the five-second trip instead of remaining at one midpoint.
-* Arrival opens the destination door, announces the floor to riders, and plays a spatial up/down arrival sound.
+* Arrival opens the destination door automatically and announces the floor. Every door opening plays the spatial cue for the next trip's direction.
+* A rider remains inside if the arrival door closes before they exit. One use at a stopped floor opens the door and exits the rider.
 
 Deferred:
 
-* Elevator motor and door sounds. The user will provide assets later.
+* Elevator motor, door movement, and door-closing sounds. The user will provide assets later.
 * Stable floor ids, jumping, flying, and other intermediate-height movement.
 * Walls, doors, collision, sound dampening, and item overlap policy.
 * Actual multi-square item types. The generic footprint model is ready, but the elevator and current catalog remain one square.
