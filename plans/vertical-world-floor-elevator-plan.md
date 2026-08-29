@@ -78,6 +78,8 @@ The elevator is an assembly, not duplicated floor items:
 
 This footprint model is also useful for tables, stages, large instruments, and vehicles. Walls should still use a separate edge-based geometry model later; footprints are not a replacement for walls.
 
+Detailed plans for walls, doors, jumping, flying, collision, sound occlusion, and future multi-square items are in `plans/world-expansion-plan.md`.
+
 ## Elevator Interaction
 
 Implemented two-floor behavior:
