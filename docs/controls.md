@@ -47,7 +47,7 @@ This document is the authoritative keymap for the client.
 - `Space` in item management menu: Read tooltip/help for the selected action
 - `Enter`: Use item
 - `Shift+Enter`: Secondary item action
-- For an elevator, `Enter` calls or opens it, enters through an open door, and exits after arrival according to the current elevator state.
+- For an elevator, `Enter` calls or starts opening it, enters or exits only after the door is fully open, and has no boarding effect while the door is opening or closing.
 
 ### Audio
 - `P`: Ping server

@@ -40,12 +40,18 @@ def secondary_use_item(
     """Report the elevator car's landing or travel state."""
 
     current_z = int(item.params.get("currentZ", 0))
-    if item.params.get("state") == "moving":
+    state = item.params.get("state")
+    if state == "moving":
         target_z = int(item.params.get("targetZ", current_z))
         direction = "up" if target_z > current_z else "down"
         message = (
             f"{item.title} is headed to {_floor_name(item, target_z)}, "
             f"traveling {direction}."
+        )
+    elif state in {"opening", "arriving", "closing"}:
+        door_state = "opening" if state == "arriving" else state
+        message = (
+            f"{item.title} is on {_floor_name(item, current_z)}, door {door_state}."
         )
     else:
         door = "open" if item.params.get("doorOpen") is True else "closed"

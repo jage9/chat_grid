@@ -100,9 +100,10 @@ Core incoming message effects:
 - Cross-floor user teleport is blocked in the client, and the server rejects any packet that attempts to change `z` directly.
 - Positional voice, media, item, piano, clock, footstep, teleport, and use audio is gated by `z`.
 - Each elevator is one independent single-square shaft object at the same coordinate on both landings. Calls, doors, queueing, travel, rider movement, and carried-item movement are server-owned.
-- A door remains open for five seconds. Travel takes another five seconds. During travel, riders are broadcast at progressively changing intermediate heights and belong to neither floor.
+- Opening and closing are explicit server-owned, non-traversable states whose durations match their sound assets. A fully open door remains open for five seconds; the five-second trip begins only after closing finishes. During travel, riders are broadcast at progressively changing intermediate heights and belong to neither floor.
 - The elevator object's own `z` remains canonical while rider and car travel heights change separately. Its optional emitter uses the shaft's multi-floor occupancy and emits independently at both landings; it is suppressed for an inside rider only while the door is closed.
-- Arrival opens the door automatically, moves riders to the destination floor, sends them a clear arrival announcement, and plays the next-direction spatial cue at that landing. A rider who does not exit remains inside after the door closes and can later open-and-exit with one use.
+- Arrival starts the opening sound while riders remain acoustically inside. When it finishes, the server marks the door open, moves riders onto the destination floor, sends the arrival announcement, and plays the next-direction cue. A rider who remains after closing must reopen the door, wait for opening to finish, and use again to exit.
+- The client-owned elevator audio runtime loops the built-in interior ambience from a randomized file offset. It follows an occupant through all car states and is exposed spatially to nearby landing users only while the door is fully open.
 - On startup, any incomplete persisted elevator timer is cleared and the car becomes closed and idle at its last completed landing.
 - A process restart also drops items whose connection-scoped carrier no longer exists; a carried item caught at an intermediate travel height returns to the ground floor.
 

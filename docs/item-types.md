@@ -220,24 +220,27 @@ This is behavior-focused documentation for item types and their defaults.
 - Floors: ground at `z=0`, second at `z=40`
 - Footprint: one square, present at the same coordinate on both landings
 - Door-open time: 5 seconds
+- Door transition sounds: `/sounds/elevator_open.ogg` (about 2.56 seconds) and `/sounds/elevator_close.ogg` (about 3.77 seconds)
 - Travel time: 5 seconds
+- Built-in interior ambience: `/sounds/elevator_inside.ogg`
 - Emitter defaults: nondirectional at facing `0`, range `15`, volume `100`, normal speed/tempo, no delays, effect off, and empty sound
 - Door-open direction cue: `/sounds/elevator_up.ogg` for the next upward trip or `/sounds/elevator_down.ogg` for the next downward trip
 
 ### Use
 - Use once to call the car or open its door when it is already present.
-- Use again while the door is open to enter. With two floors, entering selects the other floor.
-- The door closes five seconds after the latest open or entry, then the car travels for five seconds.
-- On arrival, the door opens automatically, riders receive a floor-and-door announcement, and the landing plays the next-direction cue.
-- Use once after arrival to exit. If the five-second timer closes the door first, the rider remains inside; one use then opens the stopped car and exits.
+- Opening and closing are non-traversable phases. Use again only after the opening sound finishes to enter. With two floors, entering selects the other floor.
+- The fully open door closes five seconds after the latest open or entry. The car starts its five-second trip only after the closing sound finishes.
+- On arrival, the opening sound plays first. Once it finishes, riders join the destination floor, receive a floor-and-door announcement, the interior ambience becomes audible outside nearby, and the landing plays the next-direction cue.
+- Use once after arrival to exit through the fully open door. If the five-second timer closes it first, one use starts reopening it; use again after opening finishes to exit.
 - Secondary use reports the current landing and door state, or the destination and travel direction while moving.
-- Calls made while the car is moving are queued.
+- Away-floor calls made while the car is moving or a door is transitioning are queued.
 
 ### Rules
 - Each placed elevator has its own car and state machine; multiple elevators are allowed.
 - Elevators cannot be carried. They cannot be deleted while moving or occupied.
 - Riders cannot move or teleport while inside.
 - During travel, rider `z` advances progressively between the two floors. Every intermediate height is hidden from both floors and blocks all floor audio.
+- The built-in interior ambience loops from a randomized offset. Passengers hear it throughout their time inside; nearby users hear it spatially only while the door is fully open on their landing.
 - A configured emitted sound stays on the elevator shaft object and emits from its anchor on both floors. A rider can hear it normally while the door is open; it is suppressed only while that rider is inside with the door closed.
 
 ### Validation

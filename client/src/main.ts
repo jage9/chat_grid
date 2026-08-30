@@ -8,6 +8,7 @@ import {
 } from './audio/radioStationRuntime';
 import { getProxyUrlForMedia, shouldProxyExternalMediaUrl } from './audio/mediaUrl';
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
+import { ElevatorAudioRuntime } from './items/types/elevator/runtime';
 import { ClockAnnouncer } from './audio/clockAnnouncer';
 import { normalizeDegrees } from './audio/spatial';
 import {
@@ -324,6 +325,12 @@ const itemEmitRuntime = new ItemEmitRuntime(
   resolveIncomingSoundUrl,
   getItemSpatialConfig,
   (item) => state.elevatorItemId !== item.id || item.params.doorOpen === true,
+);
+const elevatorAudioRuntime = new ElevatorAudioRuntime(
+  audio,
+  resolveIncomingSoundUrl,
+  getItemSpatialConfig,
+  () => state.elevatorItemId,
 );
 const clockAnnouncer = new ClockAnnouncer(audio, () => ({ x: state.player.x, y: state.player.y, z: state.player.z }));
 let replaceTextOnNextType = false;
@@ -765,6 +772,7 @@ async function applyAudioLayerState(): Promise<void> {
   const listenerPosition = { x: state.player.x, y: state.player.y, z: state.player.z };
   await radioRuntime.setLayerEnabled(audioLayers.media, state.items.values(), listenerPosition);
   await itemEmitRuntime.setLayerEnabled(audioLayers.item, state.items.values(), listenerPosition);
+  await elevatorAudioRuntime.setLayerEnabled(audioLayers.item, state.items.values(), listenerPosition);
 }
 
 /** Refreshes distance-gated radio/item stream subscriptions for a listener position. */
@@ -800,6 +808,7 @@ async function refreshAudioSubscriptionsForListeners(
   try {
     await radioRuntime.sync(state.items.values(), listenerPositions);
     await itemEmitRuntime.sync(state.items.values(), listenerPositions);
+    await elevatorAudioRuntime.sync(state.items.values(), anchorListener);
   } finally {
     subscriptionRefreshInFlight = false;
     if (subscriptionRefreshPending) {
@@ -1282,6 +1291,7 @@ function gameLoop(): void {
   audio.updateSpatialSamples(listenerPosition);
   radioRuntime.updateSpatialAudio(state.items, listenerPosition);
   itemEmitRuntime.updateSpatialAudio(state.items, listenerPosition);
+  elevatorAudioRuntime.updateSpatialAudio(state.items, listenerPosition);
   state.cursorVisible = Math.floor(Date.now() / 500) % 2 === 0;
   renderer.draw(state);
   requestAnimationFrame(gameLoop);
@@ -1544,7 +1554,10 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
     onMessage: (message) => onSignalingMessage(message as IncomingMessage),
     peerManagerCleanupAll: () => peerManager.cleanupAll(),
     radioCleanupAll: () => radioRuntime.cleanupAll(),
-    emitCleanupAll: () => itemEmitRuntime.cleanupAll(),
+    emitCleanupAll: () => {
+      itemEmitRuntime.cleanupAll();
+      elevatorAudioRuntime.cleanupAll();
+    },
     playLogoutSound: () => {
       void audio.playSample(SYSTEM_SOUND_URLS.logout, 1);
     },
@@ -1611,6 +1624,7 @@ const onAppMessage = createOnMessageHandler({
   cleanupItemAudio: (itemId) => {
     radioRuntime.cleanup(itemId);
     itemEmitRuntime.cleanup(itemId);
+    elevatorAudioRuntime.cleanup(itemId);
   },
   applyAudioLayerState,
   gameLoop,
