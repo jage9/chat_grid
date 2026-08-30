@@ -2,7 +2,7 @@
 
 Date: 2026-08-29
 
-This plan covers world features beyond the completed floor and elevator work. The shipped floor/elevator behavior remains documented in `plans/vertical-world-floor-elevator-plan.md`.
+This plan covers world features beyond the completed floor and elevator work. The shipped floor/elevator behavior remains documented in `plans/vertical-world-floor-elevator-plan.md`; reusable vertical audio and acoustic-zone work is outlined in `plans/3d-audio-plan.md`.
 
 ## Current Foundation
 
@@ -139,6 +139,8 @@ Teleporting needs destination validation but does not need to trace every crosse
 ## Sound Occlusion
 
 Floor separation remains the first, cheapest gate. Wall processing happens only after source and listener are in the same acoustic area.
+
+The shared source, zone, vertical-distance, and transmission pipeline is defined in `plans/3d-audio-plan.md`. This section supplies its canonical wall and door geometry.
 
 Recommended initial algorithm:
 
