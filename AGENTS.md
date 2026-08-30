@@ -37,6 +37,9 @@
 - Item behavior/defaults/validation changes: update `docs/item-types.md` and `docs/item-schema.md`.
 - Runtime/protocol behavior changes: update `docs/runtime-flow.md` and/or `docs/protocol-notes.md`.
 
+## Planning Files
+- `plans/` is ignored local planning scratch. It may be read and updated locally, but do not force-add, track, or commit files from it unless the user explicitly asks.
+
 ## Versioning & Configuration
 - Bump `client/public/version.js` on every user-visible client change using shared release version + client revision metadata (`CHGRID_RELEASE_VERSION` and `CHGRID_CLIENT_REVISION`, for example `0.1.1` + `R350`).
 - Keep the server-only revision in `server/app/version.py` (for example `S350`); server revisions do not require a client version bump unless browser code/assets changed.
