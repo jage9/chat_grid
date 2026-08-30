@@ -138,16 +138,13 @@
 }
 ```
 
-- `timeZone`: one representative IANA zone per world UTC offset. Includes:
-  `America/Anchorage`, `America/Argentina/Buenos_Aires`, `America/Chicago`, `America/Detroit`,
-  `America/Halifax`, `America/Indiana/Indianapolis`, `America/Kentucky/Louisville`,
-  `America/Los_Angeles`, `America/St_Johns`, `Asia/Bangkok`, `Asia/Dhaka`, `Asia/Dubai`,
-  `Asia/Hong_Kong`, `Asia/Kabul`, `Asia/Karachi`, `Asia/Kathmandu`, `Asia/Kolkata`,
-  `Asia/Seoul`, `Asia/Singapore`, `Asia/Tehran`, `Asia/Tokyo`, `Asia/Yangon`,
-  `Atlantic/Azores`, `Atlantic/South_Georgia`, `Australia/Brisbane`, `Australia/Darwin`,
-  `Australia/Eucla`, `Australia/Lord_Howe`, `Europe/Berlin`, `Europe/Helsinki`,
-  `Europe/London`, `Europe/Moscow`, `Pacific/Apia`, `Pacific/Auckland`, `Pacific/Chatham`,
-  `Pacific/Honolulu`, `Pacific/Kiritimati`, `Pacific/Noumea`, `Pacific/Pago_Pago`, `UTC`.
+- `timeZone`: one of the representative IANA zones in `CLOCK_TIME_ZONE_OPTIONS`.
+  The concise menu covers every modern standard UTC offset globally and at least one
+  city or region for each standard offset used within Africa, Asia, Europe, North
+  America, South America, and Australia/Oceania. Antarctica is represented by its
+  research-station zones. `Etc/GMT+12` covers UTC−12 because that offset has no
+  inhabited representative city. Daylight-saving changes are supplied by each IANA
+  zone rather than listed as separate offsets.
 - `use24Hour`: boolean (or `on/off` in updates), default `false`.
 - `topOfHourAnnounce`: boolean (or `on/off` in updates), default `true`.
 - `alarmEnabled`: boolean (or `on/off` in updates), default `false`.
