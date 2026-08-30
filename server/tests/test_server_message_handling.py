@@ -251,9 +251,9 @@ async def test_radio_metadata_refresh_updates_station_and_title(
         return ("Test Station", "Test Song")
 
     monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
-    monkeypatch.setattr(server, "_fetch_stream_metadata", fake_fetch)
+    monkeypatch.setattr(server.radio_runtime, "_fetch_stream_metadata", fake_fetch)
 
-    await server._refresh_radio_metadata_once()
+    await server.radio_runtime.refresh_once()
 
     assert radio.params["stationName"] == "Test Station"
     assert radio.params["nowPlaying"] == "Test Song"
@@ -283,9 +283,9 @@ async def test_radio_metadata_refresh_skips_when_no_listener_in_range(
         called = True
         return ("X", "Y")
 
-    monkeypatch.setattr(server, "_fetch_stream_metadata", fake_fetch)
+    monkeypatch.setattr(server.radio_runtime, "_fetch_stream_metadata", fake_fetch)
 
-    await server._refresh_radio_metadata_once()
+    await server.radio_runtime.refresh_once()
 
     assert called is False
 
@@ -322,9 +322,9 @@ async def test_radio_metadata_refresh_continues_after_one_stream_fails(
         return ("Working Station", "Working Song")
 
     monkeypatch.setattr(server, "_broadcast_item", fake_broadcast_item)
-    monkeypatch.setattr(server, "_fetch_stream_metadata", fake_fetch)
+    monkeypatch.setattr(server.radio_runtime, "_fetch_stream_metadata", fake_fetch)
 
-    await server._refresh_radio_metadata_once()
+    await server.radio_runtime.refresh_once()
 
     assert working_radio.params["stationName"] == "Working Station"
     assert working_radio.params["nowPlaying"] == "Working Song"
@@ -415,7 +415,7 @@ async def test_item_secondary_use_radio_fetches_missing_now_playing(
 
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
-    monkeypatch.setattr(server, "_fetch_stream_metadata", fake_fetch)
+    monkeypatch.setattr(server.radio_runtime, "_fetch_stream_metadata", fake_fetch)
 
     await server._handle_message(
         client, json.dumps({"type": "item_secondary_use", "itemId": radio.id})
@@ -465,14 +465,14 @@ def test_clock_alarm_announcement_sequence_shape() -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     params = {"timeZone": "America/Detroit", "use24Hour": False}
 
-    alarm_sounds = server._build_clock_announcement_sounds(
+    alarm_sounds = server.clock_runtime._build_clock_announcement_sounds(
         params, top_of_hour=False, alarm=True
     )
     assert alarm_sounds
     assert alarm_sounds[0] == "/sounds/clock/el640/announcement.ogg"
     assert alarm_sounds[-1] == "/sounds/clock/el640/alarm.ogg"
 
-    top_of_hour_sounds = server._build_clock_announcement_sounds(
+    top_of_hour_sounds = server.clock_runtime._build_clock_announcement_sounds(
         params, top_of_hour=True, alarm=False
     )
     assert top_of_hour_sounds

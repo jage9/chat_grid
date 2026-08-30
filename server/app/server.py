@@ -21,7 +21,6 @@ import uuid
 from pathlib import Path
 from typing import Literal, TypeAlias
 from urllib.parse import urlsplit, urlunsplit
-from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError, TypeAdapter
 from websockets.asyncio.server import ServerConnection, serve
@@ -34,8 +33,6 @@ from .acoustic_zones import client_acoustic_zone_id, client_position_packet
 from .client import ClientConnection
 from .config import load_config
 from .item_catalog import (
-    CLOCK_DEFAULT_TIME_ZONE,
-    CLOCK_TIME_ZONE_OPTIONS,
     ITEM_TYPE_EDITABLE_PROPERTIES,
     ITEM_TYPE_LABELS,
     ITEM_TYPE_PROPERTY_METADATA,
@@ -48,9 +45,10 @@ from .item_catalog import (
 )
 from .item_type_handlers import get_item_type_handler
 from .item_service import ItemService
-from .items.types.clock.time_format import parse_alarm_time_flexible
+from .items.types.clock.runtime import ClockRuntime
 from .items.types.elevator.runtime import ElevatorRuntime, ElevatorRuntimeCallbacks
 from .items.types.piano.runtime import PianoRuntime
+from .items.types.radio_station.runtime import RadioRuntime
 from .models import (
     AuthLoginPacket,
     AuthLogoutPacket,
@@ -81,7 +79,6 @@ from .models import (
     LiveKitTokenPacket,
     ItemActionResultPacket,
     ItemAddPacket,
-    ItemClockAnnouncePacket,
     ItemDeletePacket,
     ItemDropPacket,
     ItemPianoNotePacket,
@@ -109,7 +106,7 @@ from .models import (
     WelcomePacket,
     WorldItem,
 )
-from .network_security import normalize_origin, open_validated_public_url
+from .network_security import normalize_origin
 from .ui_metadata import (
     ADMIN_MENU_ACTION_DEFINITIONS,
     ITEM_MANAGEMENT_ACTION_DEFINITIONS,
@@ -276,13 +273,8 @@ class SignalingServer:
         self._auth_hash_semaphore = asyncio.Semaphore(AUTH_HASH_MAX_CONCURRENCY)
         self._auth_failures_by_ip: dict[str, deque[float]] = {}
         self._auth_failures_by_identity: dict[str, deque[float]] = {}
-        self._radio_metadata_task: asyncio.Task[None] | None = None
-        self._radio_metadata_semaphore = asyncio.Semaphore(
-            RADIO_METADATA_MAX_CONCURRENCY
-        )
-        self._clock_announce_task: asyncio.Task[None] | None = None
-        self._clock_top_of_hour_markers: dict[str, str] = {}
-        self._clock_alarm_markers: dict[str, str] = {}
+        self.radio_runtime = RadioRuntime(self)
+        self.clock_runtime = ClockRuntime(self)
         self._started_at_monotonic = time.monotonic()
         self._pending_reboot_task: asyncio.Task[None] | None = None
         self.elevator_runtime = ElevatorRuntime(
@@ -971,250 +963,6 @@ class SignalingServer:
                 return True
         return False
 
-    @staticmethod
-    def _fetch_stream_metadata(stream_url: str) -> tuple[str, str]:
-        """Read ICY headers/metadata from a stream URL and return station/title."""
-
-        if not stream_url:
-            return "", ""
-        with open_validated_public_url(
-            stream_url,
-            headers={"Icy-MetaData": "1", "User-Agent": "ChatGrid"},
-            timeout=RADIO_METADATA_TIMEOUT_S,
-        ) as response:
-            station = str(
-                response.headers.get("icy-name")
-                or response.headers.get("ice-name")
-                or ""
-            ).strip()
-            title = ""
-            metaint_raw = response.headers.get("icy-metaint")
-            if metaint_raw:
-                metaint = int(metaint_raw)
-                if metaint > 0:
-                    response.read(metaint)
-                    meta_len_byte = response.read(1)
-                    if meta_len_byte:
-                        meta_length = meta_len_byte[0] * 16
-                        if meta_length > 0:
-                            meta = response.read(meta_length).decode(errors="ignore")
-                            match = re.search(r"StreamTitle='(.*?)';", meta)
-                            if match:
-                                title = match.group(1).strip()
-            return station[:160], title[:200]
-
-    async def _fetch_stream_metadata_safely(
-        self, stream_url: str
-    ) -> tuple[str, str] | None:
-        """Fetch one stream without allowing upstream failure to escape."""
-
-        try:
-            async with self._radio_metadata_semaphore:
-                return await asyncio.to_thread(self._fetch_stream_metadata, stream_url)
-        except Exception:
-            hostname = urlsplit(stream_url).hostname or "invalid"
-            LOGGER.warning(
-                "radio metadata fetch failed host=%s", hostname, exc_info=True
-            )
-            return None
-
-    async def _apply_radio_metadata(
-        self,
-        radios: list[WorldItem],
-        metadata: tuple[str, str] | None,
-    ) -> None:
-        """Apply one successful metadata result to matching radio items."""
-
-        if metadata is None:
-            return
-        station_name, now_playing = metadata
-        for item in radios:
-            current_station = str(item.params.get("stationName", "")).strip()
-            current_playing = str(item.params.get("nowPlaying", "")).strip()
-            if station_name == current_station and now_playing == current_playing:
-                continue
-            item.params["stationName"] = station_name
-            item.params["nowPlaying"] = now_playing
-            item.updatedAt = self.item_service.now_ms()
-            item.updatedBy = "system"
-            item.updatedByName = "system"
-            item.version += 1
-            self._request_state_save()
-            await self._broadcast_item(item)
-
-    async def _refresh_radio_metadata_once(self) -> None:
-        """Refresh metadata once per stream for radios near an active listener."""
-
-        radios_by_stream: dict[str, list[WorldItem]] = {}
-        for item in self.items.values():
-            if (
-                item.type != "radio_station"
-                or not bool(item.params.get("enabled", True))
-                or not isinstance(item.params.get("streamUrl"), str)
-                or not self._has_listener_in_range(item)
-            ):
-                continue
-            stream_url = str(item.params.get("streamUrl", "")).strip()
-            if stream_url:
-                radios_by_stream.setdefault(stream_url, []).append(item)
-
-        stream_urls = list(radios_by_stream)
-        results = await asyncio.gather(
-            *(self._fetch_stream_metadata_safely(url) for url in stream_urls)
-        )
-        for stream_url, metadata in zip(stream_urls, results, strict=True):
-            await self._apply_radio_metadata(radios_by_stream[stream_url], metadata)
-
-    async def _run_radio_metadata_loop(self) -> None:
-        """Background polling loop that refreshes radio now-playing metadata."""
-
-        try:
-            while True:
-                try:
-                    await self._refresh_radio_metadata_once()
-                except Exception:
-                    LOGGER.exception("radio metadata polling cycle failed")
-                await asyncio.sleep(RADIO_METADATA_POLL_INTERVAL_S)
-        except asyncio.CancelledError:
-            return
-
-    @classmethod
-    def _build_clock_time_sounds(cls, params: dict) -> list[str]:
-        """Build ordered EL640 sample URLs for just the clock time phrase."""
-
-        tz_name = cls._normalize_clock_timezone(params.get("timeZone"))
-        use_24_hour = cls._parse_clock_use_24_hour(params.get("use24Hour")) is True
-        now = datetime.now(ZoneInfo(tz_name))
-        hour24 = now.hour
-        minute = now.minute
-        ampm = "AM" if hour24 < 12 else "PM"
-        hour12 = hour24 % 12 or 12
-
-        sounds: list[str] = ["/sounds/clock/el640/its.ogg"]
-
-        if use_24_hour:
-            if hour24 < 20:
-                sounds.append(f"/sounds/clock/el640/{hour24}.ogg")
-            else:
-                tens = (hour24 // 10) * 10
-                ones = hour24 % 10
-                sounds.append(f"/sounds/clock/el640/{tens}.ogg")
-                if ones != 0:
-                    sounds.append(f"/sounds/clock/el640/{ones}.ogg")
-        else:
-            sounds.append(f"/sounds/clock/el640/{hour12}.ogg")
-
-        if minute > 0:
-            if minute < 10:
-                sounds.append("/sounds/clock/el640/o.ogg")
-            if minute < 20:
-                sounds.append(f"/sounds/clock/el640/{minute}.ogg")
-            else:
-                tens = (minute // 10) * 10
-                ones = minute % 10
-                sounds.append(f"/sounds/clock/el640/{tens}.ogg")
-                if ones != 0:
-                    sounds.append(f"/sounds/clock/el640/{ones}.ogg")
-
-        if not use_24_hour:
-            sounds.append(f"/sounds/clock/el640/{ampm}.ogg")
-        return sounds
-
-    @classmethod
-    def _build_clock_announcement_sounds(
-        cls, params: dict, *, top_of_hour: bool, alarm: bool
-    ) -> list[str]:
-        """Build ordered EL640 sample URLs for one clock announcement variant."""
-
-        sounds: list[str] = []
-        if alarm:
-            sounds.append("/sounds/clock/el640/announcement.ogg")
-        elif top_of_hour:
-            sounds.append("/sounds/clock/el640/hour1.ogg")
-        sounds.extend(cls._build_clock_time_sounds(params))
-        if alarm:
-            sounds.append("/sounds/clock/el640/alarm.ogg")
-        elif top_of_hour:
-            sounds.append("/sounds/clock/el640/hour2.ogg")
-        return sounds
-
-    async def _broadcast_clock_announcement(
-        self, item: WorldItem, *, top_of_hour: bool, alarm: bool
-    ) -> None:
-        """Broadcast one server-authoritative clock speech sequence from item position."""
-
-        sound_x, sound_y, sound_z = self._get_item_sound_source_position(item)
-        sound_range = self._get_item_emit_range(item)
-        sounds = self._build_clock_announcement_sounds(
-            item.params, top_of_hour=top_of_hour, alarm=alarm
-        )
-        if not sounds:
-            return
-        await self._broadcast(
-            ItemClockAnnouncePacket(
-                type="item_clock_announce",
-                itemId=item.id,
-                sounds=sounds,
-                x=sound_x,
-                y=sound_y,
-                z=sound_z,
-                range=sound_range,
-            )
-        )
-
-    async def _run_clock_top_of_hour_loop(self) -> None:
-        """Background polling loop that triggers top-of-hour speech for clock items."""
-
-        try:
-            while True:
-                valid_clock_ids = {
-                    item.id for item in self.items.values() if item.type == "clock"
-                }
-                for stale_id in list(self._clock_top_of_hour_markers.keys()):
-                    if stale_id not in valid_clock_ids:
-                        self._clock_top_of_hour_markers.pop(stale_id, None)
-                for stale_id in list(self._clock_alarm_markers.keys()):
-                    if stale_id not in valid_clock_ids:
-                        self._clock_alarm_markers.pop(stale_id, None)
-                for item in self.items.values():
-                    if item.type != "clock":
-                        continue
-                    tz_name = self._normalize_clock_timezone(
-                        item.params.get("timeZone")
-                    )
-                    now = datetime.now(ZoneInfo(tz_name))
-                    top_of_hour_enabled = (
-                        item.params.get("topOfHourAnnounce", True) is True
-                    )
-                    if top_of_hour_enabled and now.minute == 0 and now.second <= 1:
-                        marker = now.strftime("%Y-%m-%d-%H")
-                        if self._clock_top_of_hour_markers.get(item.id) != marker:
-                            self._clock_top_of_hour_markers[item.id] = marker
-                            await self._broadcast_clock_announcement(
-                                item, top_of_hour=True, alarm=False
-                            )
-
-                    alarm_enabled = item.params.get("alarmEnabled", False) is True
-                    alarm_time = parse_alarm_time_flexible(
-                        item.params.get("alarmTime", "")
-                    )
-                    if alarm_enabled and alarm_time is not None:
-                        alarm_hour, alarm_minute = alarm_time
-                        if (
-                            now.hour == alarm_hour
-                            and now.minute == alarm_minute
-                            and now.second <= 1
-                        ):
-                            marker = now.strftime("%Y-%m-%d-%H-%M")
-                            if self._clock_alarm_markers.get(item.id) != marker:
-                                self._clock_alarm_markers[item.id] = marker
-                                await self._broadcast_clock_announcement(
-                                    item, top_of_hour=False, alarm=True
-                                )
-                await asyncio.sleep(CLOCK_ANNOUNCE_POLL_INTERVAL_S)
-        except asyncio.CancelledError:
-            return
-
     def _get_item_sound_source_position(self, item: WorldItem) -> tuple[int, int, int]:
         """Resolve source position for item-emitted one-shot sounds."""
 
@@ -1299,45 +1047,6 @@ class SignalingServer:
         client.movement_window_steps_used += requested_delta
         return True
 
-    @staticmethod
-    def _normalize_clock_timezone(value: object) -> str:
-        """Normalize timezone input to one of supported clock zones."""
-
-        token = str(value or "").strip()
-        if token in CLOCK_TIME_ZONE_OPTIONS:
-            return token
-        return CLOCK_DEFAULT_TIME_ZONE
-
-    @staticmethod
-    def _parse_clock_use_24_hour(value: object) -> bool | None:
-        """Parse bool-like clock format values (`on/off`, `true/false`, etc.)."""
-
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, (int, float)):
-            return bool(value)
-        if isinstance(value, str):
-            token = value.strip().lower()
-            if token in {"on", "true", "1", "yes"}:
-                return True
-            if token in {"off", "false", "0", "no"}:
-                return False
-        return None
-
-    @classmethod
-    def _format_clock_display_time(cls, params: dict) -> str:
-        """Render current clock text based on item timezone/format params."""
-
-        tz_name = cls._normalize_clock_timezone(params.get("timeZone"))
-        use_24_hour = cls._parse_clock_use_24_hour(params.get("use24Hour"))
-        if use_24_hour is None:
-            use_24_hour = False
-        now = datetime.now(ZoneInfo(tz_name))
-        if use_24_hour:
-            return now.strftime("%H:%M")
-        hour_12 = now.hour % 12 or 12
-        return f"{hour_12}:{now.minute:02d} {'AM' if now.hour < 12 else 'PM'}"
-
     async def _send_item_result(
         self,
         client: ClientConnection,
@@ -1382,10 +1091,8 @@ class SignalingServer:
         LOGGER.info(
             "starting signaling server on %s://%s:%d", protocol, self.host, self.port
         )
-        self._radio_metadata_task = asyncio.create_task(self._run_radio_metadata_loop())
-        self._clock_announce_task = asyncio.create_task(
-            self._run_clock_top_of_hour_loop()
-        )
+        self.radio_runtime.start()
+        self.clock_runtime.start()
         try:
             async with serve(
                 self._handle_client,
@@ -1405,16 +1112,8 @@ class SignalingServer:
                 with suppress(asyncio.CancelledError):
                     await self._pending_reboot_task
                 self._pending_reboot_task = None
-            if self._clock_announce_task is not None:
-                self._clock_announce_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await self._clock_announce_task
-                self._clock_announce_task = None
-            if self._radio_metadata_task is not None:
-                self._radio_metadata_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await self._radio_metadata_task
-                self._radio_metadata_task = None
+            await self.clock_runtime.shutdown()
+            await self.radio_runtime.shutdown()
             self._flush_state_save()
             self.auth_service.close()
 
@@ -3099,7 +2798,7 @@ class SignalingServer:
                 return
             try:
                 use_result = handler.use(
-                    use_item, client.nickname, self._format_clock_display_time
+                    use_item, client.nickname, self.clock_runtime.format_display_time
                 )
             except ValueError as exc:
                 await self._send_item_result(
@@ -3152,7 +2851,7 @@ class SignalingServer:
                     )
                 )
             if use_item.type == "clock":
-                await self._broadcast_clock_announcement(
+                await self.clock_runtime.broadcast_announcement(
                     use_item, top_of_hour=False, alarm=False
                 )
             if use_item.type == "piano":
@@ -3226,11 +2925,15 @@ class SignalingServer:
             ):
                 stream_url = str(secondary_item.params.get("streamUrl", "")).strip()
                 if stream_url:
-                    metadata = await self._fetch_stream_metadata_safely(stream_url)
-                    await self._apply_radio_metadata([secondary_item], metadata)
+                    metadata = await self.radio_runtime.fetch_metadata_safely(
+                        stream_url
+                    )
+                    await self.radio_runtime.apply_metadata([secondary_item], metadata)
             try:
                 secondary_result = handler.secondary_use(
-                    secondary_item, client.nickname, self._format_clock_display_time
+                    secondary_item,
+                    client.nickname,
+                    self.clock_runtime.format_display_time,
                 )
             except ValueError as exc:
                 await self._send_item_result(
