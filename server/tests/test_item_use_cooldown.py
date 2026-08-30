@@ -942,7 +942,7 @@ async def test_piano_recording_toggle_and_save(monkeypatch: pytest.MonkeyPatch) 
         == "record_started"
     )
     assert _last_packet_of_type(send_payloads, ItemActionResultPacket).ok is True
-    assert item.id in server.piano_recording_state_by_item
+    assert item.id in server.piano_runtime.recording_state_by_item
 
     await server._handle_message(
         client,
@@ -985,7 +985,7 @@ async def test_piano_recording_toggle_and_save(monkeypatch: pytest.MonkeyPatch) 
     item_result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
     assert item_result.ok is True
     assert item_result.message == "Recording paused."
-    assert item.id in server.piano_recording_state_by_item
+    assert item.id in server.piano_runtime.recording_state_by_item
 
     await server._handle_message(
         client,
@@ -1000,7 +1000,7 @@ async def test_piano_recording_toggle_and_save(monkeypatch: pytest.MonkeyPatch) 
     item_result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
     assert item_result.ok is True
     assert item_result.message == "Recording stopped."
-    assert item.id not in server.piano_recording_state_by_item
+    assert item.id not in server.piano_runtime.recording_state_by_item
     song_id = item.params.get("songId")
     assert isinstance(song_id, str)
     payload = server.item_service.piano_songs.get(song_id)
@@ -1056,7 +1056,9 @@ async def test_piano_playback_starts_task(monkeypatch: pytest.MonkeyPatch) -> No
 
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
-    monkeypatch.setattr(server, "_start_piano_playback", fake_start_playback)
+    monkeypatch.setattr(
+        server.piano_runtime, "_start_piano_playback", fake_start_playback
+    )
 
     await server._handle_message(
         client,
@@ -1069,7 +1071,7 @@ async def test_piano_playback_starts_task(monkeypatch: pytest.MonkeyPatch) -> No
         == "playback_started"
     )
     assert _last_packet_of_type(send_payloads, ItemActionResultPacket).ok is True
-    task = server.piano_playback_tasks_by_item.get(item.id)
+    task = server.piano_runtime.playback_tasks_by_item.get(item.id)
     assert task is not None
     await task
     assert playback_started == [item.id]
