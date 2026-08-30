@@ -175,9 +175,15 @@ class ElevatorRuntime:
                 z=current_z,
             ),
         )
+        door_open_seconds = self._duration_seconds(
+            item, "doorOpenSeconds", ELEVATOR_DOOR_OPEN_SECONDS
+        )
+        seconds_label = f"{door_open_seconds:g} second"
+        if door_open_seconds != 1:
+            seconds_label += "s"
         await self._send_result(
             client,
-            f"You enter {item.title}. The door will close in five seconds.",
+            f"You enter {item.title}. The door will close in {seconds_label}.",
             item.id,
         )
 

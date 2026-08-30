@@ -249,6 +249,7 @@ async def test_elevator_opens_then_second_use_enters(
 
     elevator.params["state"] = "door_open"
     elevator.params["doorOpen"] = True
+    elevator.params["doorOpenSeconds"] = 8.2
     await server.elevator_runtime.use(client, elevator)
     assert client.elevator_id == elevator.id
     assert elevator.params["departOnCloseZ"] == 40
@@ -262,6 +263,12 @@ async def test_elevator_opens_then_second_use_enters(
         if isinstance(packet, BroadcastPositionPacket)
     )
     assert presence.acousticZoneId == f"elevator:{elevator.id}"
+    result = next(
+        packet
+        for packet in reversed(sent)
+        if isinstance(packet, ItemActionResultPacket)
+    )
+    assert result.message == "You enter Elevator. The door will close in 8.2 seconds."
 
     await server.elevator_runtime.use(client, elevator)
     assert client.elevator_id is None
