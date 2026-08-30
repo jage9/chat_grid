@@ -40,6 +40,22 @@ def test_login_rejects_invalid_password(tmp_path: Path) -> None:
         service.close()
 
 
+def test_touch_last_seen_updates_admin_presence_timestamp(tmp_path: Path) -> None:
+    service = make_auth_service(tmp_path)
+    try:
+        session = service.register("present_user", "password99")
+        service.touch_last_seen(session.user.id, 1_800_000_000_000)
+
+        user = next(
+            entry
+            for entry in service.list_users_for_admin()
+            if entry["id"] == session.user.id
+        )
+        assert user["lastSeenAt"] == 1_800_000_000_000
+    finally:
+        service.close()
+
+
 def test_bootstrap_admin_once(tmp_path: Path) -> None:
     service = make_auth_service(tmp_path)
     try:

@@ -24,7 +24,7 @@ This document is the authoritative keymap for the client.
 
 ### Users, Nickname, Chat
 - `L`: Locate nearest user
-- `Shift+L`: List users alphabetically; `Enter` teleports to selected user; `ArrowLeft`/`ArrowRight` adjust selected user volume
+- `Shift+L`: List users alphabetically with current presence; `Enter` teleports to selected user; `ArrowLeft`/`ArrowRight` adjust selected user volume
 - `U`: Speak connected users
 - `N`: Edit nickname
 - `/`: Start chat
@@ -123,6 +123,7 @@ Applies to effect select, user/item list modes, item selection, item property li
   - change user role
   - ban user
   - unban user
+  - user entries include online/last-seen presence
   - delete account
 - In admin role management:
   - role list includes role user-counts

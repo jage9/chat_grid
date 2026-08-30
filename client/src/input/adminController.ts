@@ -3,6 +3,7 @@ import { getEditSessionAction } from './editSession';
 import { handleYesNoMenuInput, YES_NO_OPTIONS } from './yesNoMenu';
 import type { IncomingMessage, OutgoingMessage } from '../network/protocol';
 import type { GameMode } from '../state/gameState';
+import { formatLastSeen } from '../ui/lastSeen';
 
 export type AdminMenuAction = {
   id: string;
@@ -23,7 +24,13 @@ export type AdminUserSummary = {
   username: string;
   role: string;
   status: 'active' | 'disabled';
+  lastSeenAt: number;
+  online: boolean;
 };
+
+function adminUserLabel(user: AdminUserSummary): string {
+  return `${user.username}, ${user.role}, ${user.status}, ${formatLastSeen(user.lastSeenAt, user.online)}`;
+}
 
 export type AdminPendingUserMutation =
   | { action: 'set_role'; username: string; role: string }
@@ -156,7 +163,7 @@ export function createAdminController(deps: AdminControllerDeps): {
     deps.state.mode = 'adminUserList';
     adminUserIndex = 0;
     const first = adminUsers[0];
-    deps.announceMenuEntry('Users', `${first.username}, ${first.role}, ${first.status}`);
+    deps.announceMenuEntry('Users', adminUserLabel(first));
   }
 
   function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admin_action_result' }>): void {
@@ -187,7 +194,7 @@ export function createAdminController(deps: AdminControllerDeps): {
           if (userIndex >= 0) {
             adminUserIndex = userIndex;
             const selected = adminUsers[adminUserIndex];
-            deps.updateStatus(`${selected.username}, ${selected.role}, ${selected.status}.`);
+            deps.updateStatus(`${adminUserLabel(selected)}.`);
           }
         }
       } else if (adminPendingUserMutation.action === 'ban') {
@@ -444,11 +451,11 @@ export function createAdminController(deps: AdminControllerDeps): {
       adminPendingUserAction = null;
       return;
     }
-    const control = handleListControlKey(code, key, adminUsers, adminUserIndex, (entry) => `${entry.username}, ${entry.role}, ${entry.status}`);
+    const control = handleListControlKey(code, key, adminUsers, adminUserIndex, adminUserLabel);
     if (control.type === 'move') {
       adminUserIndex = control.index;
       const selected = adminUsers[adminUserIndex];
-      deps.updateStatus(`${selected.username}, ${selected.role}, ${selected.status}.`);
+      deps.updateStatus(`${adminUserLabel(selected)}.`);
       deps.sfxUiBlip();
       return;
     }

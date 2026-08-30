@@ -81,6 +81,7 @@ import { runConnectFlow, runDisconnectFlow, type ConnectFlowDeps } from './sessi
 import { MediaSession } from './session/mediaSession';
 import { type AudioLayerState } from './types/audio';
 import { setupUiHandlers as setupDomUiHandlers } from './ui/domBindings';
+import { formatLastSeen } from './ui/lastSeen';
 import { PeerManager } from './webrtc/peerManager';
 
 const NICKNAME_MAX_LENGTH = 32;
@@ -2126,7 +2127,7 @@ function listUsersCommand(): void {
   const gainPhrase = `volume ${formatSteppedNumber(getPeerListenGainForNickname(first.nickname), MIC_INPUT_GAIN_STEP)}`;
   announceMenuEntry(
     `${userCount} ${userLabelText}`,
-    `${first.nickname}, ${gainPhrase}, ${first.z === state.player.z ? distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y) : 'different floor'}, ${locationPhrase(first.x, first.y, first.z)}`,
+    `${first.nickname}, ${formatLastSeen(null, true)}, ${gainPhrase}, ${first.z === state.player.z ? distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y) : 'different floor'}, ${locationPhrase(first.x, first.y, first.z)}`,
   );
 }
 
@@ -2510,7 +2511,7 @@ function handleListModeInput(code: string, key: string): void {
     if (!entry) return;
     const gainPhrase = `volume ${formatSteppedNumber(getPeerListenGainForNickname(entry.nickname), MIC_INPUT_GAIN_STEP)}`;
     updateStatus(
-      `${entry.nickname}, ${gainPhrase}, ${entry.z === state.player.z ? distanceDirectionPhrase(state.player.x, state.player.y, entry.x, entry.y) : 'different floor'}, ${locationPhrase(entry.x, entry.y, entry.z)}`,
+      `${entry.nickname}, ${formatLastSeen(null, true)}, ${gainPhrase}, ${entry.z === state.player.z ? distanceDirectionPhrase(state.player.x, state.player.y, entry.x, entry.y) : 'different floor'}, ${locationPhrase(entry.x, entry.y, entry.z)}`,
     );
     if (control.reason === 'initial') {
       audio.sfxUiBlip();

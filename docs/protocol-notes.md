@@ -42,7 +42,8 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `auth_result`: auth success/failure and session/account metadata.
 - `auth_permissions`: server-pushed live role/permission refresh for current session.
 - `admin_roles_list`: role list response payload.
-- `admin_users_list`: user list response payload.
+- `admin_users_list`: user list response payload, including `online` and the
+  server-owned `lastSeenAt` Unix timestamp in milliseconds.
 - `admin_action_result`: structured result for admin actions.
   - admin mutations include `user_delete` for account deletion.
 - `welcome`: initial snapshot with users/items plus server UI/world metadata.

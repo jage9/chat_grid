@@ -396,12 +396,13 @@ class AuthService:
         self._db_commit()
         return affected_usernames, normalized_replacement
 
-    def list_users_for_admin(self) -> list[dict[str, str]]:
-        """Return users ordered alphabetically with role + status for admin menus."""
+    def list_users_for_admin(self) -> list[dict[str, str | int]]:
+        """Return users ordered alphabetically with role, status, and presence."""
 
         rows = self._db_fetchall(
             """
-            SELECT u.id, u.username, r.name AS role_name, u.status
+            SELECT u.id, u.username, r.name AS role_name, u.status,
+                   u.last_seen_at_ms
             FROM users u
             JOIN roles r ON r.id = u.role_id
             ORDER BY u.username COLLATE NOCASE ASC
@@ -413,6 +414,7 @@ class AuthService:
                 "username": str(row["username"]),
                 "role": str(row["role_name"]),
                 "status": str(row["status"]),
+                "lastSeenAt": int(row["last_seen_at_ms"]),
             }
             for row in rows
         ]
@@ -621,14 +623,15 @@ class AuthService:
             self._db_execute(
                 """
                 INSERT INTO users (
-                    username, password_hash, email, role_id, status, created_at_ms, updated_at_ms, last_login_at_ms
-                ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
+                    username, password_hash, email, role_id, status, created_at_ms, updated_at_ms, last_login_at_ms, last_seen_at_ms
+                ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?)
                 """,
                 (
                     normalized_username,
                     password_hash,
                     normalized_email,
                     int(role_row["id"]),
+                    now_ms,
                     now_ms,
                     now_ms,
                     now_ms,
@@ -880,6 +883,21 @@ class AuthService:
         except sqlite3.IntegrityError:
             self._db_rollback()
 
+    def touch_last_seen(self, user_id: str, seen_at_ms: int | None = None) -> int:
+        """Record when an authenticated user was most recently present on the grid."""
+
+        try:
+            user_id_value = int(user_id)
+        except (TypeError, ValueError) as exc:
+            raise AuthError("Invalid user id.") from exc
+        timestamp_ms = self.now_ms() if seen_at_ms is None else int(seen_at_ms)
+        self._db_execute(
+            "UPDATE users SET last_seen_at_ms = ? WHERE id = ?",
+            (timestamp_ms, user_id_value),
+        )
+        self._db_commit()
+        return timestamp_ms
+
     @staticmethod
     def now_ms() -> int:
         """Return unix epoch timestamp in milliseconds."""
@@ -934,6 +952,7 @@ class AuthService:
                 created_at_ms INTEGER NOT NULL,
                 updated_at_ms INTEGER NOT NULL,
                 last_login_at_ms INTEGER,
+                last_seen_at_ms INTEGER NOT NULL,
                 FOREIGN KEY(role_id) REFERENCES roles(id)
             )
             """
@@ -959,6 +978,13 @@ class AuthService:
             )
         if "last_login_at_ms" not in user_cols:
             self._db_execute("ALTER TABLE users ADD COLUMN last_login_at_ms INTEGER")
+        if "last_seen_at_ms" not in user_cols:
+            self._db_execute(
+                "ALTER TABLE users ADD COLUMN last_seen_at_ms INTEGER NOT NULL DEFAULT 0"
+            )
+            self._db_execute(
+                "UPDATE users SET last_seen_at_ms = COALESCE(last_login_at_ms, created_at_ms)"
+            )
         if "email" not in user_cols:
             self._db_execute("ALTER TABLE users ADD COLUMN email TEXT")
 

@@ -128,6 +128,7 @@ PIANO_RECORDING_MAX_EVENTS = 4096
 MOVEMENT_TICK_MS = 200
 MOVEMENT_MAX_STEPS_PER_TICK = 1
 POSITION_PERSIST_DEBOUNCE_MS = 5_000
+LAST_SEEN_PERSIST_DEBOUNCE_MS = 30_000
 AUTH_HASH_MAX_CONCURRENCY = 8
 AUTH_RATE_LIMIT_WINDOW_S = 30.0
 AUTH_RATE_LIMIT_PER_IP = 20
@@ -297,6 +298,7 @@ class SignalingServer:
         self._pending_state_save_handle: asyncio.TimerHandle | None = None
         self._pending_state_save_started_at: float | None = None
         self._last_position_persist_ms_by_user: dict[str, int] = {}
+        self._last_seen_persist_ms_by_user: dict[str, int] = {}
         self._auth_hash_semaphore = asyncio.Semaphore(AUTH_HASH_MAX_CONCURRENCY)
         self._auth_failures_by_ip: dict[str, deque[float]] = {}
         self._auth_failures_by_identity: dict[str, deque[float]] = {}
@@ -426,6 +428,22 @@ class SignalingServer:
             client.user_id, client.x, client.y, client.z
         )
         self._last_position_persist_ms_by_user[client.user_id] = now_ms
+
+    def _persist_client_last_seen(
+        self, client: ClientConnection, *, force: bool = False
+    ) -> None:
+        """Persist one authenticated client's grid presence with debounce."""
+
+        if not client.user_id:
+            return
+        now_ms = self.item_service.now_ms()
+        client.last_seen_at_ms = now_ms
+        if not force:
+            last_saved_ms = self._last_seen_persist_ms_by_user.get(client.user_id, 0)
+            if now_ms - last_saved_ms < LAST_SEEN_PERSIST_DEBOUNCE_MS:
+                return
+        self.auth_service.touch_last_seen(client.user_id, now_ms)
+        self._last_seen_persist_ms_by_user[client.user_id] = now_ms
 
     def _auth_policy(self) -> dict[str, int]:
         """Return server-auth policy limits advertised to clients."""
@@ -2022,10 +2040,12 @@ class SignalingServer:
                 self.active_piano_keys_by_client.pop(disconnected.id, None)
                 self.elevator_runtime.restore_rider_to_landing(disconnected)
                 self._persist_client_position(disconnected, force=True)
+                self._persist_client_last_seen(disconnected, force=True)
                 if disconnected.user_id:
                     self._last_position_persist_ms_by_user.pop(
                         disconnected.user_id, None
                     )
+                    self._last_seen_persist_ms_by_user.pop(disconnected.user_id, None)
                 for item_id, session in list(
                     self.piano_recording_state_by_item.items()
                 ):
@@ -2159,6 +2179,7 @@ class SignalingServer:
             client.world_ready = True
             return
         client.world_ready = True
+        self._persist_client_last_seen(client, force=True)
         self.clients[client.websocket] = client
         LOGGER.info(
             "client authenticated id=%s user_id=%s username=%s total=%d",
@@ -2629,6 +2650,13 @@ class SignalingServer:
                 await deny("user_set_role", "Not authorized.")
                 return True
             users = self.auth_service.list_users_for_admin()
+            online_user_ids = {
+                connected.user_id
+                for connected in self.clients.values()
+                if connected.world_ready and connected.user_id
+            }
+            for entry in users:
+                entry["online"] = str(entry["id"]) in online_user_ids
             if packet.action == "ban":
                 users = [
                     entry for entry in users if str(entry.get("status")) == "active"
@@ -2886,6 +2914,8 @@ class SignalingServer:
             return
 
         if isinstance(packet, PingPacket):
+            if client.world_ready:
+                self._persist_client_last_seen(client)
             await self._send(
                 client.websocket,
                 PongPacket(type="pong", clientSentAt=packet.clientSentAt),

@@ -485,6 +485,8 @@ class AdminUserSummary(BaseModel):
     username: str
     role: str
     status: Literal["active", "disabled"]
+    lastSeenAt: int
+    online: bool = False
 
 
 class AdminUsersListResultPacket(BasePacket):

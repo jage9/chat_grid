@@ -369,6 +369,8 @@ export const adminUsersListSchema = z.object({
       username: z.string(),
       role: z.string(),
       status: z.enum(['active', 'disabled']),
+      lastSeenAt: z.number().int().nonnegative(),
+      online: z.boolean(),
     }),
   ),
 });

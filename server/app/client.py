@@ -27,6 +27,7 @@ class ClientConnection:
     y: int = 20
     z: int = 0
     last_position_update_ms: int = 0
+    last_seen_at_ms: int = 0
     movement_window_index: int = -1
     movement_window_steps_used: int = 0
     world_ready: bool = False

@@ -86,6 +86,33 @@ def test_client_ip_prefers_forwarded_for_from_loopback_proxy() -> None:
     assert server._client_ip(client) == "198.51.100.25"
 
 
+def test_last_seen_persistence_is_debounced(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    server = SignalingServer(
+        "127.0.0.1", 8765, None, None, auth_db_path=tmp_path / "auth.db"
+    )
+    client = _activate_client(
+        ClientConnection(websocket=_fake_ws(), id="u1", nickname="tester"),
+        user_id="1",
+    )
+    timestamps = iter((100_000, 110_000, 131_000))
+    persisted: list[tuple[str, int]] = []
+    monkeypatch.setattr(server.item_service, "now_ms", lambda: next(timestamps))
+    monkeypatch.setattr(
+        server.auth_service,
+        "touch_last_seen",
+        lambda user_id, seen_at_ms: persisted.append((user_id, seen_at_ms)),
+    )
+
+    server._persist_client_last_seen(client)
+    server._persist_client_last_seen(client)
+    server._persist_client_last_seen(client)
+
+    assert persisted == [("1", 100_000), ("1", 131_000)]
+    assert client.last_seen_at_ms == 131_000
+
+
 def test_client_ip_ignores_forwarded_for_from_non_loopback_peer() -> None:
     server = SignalingServer("127.0.0.1", 8765, None, None)
     ws = cast(

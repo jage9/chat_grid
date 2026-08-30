@@ -43,6 +43,9 @@ Each frame:
 
 - Handle local movement input.
 - Send movement intents; server remains authoritative on accepted movement updates.
+- While connected to the grid, the client's 10-second heartbeat refreshes its
+  server-owned last-seen timestamp. Database writes are debounced to 30 seconds,
+  with immediate updates on grid activation and disconnect.
 - Update spatial voice audio.
 - Update spatial radio audio.
 - Update spatial item emit audio.
