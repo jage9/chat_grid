@@ -53,30 +53,31 @@ class PianoRecordingSession(TypedDict, total=False):
 class PianoRuntimeHost(Protocol):
     """Server operations required by the piano runtime."""
 
-    item_service: ItemService
+    @property
+    def item_service(self) -> ItemService: ...
 
     @property
     def items(self) -> dict[str, WorldItem]: ...
 
-    def _get_client_by_id(self, client_id: str) -> ClientConnection | None: ...
+    def get_client_by_id(self, client_id: str) -> ClientConnection | None: ...
 
-    def _client_has_permission(self, client: ClientConnection, key: str) -> bool: ...
+    def client_has_permission(self, client: ClientConnection, key: str) -> bool: ...
 
-    def _item_is_on_client_square(
+    def item_is_on_client_square(
         self, item: WorldItem, client: ClientConnection
     ) -> bool: ...
 
-    def _request_state_save(self) -> None: ...
+    def request_state_save(self) -> None: ...
 
-    async def _broadcast(
+    async def broadcast(
         self, packet: object, exclude: ServerConnection | None = None
     ) -> None: ...
 
-    async def _broadcast_item(self, item: WorldItem) -> None: ...
+    async def broadcast_item(self, item: WorldItem) -> None: ...
 
-    async def _send(self, websocket: ServerConnection, packet: object) -> None: ...
+    async def send(self, websocket: ServerConnection, packet: object) -> None: ...
 
-    async def _send_item_result(
+    async def send_result(
         self,
         client: ClientConnection,
         ok: bool,
@@ -113,7 +114,7 @@ class PianoRuntime:
         self, client: ClientConnection, packet: ItemPianoNotePacket
     ) -> None:
         """Validate, optionally record, and broadcast one live piano note."""
-        if not self.host._client_has_permission(client, "item.use"):
+        if not self.host.client_has_permission(client, "item.use"):
             return
         piano_item = self.items.get(packet.itemId)
         if not piano_item or piano_item.type != "piano":
@@ -121,7 +122,7 @@ class PianoRuntime:
         if piano_item.carrierId not in (None, client.id):
             return
         if piano_item.carrierId is None and (
-            not self.host._item_is_on_client_square(piano_item, client)
+            not self.host.item_is_on_client_square(piano_item, client)
         ):
             return
         active_keys = self.active_keys_by_client.setdefault(client.id, set())
@@ -213,24 +214,24 @@ class PianoRuntime:
         self, client: ClientConnection, packet: ItemPianoRecordingPacket
     ) -> None:
         """Apply one recording or playback control action."""
-        if not self.host._client_has_permission(client, "item.use"):
-            await self.host._send_item_result(
+        if not self.host.client_has_permission(client, "item.use"):
+            await self.host.send_result(
                 client, False, "use", "Not authorized to use items."
             )
             return
         recording_item = self.items.get(packet.itemId)
         if not recording_item or recording_item.type != "piano":
-            await self.host._send_item_result(client, False, "use", "Piano not found.")
+            await self.host.send_result(client, False, "use", "Piano not found.")
             return
         if recording_item.carrierId not in (None, client.id):
-            await self.host._send_item_result(
+            await self.host.send_result(
                 client, False, "use", "Piano is not available.", recording_item.id
             )
             return
         if recording_item.carrierId is None and (
-            not self.host._item_is_on_client_square(recording_item, client)
+            not self.host.item_is_on_client_square(recording_item, client)
         ):
-            await self.host._send_item_result(
+            await self.host.send_result(
                 client,
                 False,
                 "use",
@@ -242,7 +243,7 @@ class PianoRuntime:
         if packet.action == "toggle_record":
             existing = self.recording_state_by_item.get(recording_item.id)
             if existing and existing.get("ownerClientId") != client.id:
-                await self.host._send_item_result(
+                await self.host.send_result(
                     client,
                     False,
                     "use",
@@ -260,7 +261,7 @@ class PianoRuntime:
                         event="record_resumed",
                         recording_state="recording",
                     )
-                    await self.host._send_item_result(
+                    await self.host.send_result(
                         client, True, "use", "Recording resumed.", recording_item.id
                     )
                 else:
@@ -273,7 +274,7 @@ class PianoRuntime:
                         event="record_paused",
                         recording_state="paused",
                     )
-                    await self.host._send_item_result(
+                    await self.host.send_result(
                         client, True, "use", "Recording paused.", recording_item.id
                     )
                 return
@@ -296,7 +297,7 @@ class PianoRuntime:
                 event="record_started",
                 recording_state="recording",
             )
-            await self.host._send_item_result(
+            await self.host.send_result(
                 client, True, "use", "Recording started.", recording_item.id
             )
             return
@@ -304,7 +305,7 @@ class PianoRuntime:
         if packet.action == "stop_record":
             existing = self.recording_state_by_item.get(recording_item.id)
             if existing and existing.get("ownerClientId") != client.id:
-                await self.host._send_item_result(
+                await self.host.send_result(
                     client,
                     False,
                     "use",
@@ -323,14 +324,14 @@ class PianoRuntime:
                 event="record_stopped",
                 recording_state="idle",
             )
-            await self.host._send_item_result(
+            await self.host.send_result(
                 client, True, "use", "Recording stopped.", recording_item.id
             )
             return
 
         if packet.action == "playback":
             if recording_item.id in self.recording_state_by_item:
-                await self.host._send_item_result(
+                await self.host.send_result(
                     client,
                     False,
                     "use",
@@ -345,7 +346,7 @@ class PianoRuntime:
                 else False
             )
             if not has_song:
-                await self.host._send_item_result(
+                await self.host.send_result(
                     client,
                     False,
                     "use",
@@ -364,7 +365,7 @@ class PianoRuntime:
                 event="playback_started",
                 recording_state="playback",
             )
-            await self.host._send_item_result(
+            await self.host.send_result(
                 client, True, "use", "Playback started.", recording_item.id
             )
             return
@@ -377,7 +378,7 @@ class PianoRuntime:
                 event="playback_stopped",
                 recording_state="idle",
             )
-            await self.host._send_item_result(
+            await self.host.send_result(
                 client, True, "use", "Playback stopped.", recording_item.id
             )
             return
@@ -387,7 +388,7 @@ class PianoRuntime:
         """Resolve world position used for piano note spatial broadcasts."""
 
         if item.carrierId:
-            carrier = self.host._get_client_by_id(item.carrierId)
+            carrier = self.host.get_client_by_id(item.carrierId)
             if carrier is not None:
                 return carrier.x, carrier.y, carrier.z
         return item.x, item.y, item.z
@@ -472,7 +473,7 @@ class PianoRuntime:
             else 15
         )
         source_x, source_y, source_z = self._get_piano_source_position(item)
-        await self.host._broadcast(
+        await self.host.broadcast(
             ItemPianoNoteBroadcastPacket(
                 type="item_piano_note",
                 itemId=item.id,
@@ -645,7 +646,7 @@ class PianoRuntime:
         }
         self.item_service.save_piano_songs()
         owner_id = str(session.get("ownerClientId", ""))
-        owner = self.host._get_client_by_id(owner_id) if owner_id else None
+        owner = self.host.get_client_by_id(owner_id) if owner_id else None
         item.params["songId"] = song_id
         item.params.pop("recording", None)
         item.params.pop("recordingLengthMs", None)
@@ -653,8 +654,8 @@ class PianoRuntime:
         item.updatedBy = owner.user_id if owner and owner.user_id else "system"
         item.updatedByName = owner.username if owner and owner.username else "system"
         item.version += 1
-        self.host._request_state_save()
-        await self.host._broadcast_item(item)
+        self.host.request_state_save()
+        await self.host.broadcast_item(item)
         if owner and notify_owner:
             await self.send_status(
                 owner,
@@ -662,7 +663,7 @@ class PianoRuntime:
                 event="record_stopped",
                 recording_state="idle",
             )
-            await self.host._send_item_result(
+            await self.host.send_result(
                 owner, True, "use", "Recording stopped.", item.id
             )
 
@@ -922,7 +923,7 @@ class PianoRuntime:
     ) -> None:
         """Send structured piano state transitions without relying on status-message text."""
 
-        await self.host._send(
+        await self.host.send(
             client.websocket,
             ItemPianoStatusPacket(
                 type="item_piano_status",

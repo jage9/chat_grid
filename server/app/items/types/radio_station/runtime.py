@@ -21,16 +21,17 @@ RADIO_METADATA_MAX_CONCURRENCY = 4
 class RadioRuntimeHost(Protocol):
     """Server operations required by radio metadata polling."""
 
-    item_service: ItemService
+    @property
+    def item_service(self) -> ItemService: ...
 
     @property
     def items(self) -> dict[str, WorldItem]: ...
 
-    def _has_listener_in_range(self, item: WorldItem) -> bool: ...
+    def has_listener_in_range(self, item: WorldItem) -> bool: ...
 
-    def _request_state_save(self) -> None: ...
+    def request_state_save(self) -> None: ...
 
-    async def _broadcast_item(self, item: WorldItem) -> None: ...
+    async def broadcast_item(self, item: WorldItem) -> None: ...
 
 
 class RadioRuntime:
@@ -136,8 +137,8 @@ class RadioRuntime:
             item.updatedBy = "system"
             item.updatedByName = "system"
             item.version += 1
-            self.host._request_state_save()
-            await self.host._broadcast_item(item)
+            self.host.request_state_save()
+            await self.host.broadcast_item(item)
 
     async def refresh_once(self) -> None:
         """Refresh metadata once per stream for radios near an active listener."""
@@ -148,7 +149,7 @@ class RadioRuntime:
                 item.type != "radio_station"
                 or not bool(item.params.get("enabled", True))
                 or not isinstance(item.params.get("streamUrl"), str)
-                or not self.host._has_listener_in_range(item)
+                or not self.host.has_listener_in_range(item)
             ):
                 continue
             stream_url = str(item.params.get("streamUrl", "")).strip()

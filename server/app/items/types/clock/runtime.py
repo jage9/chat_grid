@@ -22,13 +22,11 @@ class ClockRuntimeHost(Protocol):
     @property
     def items(self) -> dict[str, WorldItem]: ...
 
-    def _get_item_sound_source_position(
-        self, item: WorldItem
-    ) -> tuple[int, int, int]: ...
+    def get_sound_source_position(self, item: WorldItem) -> tuple[int, int, int]: ...
 
-    def _get_item_emit_range(self, item: WorldItem) -> int: ...
+    def get_emit_range(self, item: WorldItem) -> int: ...
 
-    async def _broadcast(
+    async def broadcast(
         self, packet: object, exclude: ServerConnection | None = None
     ) -> None: ...
 
@@ -130,14 +128,14 @@ class ClockRuntime:
     ) -> None:
         """Broadcast one server-authoritative clock speech sequence from item position."""
 
-        sound_x, sound_y, sound_z = self.host._get_item_sound_source_position(item)
-        sound_range = self.host._get_item_emit_range(item)
+        sound_x, sound_y, sound_z = self.host.get_sound_source_position(item)
+        sound_range = self.host.get_emit_range(item)
         sounds = self._build_clock_announcement_sounds(
             item.params, top_of_hour=top_of_hour, alarm=alarm
         )
         if not sounds:
             return
-        await self.host._broadcast(
+        await self.host.broadcast(
             ItemClockAnnouncePacket(
                 type="item_clock_announce",
                 itemId=item.id,

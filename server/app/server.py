@@ -6,7 +6,6 @@ import argparse
 import asyncio
 from collections import deque
 from contextlib import suppress
-from datetime import datetime, timezone
 from getpass import getpass
 import ipaddress
 import json
@@ -40,15 +39,9 @@ from .item_catalog import (
     ITEM_TYPE_TOOLTIPS,
     get_item_definition,
     get_item_global_properties,
-    get_item_use_cooldown_ms,
-    is_known_item_type,
 )
-from .item_type_handlers import get_item_type_handler
+from .item_runtime import ItemRuntime
 from .item_service import ItemService
-from .items.types.clock.runtime import ClockRuntime
-from .items.types.elevator.runtime import ElevatorRuntime, ElevatorRuntimeCallbacks
-from .items.types.piano.runtime import PianoRuntime
-from .items.types.radio_station.runtime import RadioRuntime
 from .models import (
     AuthLoginPacket,
     AuthLogoutPacket,
@@ -77,23 +70,6 @@ from .models import (
     ChatMessagePacket,
     ClientPacket,
     LiveKitTokenPacket,
-    ItemActionResultPacket,
-    ItemAddPacket,
-    ItemDeletePacket,
-    ItemDropPacket,
-    ItemPianoNotePacket,
-    ItemPianoRecordingPacket,
-    ItemPickupPacket,
-    ItemRemovePacket,
-    ItemSecondaryUsePacket,
-    ItemTransferPacket,
-    ItemTransferTargetSummary,
-    ItemTransferTargetsPacket,
-    ItemTransferTargetsResultPacket,
-    ItemUpdatePacket,
-    ItemUpsertPacket,
-    ItemUsePacket,
-    ItemUseSoundPacket,
     NicknameResultPacket,
     PingPacket,
     PongPacket,
@@ -217,8 +193,7 @@ class SignalingServer:
             username_max_length=username_max_length,
         )
         self.item_service = ItemService(state_file=state_file)
-        self.item_last_use_ms: dict[str, int] = {}
-        self.piano_runtime = PianoRuntime(self)
+        self.item_runtime = ItemRuntime(self)
         self.grid_size = max(1, grid_size)
         self.movement_tick_ms = MOVEMENT_TICK_MS
         self.movement_max_steps_per_tick = MOVEMENT_MAX_STEPS_PER_TICK
@@ -273,32 +248,8 @@ class SignalingServer:
         self._auth_hash_semaphore = asyncio.Semaphore(AUTH_HASH_MAX_CONCURRENCY)
         self._auth_failures_by_ip: dict[str, deque[float]] = {}
         self._auth_failures_by_identity: dict[str, deque[float]] = {}
-        self.radio_runtime = RadioRuntime(self)
-        self.clock_runtime = ClockRuntime(self)
         self._started_at_monotonic = time.monotonic()
         self._pending_reboot_task: asyncio.Task[None] | None = None
-        self.elevator_runtime = ElevatorRuntime(
-            ElevatorRuntimeCallbacks(
-                get_item=lambda item_id: self.items.get(item_id),
-                iter_clients=lambda: self.clients.values(),
-                broadcast=lambda packet: self._broadcast(packet),
-                send=lambda websocket, packet: self._send(websocket, packet),
-                broadcast_item=lambda item: self._broadcast_item(item),
-                send_item_result=lambda client, ok, action, message, item_id: (
-                    self._send_item_result(client, ok, action, message, item_id)
-                ),
-                request_state_save=lambda: self._request_state_save(),
-                persist_client_position=lambda client: self._persist_client_position(
-                    client, force=True
-                ),
-                find_carried_item=lambda client_id: self.item_service.find_carried_item(
-                    client_id
-                ),
-                now_ms=lambda: self.item_service.now_ms(),
-                floor_name=lambda z: self._floor_name(z),
-                get_emit_range=lambda item: self._get_item_emit_range(item),
-            )
-        )
 
     @property
     def livekit_enabled(self) -> bool:
@@ -707,12 +658,6 @@ class SignalingServer:
         return False
 
     @staticmethod
-    def _item_type_label(item: WorldItem) -> str:
-        """Return user-facing item type wording for chat/status strings."""
-
-        return "radio" if item.type == "radio_station" else item.type
-
-    @staticmethod
     def _client_ip(client: ClientConnection) -> str:
         """Extract best-effort remote IP string for audit logs and auth throttling."""
 
@@ -848,138 +793,6 @@ class SignalingServer:
         async with self._auth_hash_semaphore:
             return await asyncio.to_thread(func, *args, **kwargs)
 
-    @staticmethod
-    def _resolve_item_use_sound(item: WorldItem) -> str | None:
-        """Resolve one-shot use sound, preferring per-item param override."""
-
-        param_sound = item.params.get("useSound")
-        if isinstance(param_sound, str):
-            token = param_sound.strip()
-            if token:
-                return token
-            return None
-        if isinstance(item.useSound, str) and item.useSound.strip():
-            return item.useSound.strip()
-        return None
-
-    @staticmethod
-    def _format_display_sound_name(value: object) -> str:
-        """Return display-friendly sound token (file name only) for item property menus."""
-
-        raw = str(value or "").strip()
-        if not raw:
-            return "none"
-        if raw.lower() == "none":
-            return "none"
-        without_query = raw.split("?", 1)[0].split("#", 1)[0]
-        segments = [segment for segment in without_query.split("/") if segment]
-        return segments[-1] if segments else raw
-
-    @staticmethod
-    def _format_display_timestamp_ms(value: int) -> str:
-        """Format epoch milliseconds to compact UTC text used in item property menus."""
-
-        dt = datetime.fromtimestamp(value / 1000, tz=timezone.utc)
-        return dt.strftime("%Y-%m-%d %H:%M")
-
-    def _build_item_display_values(self, item: WorldItem) -> dict[str, str]:
-        """Build server-authoritative item property display values for readonly/system fields."""
-
-        carrier_label = "none"
-        if item.carrierId:
-            carrier = self._get_client_by_id(item.carrierId)
-            carrier_label = carrier.nickname if carrier is not None else item.carrierId
-        return {
-            "type": item.type,
-            "x": str(item.x),
-            "y": str(item.y),
-            "z": str(item.z),
-            "carrierId": carrier_label,
-            "version": str(item.version),
-            "createdBy": item.createdByName or item.createdBy,
-            "updatedBy": item.updatedByName or item.updatedBy,
-            "createdAt": self._format_display_timestamp_ms(item.createdAt),
-            "updatedAt": self._format_display_timestamp_ms(item.updatedAt),
-            "capabilities": ", ".join(item.capabilities)
-            if item.capabilities
-            else "none",
-            "useSound": self._format_display_sound_name(
-                item.params.get("useSound", item.useSound)
-            ),
-            "emitSound": self._format_display_sound_name(
-                item.params.get("emitSound", item.emitSound)
-            ),
-        }
-
-    def _outbound_item(self, item: WorldItem) -> WorldItem:
-        """Return one outbound item snapshot enriched with server-owned display values."""
-
-        return item.model_copy(
-            update={"display": self._build_item_display_values(item)}
-        )
-
-    @staticmethod
-    def _item_updated_actor(client: ClientConnection) -> tuple[str, str]:
-        """Resolve `(actor_id, actor_name)` used in item update tracking fields."""
-
-        actor_id = client.user_id or client.id
-        actor_name = client.username or client.nickname or actor_id
-        return actor_id, actor_name
-
-    @staticmethod
-    def _owns_item(client: ClientConnection, item: WorldItem) -> bool:
-        """Return whether the authenticated client is the creator/owner of an item."""
-
-        if not client.user_id:
-            return False
-        return item.createdBy == client.user_id
-
-    def _get_item_emit_range(self, item: WorldItem) -> int:
-        """Return effective emit range for one item with sane bounds."""
-
-        value = item.params.get("emitRange")
-        if isinstance(value, (int, float)):
-            emit_range = int(value)
-            if emit_range > 0:
-                return emit_range
-        definition = get_item_definition(item.type)
-        if isinstance(definition.emit_range, int) and definition.emit_range > 0:
-            return definition.emit_range
-        return 15
-
-    def _has_listener_in_range(self, item: WorldItem) -> bool:
-        """Return whether any connected user is currently inside item hear range."""
-
-        emit_range = self._get_item_emit_range(item)
-        for client in self.clients.values():
-            elevator = (
-                self.items.get(client.elevator_id) if client.elevator_id else None
-            )
-            if elevator is not None and elevator.params.get("state") == "moving":
-                continue
-            if client.z != item.z:
-                continue
-            if max(abs(client.x - item.x), abs(client.y - item.y)) <= emit_range:
-                return True
-        return False
-
-    def _get_item_sound_source_position(self, item: WorldItem) -> tuple[int, int, int]:
-        """Resolve source position for item-emitted one-shot sounds."""
-
-        if item.carrierId:
-            carrier = self._get_client_by_id(item.carrierId)
-            if carrier is not None:
-                return carrier.x, carrier.y, carrier.z
-        return item.x, item.y, item.z
-
-    def _get_client_by_id(self, client_id: str) -> ClientConnection | None:
-        """Resolve one connected client by id."""
-
-        for connected in self.clients.values():
-            if connected.id == client_id:
-                return connected
-        return None
-
     def _is_in_bounds(self, x: int, y: int) -> bool:
         """Check whether a coordinate is inside server-authoritative world bounds."""
 
@@ -990,31 +803,6 @@ class SignalingServer:
         """Return whether a height is a configured floor elevation."""
 
         return z in FLOOR_ELEVATIONS
-
-    def _item_is_on_client_square(
-        self, item: WorldItem, client: ClientConnection
-    ) -> bool:
-        """Return whether one non-carried item shares the client's world cell."""
-
-        if client.elevator_id == item.id:
-            return True
-        return self.item_service.item_occupies_position(
-            item,
-            x=client.x,
-            y=client.y,
-            z=client.z,
-        )
-
-    def _item_footprint_in_bounds(self, item: WorldItem) -> bool:
-        """Return whether every occupied cell is inside the horizontal grid."""
-
-        return all(
-            self._is_in_bounds(
-                item.x + int(offset.get("x", 0)),
-                item.y + int(offset.get("y", 0)),
-            )
-            for offset in item.occupiedOffsets
-        )
 
     @staticmethod
     def _floor_name(z: int) -> str:
@@ -1047,43 +835,6 @@ class SignalingServer:
         client.movement_window_steps_used += requested_delta
         return True
 
-    async def _send_item_result(
-        self,
-        client: ClientConnection,
-        ok: bool,
-        action: Literal[
-            "add",
-            "pickup",
-            "drop",
-            "delete",
-            "transfer",
-            "use",
-            "secondary_use",
-            "update",
-        ],
-        message: str,
-        item_id: str | None = None,
-    ) -> None:
-        """Send a structured item action result to one client."""
-
-        await self._send(
-            client.websocket,
-            ItemActionResultPacket(
-                type="item_action_result",
-                ok=ok,
-                action=action,
-                message=message,
-                itemId=item_id,
-            ),
-        )
-
-    async def _broadcast_item(self, item: WorldItem) -> None:
-        """Broadcast a full item snapshot update to all connected clients."""
-
-        await self._broadcast(
-            ItemUpsertPacket(type="item_upsert", item=self._outbound_item(item))
-        )
-
     async def start(self) -> None:
         """Start websocket serving and run until cancelled."""
 
@@ -1091,8 +842,7 @@ class SignalingServer:
         LOGGER.info(
             "starting signaling server on %s://%s:%d", protocol, self.host, self.port
         )
-        self.radio_runtime.start()
-        self.clock_runtime.start()
+        self.item_runtime.start()
         try:
             async with serve(
                 self._handle_client,
@@ -1105,15 +855,12 @@ class SignalingServer:
             ):
                 await asyncio.Future()
         finally:
-            await self.piano_runtime.shutdown()
-            await self.elevator_runtime.shutdown()
+            await self.item_runtime.shutdown()
             if self._pending_reboot_task is not None:
                 self._pending_reboot_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await self._pending_reboot_task
                 self._pending_reboot_task = None
-            await self.clock_runtime.shutdown()
-            await self.radio_runtime.shutdown()
             self._flush_state_save()
             self.auth_service.close()
 
@@ -1162,8 +909,7 @@ class SignalingServer:
         finally:
             if websocket in self.clients:
                 disconnected = self.clients.pop(websocket)
-                await self.piano_runtime.client_disconnected(disconnected)
-                self.elevator_runtime.restore_rider_to_landing(disconnected)
+                await self.item_runtime.prepare_client_disconnect(disconnected)
                 self._persist_client_position(disconnected, force=True)
                 self._persist_client_last_seen(disconnected, force=True)
                 if disconnected.user_id:
@@ -1171,11 +917,7 @@ class SignalingServer:
                         disconnected.user_id, None
                     )
                     self._last_seen_persist_ms_by_user.pop(disconnected.user_id, None)
-                for item in self.item_service.drop_carried_items_for_disconnect(
-                    disconnected
-                ):
-                    await self._broadcast_item(item)
-                self._request_state_save()
+                await self.item_runtime.finish_client_disconnect(disconnected)
                 LOGGER.info(
                     "client disconnected id=%s nickname=%s total=%d",
                     disconnected.id,
@@ -1225,7 +967,7 @@ class SignalingServer:
             ),
             users=users,
             items=[
-                self._outbound_item(item).model_dump(exclude_none=True)
+                self.item_runtime.outbound_item(item).model_dump(exclude_none=True)
                 for item in self.items.values()
             ],
             worldConfig={
@@ -1523,30 +1265,6 @@ class SignalingServer:
             "itemManagement": {"actions": list(ITEM_MANAGEMENT_ACTION_DEFINITIONS)},
             "adminMenu": {"actions": self._build_admin_menu_actions_for_client(client)},
         }
-
-    async def _broadcast_wheel_result_after_delay(
-        self,
-        client: ClientConnection,
-        self_message: str,
-        others_message: str,
-        delay_seconds: float = 3.0,
-    ) -> None:
-        """Delay then publish wheel result text to self and other users."""
-
-        await asyncio.sleep(delay_seconds)
-        await self._broadcast(
-            BroadcastChatMessagePacket(
-                type="chat_message", message=others_message, system=True
-            ),
-            exclude=client.websocket,
-        )
-        if client.websocket in self.clients:
-            await self._send(
-                client.websocket,
-                BroadcastChatMessagePacket(
-                    type="chat_message", message=self_message, system=True
-                ),
-            )
 
     async def _send_admin_action_result(
         self,
@@ -2106,16 +1824,7 @@ class SignalingServer:
                 client_position_packet(client),
                 exclude=client.websocket,
             )
-            carried = self.item_service.find_carried_item(client.id)
-            if carried:
-                actor_id, actor_name = self._item_updated_actor(client)
-                carried.x = client.x
-                carried.y = client.y
-                carried.z = client.z
-                carried.updatedAt = self.item_service.now_ms()
-                carried.updatedBy = actor_id
-                carried.updatedByName = actor_name
-                await self._broadcast_item(carried)
+            await self.item_runtime.sync_carried_item(client)
             return
 
         if isinstance(packet, TeleportCompletePacket):
@@ -2151,16 +1860,7 @@ class SignalingServer:
                 client_position_packet(client),
                 exclude=client.websocket,
             )
-            carried = self.item_service.find_carried_item(client.id)
-            if carried:
-                actor_id, actor_name = self._item_updated_actor(client)
-                carried.x = client.x
-                carried.y = client.y
-                carried.z = client.z
-                carried.updatedAt = self.item_service.now_ms()
-                carried.updatedBy = actor_id
-                carried.updatedByName = actor_name
-                await self._broadcast_item(carried)
+            await self.item_runtime.sync_carried_item(client)
             await self._broadcast(
                 BroadcastTeleportCompletePacket(
                     type="teleport_complete",
@@ -2307,754 +2007,7 @@ class SignalingServer:
             )
             return
 
-        if isinstance(packet, ItemAddPacket):
-            if not self._client_has_permission(client, "item.create"):
-                await self._send_item_result(
-                    client, False, "add", "Not authorized to create items."
-                )
-                return
-            if not is_known_item_type(packet.itemType):
-                await self._send_item_result(client, False, "add", "Unknown item type.")
-                return
-            item = self.item_service.default_item(client, packet.itemType)
-            if item.type == "elevator":
-                item.z = 0
-                item.params["currentZ"] = client.z
-            if not self._item_footprint_in_bounds(item):
-                await self._send_item_result(
-                    client,
-                    False,
-                    "add",
-                    "The item footprint does not fit at this position.",
-                )
-                return
-            self.item_service.add_item(item)
-            await self._broadcast_item(item)
-            self._request_state_save()
-            LOGGER.info(
-                "item created by=%s item_id=%s type=%s title=%s x=%d y=%d z=%d",
-                client.nickname,
-                item.id,
-                item.type,
-                item.title,
-                item.x,
-                item.y,
-                item.z,
-            )
-            item_text = f"{item.title} ({self._item_type_label(item)})"
-            await self._broadcast(
-                BroadcastChatMessagePacket(
-                    type="chat_message",
-                    message=f"{client.nickname} placed {item_text} at {item.x}, {item.y}, {item.z}, {self._floor_name(item.z)}.",
-                    system=True,
-                ),
-                exclude=client.websocket,
-            )
-            await self._send_item_result(
-                client,
-                True,
-                "add",
-                f"You placed {item_text} at {item.x}, {item.y}, {item.z}, {self._floor_name(item.z)}.",
-                item.id,
-            )
-            return
-
-        if isinstance(packet, ItemPickupPacket):
-            pickup_item = self.items.get(packet.itemId)
-            if not pickup_item:
-                await self._send_item_result(client, False, "pickup", "Item not found.")
-                return
-            if "carryable" not in pickup_item.capabilities:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "pickup",
-                    "That item cannot be carried.",
-                    pickup_item.id,
-                )
-                return
-            if pickup_item.carrierId and pickup_item.carrierId != client.id:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "pickup",
-                    "Item is already being carried.",
-                    pickup_item.id,
-                )
-                return
-            carried = self.item_service.find_carried_item(client.id)
-            if carried and carried.id != pickup_item.id:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "pickup",
-                    "You are already carrying an item.",
-                    pickup_item.id,
-                )
-                return
-            if pickup_item.carrierId is None and (
-                not self._item_is_on_client_square(pickup_item, client)
-            ):
-                await self._send_item_result(
-                    client,
-                    False,
-                    "pickup",
-                    "Item is not on your square.",
-                    pickup_item.id,
-                )
-                return
-            can_pickup_any = self._client_has_permission(client, "item.pickup_drop.any")
-            can_pickup_own = self._client_has_permission(
-                client, "item.pickup_drop.own"
-            ) and self._owns_item(client, pickup_item)
-            if not can_pickup_any and not can_pickup_own:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "pickup",
-                    "Not authorized to pick up this item.",
-                    pickup_item.id,
-                )
-                return
-            pickup_item.carrierId = client.id
-            pickup_item.x = client.x
-            pickup_item.y = client.y
-            pickup_item.z = client.z
-            pickup_item.updatedAt = self.item_service.now_ms()
-            actor_id, actor_name = self._item_updated_actor(client)
-            pickup_item.updatedBy = actor_id
-            pickup_item.updatedByName = actor_name
-            await self._broadcast_item(pickup_item)
-            self._request_state_save()
-            item_text = f"{pickup_item.title} ({self._item_type_label(pickup_item)})"
-            await self._broadcast(
-                BroadcastChatMessagePacket(
-                    type="chat_message",
-                    message=f"{client.nickname} picked up {item_text}.",
-                    system=True,
-                ),
-                exclude=client.websocket,
-            )
-            await self._send_item_result(
-                client,
-                True,
-                "pickup",
-                f"Picked up {pickup_item.title}.",
-                pickup_item.id,
-            )
-            return
-
-        if isinstance(packet, ItemDropPacket):
-            drop_item = self.items.get(packet.itemId)
-            if not drop_item:
-                await self._send_item_result(client, False, "drop", "Item not found.")
-                return
-            if drop_item.carrierId != client.id:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "drop",
-                    "You are not carrying that item.",
-                    drop_item.id,
-                )
-                return
-            if not self._is_in_bounds(packet.x, packet.y) or packet.z != client.z:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "drop",
-                    "Drop position is out of bounds.",
-                    drop_item.id,
-                )
-                return
-            can_drop_any = self._client_has_permission(client, "item.pickup_drop.any")
-            can_drop_own = self._client_has_permission(
-                client, "item.pickup_drop.own"
-            ) and self._owns_item(client, drop_item)
-            if not can_drop_any and not can_drop_own:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "drop",
-                    "Not authorized to drop this item.",
-                    drop_item.id,
-                )
-                return
-            drop_item.carrierId = None
-            drop_item.x = packet.x
-            drop_item.y = packet.y
-            drop_item.z = packet.z
-            drop_item.updatedAt = self.item_service.now_ms()
-            actor_id, actor_name = self._item_updated_actor(client)
-            drop_item.updatedBy = actor_id
-            drop_item.updatedByName = actor_name
-            await self._broadcast_item(drop_item)
-            self._request_state_save()
-            item_text = f"{drop_item.title} ({self._item_type_label(drop_item)})"
-            await self._broadcast(
-                BroadcastChatMessagePacket(
-                    type="chat_message",
-                    message=f"{client.nickname} dropped {item_text} at {drop_item.x}, {drop_item.y}, {drop_item.z}, {self._floor_name(drop_item.z)}.",
-                    system=True,
-                ),
-                exclude=client.websocket,
-            )
-            await self._send_item_result(
-                client,
-                True,
-                "drop",
-                f"Dropped {drop_item.title} at {drop_item.x}, {drop_item.y}, {drop_item.z}, {self._floor_name(drop_item.z)}.",
-                drop_item.id,
-            )
-            return
-
-        if isinstance(packet, ItemDeletePacket):
-            delete_item = self.items.get(packet.itemId)
-            if not delete_item:
-                await self._send_item_result(client, False, "delete", "Item not found.")
-                return
-            if delete_item.carrierId and delete_item.carrierId != client.id:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "delete",
-                    "Item is being carried by another user.",
-                    delete_item.id,
-                )
-                return
-            if delete_item.type == "elevator" and (
-                str(delete_item.params.get("state", "idle")) == "moving"
-                or any(
-                    other.elevator_id == delete_item.id
-                    for other in self.clients.values()
-                )
-            ):
-                await self._send_item_result(
-                    client,
-                    False,
-                    "delete",
-                    "The elevator cannot be deleted while moving or occupied.",
-                    delete_item.id,
-                )
-                return
-            if delete_item.carrierId is None and (
-                not self._item_is_on_client_square(delete_item, client)
-            ):
-                await self._send_item_result(
-                    client,
-                    False,
-                    "delete",
-                    "Item is not on your square.",
-                    delete_item.id,
-                )
-                return
-            can_delete_any = self._client_has_permission(client, "item.delete.any")
-            can_delete_own = self._client_has_permission(
-                client, "item.delete.own"
-            ) and self._owns_item(client, delete_item)
-            if not can_delete_any and not can_delete_own:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "delete",
-                    "Not authorized to delete this item.",
-                    delete_item.id,
-                )
-                return
-            LOGGER.info(
-                "item deleted by=%s item_id=%s type=%s title=%s",
-                client.nickname,
-                delete_item.id,
-                delete_item.type,
-                delete_item.title,
-            )
-            self.piano_runtime.remove_item(delete_item)
-            self.item_service.remove_item(delete_item.id)
-            await self.elevator_runtime.cancel(delete_item.id)
-            self.item_last_use_ms.pop(delete_item.id, None)
-            await self._broadcast(
-                ItemRemovePacket(type="item_remove", itemId=delete_item.id)
-            )
-            self._request_state_save()
-            item_text = f"{delete_item.title} ({self._item_type_label(delete_item)})"
-            await self._broadcast(
-                BroadcastChatMessagePacket(
-                    type="chat_message",
-                    message=f"{client.nickname} deleted {item_text}.",
-                    system=True,
-                ),
-                exclude=client.websocket,
-            )
-            await self._send_item_result(
-                client, True, "delete", f"You deleted {item_text}.", delete_item.id
-            )
-            return
-
-        if isinstance(packet, ItemTransferTargetsPacket):
-            transfer_targets_item = self.items.get(packet.itemId)
-            if not transfer_targets_item:
-                await self._send_item_result(
-                    client, False, "transfer", "Item not found."
-                )
-                return
-            if transfer_targets_item.carrierId:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "transfer",
-                    "Item cannot be transferred while carried.",
-                    transfer_targets_item.id,
-                )
-                return
-            if not self._item_is_on_client_square(transfer_targets_item, client):
-                await self._send_item_result(
-                    client,
-                    False,
-                    "transfer",
-                    "Item is not on your square.",
-                    transfer_targets_item.id,
-                )
-                return
-            can_transfer_any = self._client_has_permission(client, "item.transfer.any")
-            can_transfer_own = self._client_has_permission(
-                client, "item.transfer.own"
-            ) and self._owns_item(client, transfer_targets_item)
-            if not can_transfer_any and not can_transfer_own:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "transfer",
-                    "Not authorized to transfer this item.",
-                    transfer_targets_item.id,
-                )
-                return
-            users = self.auth_service.list_users_for_admin()
-            connected_user_ids = {
-                other.user_id
-                for other in self.clients.values()
-                if other.authenticated and other.user_id
-            }
-            targets = [
-                ItemTransferTargetSummary(
-                    userId=str(entry["id"]),
-                    username=str(entry["username"]),
-                    online=str(entry.get("id")) in connected_user_ids,
-                )
-                for entry in users
-                if str(entry.get("status")) == "active"
-                and str(entry["id"]) != transfer_targets_item.createdBy
-            ]
-            await self._send(
-                client.websocket,
-                ItemTransferTargetsResultPacket(
-                    type="item_transfer_targets",
-                    itemId=transfer_targets_item.id,
-                    targets=targets,
-                ),
-            )
-            return
-
-        if isinstance(packet, ItemTransferPacket):
-            transfer_item = self.items.get(packet.itemId)
-            if not transfer_item:
-                await self._send_item_result(
-                    client, False, "transfer", "Item not found."
-                )
-                return
-            if transfer_item.carrierId:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "transfer",
-                    "Item cannot be transferred while carried.",
-                    transfer_item.id,
-                )
-                return
-            if not self._item_is_on_client_square(transfer_item, client):
-                await self._send_item_result(
-                    client,
-                    False,
-                    "transfer",
-                    "Item is not on your square.",
-                    transfer_item.id,
-                )
-                return
-            can_transfer_any = self._client_has_permission(client, "item.transfer.any")
-            can_transfer_own = self._client_has_permission(
-                client, "item.transfer.own"
-            ) and self._owns_item(client, transfer_item)
-            if not can_transfer_any and not can_transfer_own:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "transfer",
-                    "Not authorized to transfer this item.",
-                    transfer_item.id,
-                )
-                return
-            target_user_id = str(packet.targetUserId).strip()
-            if not target_user_id:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "transfer",
-                    "Target user is not available.",
-                    transfer_item.id,
-                )
-                return
-            if transfer_item.createdBy == target_user_id:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "transfer",
-                    "Item already belongs to that user.",
-                    transfer_item.id,
-                )
-                return
-            target = next(
-                (
-                    other
-                    for other in self.clients.values()
-                    if other.authenticated and other.user_id == target_user_id
-                ),
-                None,
-            )
-            target_username = (
-                target.username
-                if target and target.username
-                else target.nickname
-                if target
-                else self.auth_service.get_username_by_id(target_user_id)
-                or target_user_id
-            )
-            transfer_item.createdBy = target_user_id
-            transfer_item.createdByName = target_username
-            transfer_item.updatedAt = self.item_service.now_ms()
-            actor_id, actor_name = self._item_updated_actor(client)
-            transfer_item.updatedBy = actor_id
-            transfer_item.updatedByName = actor_name
-            transfer_item.version += 1
-            await self._broadcast_item(transfer_item)
-            self._request_state_save()
-            item_text = (
-                f"{transfer_item.title} ({self._item_type_label(transfer_item)})"
-            )
-            await self._broadcast(
-                BroadcastChatMessagePacket(
-                    type="chat_message",
-                    message=f"{client.nickname} transferred {item_text} to {target_username}.",
-                    system=True,
-                ),
-                exclude=client.websocket,
-            )
-            await self._send_item_result(
-                client,
-                True,
-                "transfer",
-                f"You transferred {item_text} to {target_username}.",
-                transfer_item.id,
-            )
-            return
-
-        if isinstance(packet, ItemUsePacket):
-            if not self._client_has_permission(client, "item.use"):
-                await self._send_item_result(
-                    client, False, "use", "Not authorized to use items."
-                )
-                return
-            use_item = self.items.get(packet.itemId)
-            if not use_item:
-                await self._send_item_result(client, False, "use", "Item not found.")
-                return
-            if use_item.carrierId not in (None, client.id):
-                await self._send_item_result(
-                    client, False, "use", "Item is not available.", use_item.id
-                )
-                return
-            if use_item.carrierId is None and (
-                not self._item_is_on_client_square(use_item, client)
-            ):
-                await self._send_item_result(
-                    client, False, "use", "Item is not on your square.", use_item.id
-                )
-                return
-            if use_item.type == "elevator":
-                await self.elevator_runtime.use(client, use_item)
-                return
-            handler = get_item_type_handler(use_item.type)
-            now_ms = self.item_service.now_ms()
-            cooldown_ms = get_item_use_cooldown_ms(use_item.type)
-            last_use_ms = self.item_last_use_ms.get(use_item.id)
-            if last_use_ms is not None and now_ms - last_use_ms < cooldown_ms:
-                remaining_ms = cooldown_ms - (now_ms - last_use_ms)
-                remaining_seconds = max(0.1, round(remaining_ms / 1000, 1))
-                await self._send_item_result(
-                    client,
-                    False,
-                    "use",
-                    f"{use_item.title} is on cooldown for {remaining_seconds:.1f} s.",
-                    use_item.id,
-                )
-                return
-            try:
-                use_result = handler.use(
-                    use_item, client.nickname, self.clock_runtime.format_display_time
-                )
-            except ValueError as exc:
-                await self._send_item_result(
-                    client, False, "use", str(exc), use_item.id
-                )
-                return
-
-            if use_result.updated_params is not None:
-                try:
-                    use_item.params = handler.validate_update(
-                        use_item, {**use_item.params, **use_result.updated_params}
-                    )
-                except ValueError as exc:
-                    await self._send_item_result(
-                        client, False, "use", str(exc), use_item.id
-                    )
-                    return
-                use_item.updatedAt = now_ms
-                actor_id, actor_name = self._item_updated_actor(client)
-                use_item.updatedBy = actor_id
-                use_item.updatedByName = actor_name
-                self._request_state_save()
-                await self._broadcast_item(use_item)
-
-            self.item_last_use_ms[use_item.id] = now_ms
-            if use_result.others_message:
-                await self._broadcast(
-                    BroadcastChatMessagePacket(
-                        type="chat_message",
-                        message=use_result.others_message,
-                        system=True,
-                    ),
-                    exclude=client.websocket,
-                )
-            use_sound = self._resolve_item_use_sound(use_item)
-            if use_sound:
-                sound_x, sound_y, sound_z = self._get_item_sound_source_position(
-                    use_item
-                )
-                sound_range = self._get_item_emit_range(use_item)
-                await self._broadcast(
-                    ItemUseSoundPacket(
-                        type="item_use_sound",
-                        itemId=use_item.id,
-                        sound=use_sound,
-                        x=sound_x,
-                        y=sound_y,
-                        z=sound_z,
-                        range=sound_range,
-                    )
-                )
-            if use_item.type == "clock":
-                await self.clock_runtime.broadcast_announcement(
-                    use_item, top_of_hour=False, alarm=False
-                )
-            if use_item.type == "piano":
-                await self.piano_runtime.send_status(
-                    client,
-                    item_id=use_item.id,
-                    event="use_mode_entered",
-                    recording_state="idle",
-                )
-            await self._send_item_result(
-                client, True, "use", use_result.self_message, use_item.id
-            )
-            if (
-                use_result.delayed_self_message is not None
-                and use_result.delayed_others_message is not None
-            ):
-                asyncio.create_task(
-                    self._broadcast_wheel_result_after_delay(
-                        client=client,
-                        self_message=use_result.delayed_self_message,
-                        others_message=use_result.delayed_others_message,
-                    )
-                )
-            return
-
-        if isinstance(packet, ItemSecondaryUsePacket):
-            if not self._client_has_permission(client, "item.use"):
-                await self._send_item_result(
-                    client, False, "secondary_use", "Not authorized to use items."
-                )
-                return
-            secondary_item = self.items.get(packet.itemId)
-            if not secondary_item:
-                await self._send_item_result(
-                    client, False, "secondary_use", "Item not found."
-                )
-                return
-            if secondary_item.carrierId not in (None, client.id):
-                await self._send_item_result(
-                    client,
-                    False,
-                    "secondary_use",
-                    "Item is not available.",
-                    secondary_item.id,
-                )
-                return
-            if secondary_item.carrierId is None and (
-                not self._item_is_on_client_square(secondary_item, client)
-            ):
-                await self._send_item_result(
-                    client,
-                    False,
-                    "secondary_use",
-                    "Item is not on your square.",
-                    secondary_item.id,
-                )
-                return
-            handler = get_item_type_handler(secondary_item.type)
-            if handler.secondary_use is None:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "secondary_use",
-                    f"No secondary action for {secondary_item.title}.",
-                    secondary_item.id,
-                )
-                return
-            if secondary_item.type == "radio_station" and not (
-                str(secondary_item.params.get("stationName", "")).strip()
-                or str(secondary_item.params.get("nowPlaying", "")).strip()
-            ):
-                stream_url = str(secondary_item.params.get("streamUrl", "")).strip()
-                if stream_url:
-                    metadata = await self.radio_runtime.fetch_metadata_safely(
-                        stream_url
-                    )
-                    await self.radio_runtime.apply_metadata([secondary_item], metadata)
-            try:
-                secondary_result = handler.secondary_use(
-                    secondary_item,
-                    client.nickname,
-                    self.clock_runtime.format_display_time,
-                )
-            except ValueError as exc:
-                await self._send_item_result(
-                    client, False, "secondary_use", str(exc), secondary_item.id
-                )
-                return
-            if secondary_result.updated_params is not None:
-                try:
-                    secondary_item.params = handler.validate_update(
-                        secondary_item,
-                        {**secondary_item.params, **secondary_result.updated_params},
-                    )
-                except ValueError as exc:
-                    await self._send_item_result(
-                        client, False, "secondary_use", str(exc), secondary_item.id
-                    )
-                    return
-                secondary_item.updatedAt = self.item_service.now_ms()
-                actor_id, actor_name = self._item_updated_actor(client)
-                secondary_item.updatedBy = actor_id
-                secondary_item.updatedByName = actor_name
-                secondary_item.version += 1
-                self._request_state_save()
-                await self._broadcast_item(secondary_item)
-            if secondary_result.others_message.strip():
-                await self._broadcast(
-                    BroadcastChatMessagePacket(
-                        type="chat_message",
-                        message=secondary_result.others_message,
-                        system=True,
-                    ),
-                    exclude=client.websocket,
-                )
-            await self._send_item_result(
-                client,
-                True,
-                "secondary_use",
-                secondary_result.self_message,
-                secondary_item.id,
-            )
-            return
-
-        if isinstance(packet, ItemPianoNotePacket):
-            await self.piano_runtime.handle_note(client, packet)
-            return
-
-        if isinstance(packet, ItemPianoRecordingPacket):
-            await self.piano_runtime.handle_recording_action(client, packet)
-            return
-
-        if isinstance(packet, ItemUpdatePacket):
-            update_item = self.items.get(packet.itemId)
-            if not update_item:
-                await self._send_item_result(client, False, "update", "Item not found.")
-                return
-            if update_item.carrierId not in (None, client.id):
-                await self._send_item_result(
-                    client,
-                    False,
-                    "update",
-                    "Item is not available for editing.",
-                    update_item.id,
-                )
-                return
-            if update_item.carrierId is None and (
-                not self._item_is_on_client_square(update_item, client)
-            ):
-                await self._send_item_result(
-                    client,
-                    False,
-                    "update",
-                    "Item is not on your square.",
-                    update_item.id,
-                )
-                return
-            can_edit_any = self._client_has_permission(client, "item.edit.any")
-            can_edit_own = self._client_has_permission(
-                client, "item.edit.own"
-            ) and self._owns_item(client, update_item)
-            if not can_edit_any and not can_edit_own:
-                await self._send_item_result(
-                    client,
-                    False,
-                    "update",
-                    "Not authorized to edit this item.",
-                    update_item.id,
-                )
-                return
-            if packet.title is not None:
-                title = packet.title.strip()
-                if not title:
-                    await self._send_item_result(
-                        client,
-                        False,
-                        "update",
-                        "Title cannot be empty.",
-                        update_item.id,
-                    )
-                    return
-                update_item.title = title[:80]
-            if packet.params:
-                next_params = {**update_item.params, **packet.params}
-                handler = get_item_type_handler(update_item.type)
-                try:
-                    next_params = handler.validate_update(update_item, next_params)
-                except ValueError as exc:
-                    await self._send_item_result(
-                        client, False, "update", str(exc), update_item.id
-                    )
-                    return
-                update_item.params = next_params
-            update_item.updatedAt = self.item_service.now_ms()
-            actor_id, actor_name = self._item_updated_actor(client)
-            update_item.updatedBy = actor_id
-            update_item.updatedByName = actor_name
-            update_item.version += 1
-            await self._broadcast_item(update_item)
-            self._request_state_save()
-            await self._send_item_result(
-                client, True, "update", f"Updated {update_item.title}.", update_item.id
-            )
+        if await self.item_runtime.handle_packet(client, packet):
             return
 
     async def _broadcast(

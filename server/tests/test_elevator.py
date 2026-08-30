@@ -45,11 +45,11 @@ def test_elevator_single_square_occupies_both_floors() -> None:
     elevator = server.item_service.default_item(client, "elevator")
     elevator.z = 0
 
-    assert server._item_is_on_client_square(elevator, client)
+    assert server.item_runtime.item_is_on_client_square(elevator, client)
     client.z = 40
-    assert server._item_is_on_client_square(elevator, client)
+    assert server.item_runtime.item_is_on_client_square(elevator, client)
     client.x = 11
-    assert not server._item_is_on_client_square(elevator, client)
+    assert not server.item_runtime.item_is_on_client_square(elevator, client)
 
 
 def test_same_xy_on_another_floor_is_not_the_same_item_square() -> None:
@@ -62,7 +62,7 @@ def test_same_xy_on_another_floor_is_not_the_same_item_square() -> None:
     item = server.item_service.default_item(client, "dice")
     item.z = 0
 
-    assert not server._item_is_on_client_square(item, client)
+    assert not server.item_runtime.item_is_on_client_square(item, client)
 
 
 def test_elevator_timing_and_emitter_are_editable_but_runtime_state_is_not() -> None:
@@ -216,7 +216,7 @@ async def test_elevator_opens_then_second_use_enters(
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server.elevator_runtime.use(client, elevator)
+    await server.item_runtime.elevator.use(client, elevator)
     assert elevator.params["state"] == "opening"
     assert elevator.params["doorOpen"] is False
     assert client.elevator_id is None
@@ -228,7 +228,7 @@ async def test_elevator_opens_then_second_use_enters(
         "/sounds/elevator_open.ogg",
     ]
 
-    await server.elevator_runtime.use(client, elevator)
+    await server.item_runtime.elevator.use(client, elevator)
     assert client.elevator_id is None
     result = next(
         packet
@@ -238,7 +238,7 @@ async def test_elevator_opens_then_second_use_enters(
     assert result.message == "The elevator door is opening."
 
     elevator.params["state"] = "closing"
-    await server.elevator_runtime.use(client, elevator)
+    await server.item_runtime.elevator.use(client, elevator)
     assert client.elevator_id is None
     result = next(
         packet
@@ -250,7 +250,7 @@ async def test_elevator_opens_then_second_use_enters(
     elevator.params["state"] = "door_open"
     elevator.params["doorOpen"] = True
     elevator.params["doorOpenSeconds"] = 8.2
-    await server.elevator_runtime.use(client, elevator)
+    await server.item_runtime.elevator.use(client, elevator)
     assert client.elevator_id == elevator.id
     assert elevator.params["departOnCloseZ"] == 40
     assert any(
@@ -270,7 +270,7 @@ async def test_elevator_opens_then_second_use_enters(
     )
     assert result.message == "You enter Elevator. The door will close in 8.2 seconds."
 
-    await server.elevator_runtime.use(client, elevator)
+    await server.item_runtime.elevator.use(client, elevator)
     assert client.elevator_id is None
     exit_presence = next(
         packet
@@ -279,7 +279,7 @@ async def test_elevator_opens_then_second_use_enters(
     )
     assert exit_presence.acousticZoneId == "floor:0"
 
-    await server.elevator_runtime.cancel(elevator.id)
+    await server.item_runtime.elevator.cancel(elevator.id)
 
 
 @pytest.mark.asyncio
@@ -308,15 +308,15 @@ async def test_absent_elevator_is_called_and_moving_calls_are_queued(
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server.elevator_runtime.use(ground_client, elevator)
+    await server.item_runtime.elevator.use(ground_client, elevator)
     assert elevator.params["state"] == "moving"
     assert elevator.params["targetZ"] == 0
     assert ground_client.elevator_id is None
 
-    await server.elevator_runtime.use(second_client, elevator)
+    await server.item_runtime.elevator.use(second_client, elevator)
     assert elevator.params["queuedZ"] == 40
 
-    await server.elevator_runtime.cancel(elevator.id)
+    await server.item_runtime.elevator.cancel(elevator.id)
 
 
 @pytest.mark.asyncio
@@ -343,7 +343,7 @@ async def test_opposite_landing_call_is_queued_while_door_is_closing(
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server.elevator_runtime.use(client, elevator)
+    await server.item_runtime.elevator.use(client, elevator)
 
     assert client.elevator_id is None
     assert elevator.params["state"] == "closing"
@@ -380,14 +380,14 @@ async def test_multiple_elevators_keep_independent_state(
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server.elevator_runtime.use(client, first)
+    await server.item_runtime.elevator.use(client, first)
 
     assert first.params["state"] == "opening"
     assert first.params["doorOpen"] is False
     assert second.params["doorOpen"] is False
     assert second.params["state"] == "idle"
 
-    await server.elevator_runtime.cancel(first.id)
+    await server.item_runtime.elevator.cancel(first.id)
 
 
 @pytest.mark.asyncio
@@ -444,7 +444,7 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server.elevator_runtime.run_cycle(elevator.id)
+    await server.item_runtime.elevator.run_cycle(elevator.id)
 
     assert elevator.params["currentZ"] == 40
     assert elevator.params["state"] == "idle"
@@ -500,7 +500,7 @@ async def test_elevator_door_sound_announces_next_upward_trip(
 
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server.elevator_runtime.broadcast_direction_sound(elevator, 0)
+    await server.item_runtime.elevator.broadcast_direction_sound(elevator, 0)
 
     arrival_sound = cast(ItemUseSoundPacket, broadcast[0])
     assert arrival_sound.sound == "/sounds/elevator_up.ogg"
@@ -545,9 +545,9 @@ async def test_elevator_waits_for_closing_sound_before_travel(
 
     monkeypatch.setattr(asyncio, "sleep", immediate_sleep)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
-    monkeypatch.setattr(server.elevator_runtime, "advance_travel", stop_at_travel)
+    monkeypatch.setattr(server.item_runtime.elevator, "advance_travel", stop_at_travel)
 
-    await server.elevator_runtime.run_cycle(elevator.id)
+    await server.item_runtime.elevator.run_cycle(elevator.id)
 
     assert travel_started is True
     assert elevator.params["state"] == "moving"
@@ -584,11 +584,11 @@ async def test_editable_elevator_durations_drive_runtime_timing(
     monkeypatch.setattr(asyncio, "sleep", immediate_sleep)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server.elevator_runtime.run_cycle(elevator.id)
+    await server.item_runtime.elevator.run_cycle(elevator.id)
     assert sleeps[:2] == [7.5, ELEVATOR_DOOR_CLOSE_SOUND_SECONDS]
 
     sleeps.clear()
-    await server.elevator_runtime.advance_travel(elevator, 0, 0)
+    await server.item_runtime.elevator.advance_travel(elevator, 0, 0)
     assert sleeps == [1.25]
 
 
@@ -626,7 +626,7 @@ async def test_stopped_rider_waits_for_reopened_door_before_exiting(
     monkeypatch.setattr(server, "_send", fake_send)
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
-    await server.elevator_runtime.use(client, elevator)
+    await server.item_runtime.elevator.use(client, elevator)
 
     assert client.elevator_id == elevator.id
     assert elevator.params["state"] == "opening"
@@ -643,19 +643,19 @@ async def test_stopped_rider_waits_for_reopened_door_before_exiting(
         "/sounds/elevator_open.ogg",
     ]
 
-    await server.elevator_runtime.use(client, elevator)
+    await server.item_runtime.elevator.use(client, elevator)
     assert client.elevator_id == elevator.id
 
     elevator.params["state"] = "door_open"
     elevator.params["doorOpen"] = True
-    await server.elevator_runtime.use(client, elevator)
+    await server.item_runtime.elevator.use(client, elevator)
     assert client.elevator_id is None
     assert any(
         isinstance(packet, ItemElevatorStatusPacket) and packet.event == "exited"
         for packet in sent
     )
 
-    await server.elevator_runtime.cancel(elevator.id)
+    await server.item_runtime.elevator.cancel(elevator.id)
 
 
 @pytest.mark.asyncio
@@ -686,7 +686,7 @@ async def test_rider_cannot_exit_while_elevator_is_moving(
 
     monkeypatch.setattr(server, "_send", fake_send)
 
-    await server.elevator_runtime.use(client, elevator)
+    await server.item_runtime.elevator.use(client, elevator)
 
     assert client.elevator_id == elevator.id
     assert not any(
@@ -745,7 +745,7 @@ async def test_elevator_travel_height_progresses_between_acoustic_floors(
     monkeypatch.setattr(server, "_broadcast", fake_broadcast)
     monkeypatch.setattr(server, "_send", fake_send)
 
-    await server.elevator_runtime.advance_travel(elevator, origin_z, destination_z)
+    await server.item_runtime.elevator.advance_travel(elevator, origin_z, destination_z)
 
     heights = [
         cast(BroadcastPositionPacket, packet).z
@@ -790,7 +790,7 @@ def test_disconnecting_rider_returns_to_last_landing() -> None:
     elevator.params["state"] = "moving"
     server.item_service.add_item(elevator)
 
-    server.elevator_runtime.restore_rider_to_landing(client)
+    server.item_runtime.elevator.restore_rider_to_landing(client)
 
     assert (client.x, client.y, client.z) == (10, 10, 0)
     assert client.elevator_id is None
