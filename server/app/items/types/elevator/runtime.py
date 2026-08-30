@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
+from math import isfinite
 from typing import Literal
 
 from websockets.asyncio.server import ServerConnection
@@ -197,6 +198,7 @@ class ElevatorRuntime:
                     item.params["doorOpen"] = False
                     self._touch(item)
                     await self.callbacks.broadcast_item(item)
+                    await self.broadcast_direction_sound(item, target_z)
                     await self._broadcast_sound(
                         item, target_z, "/sounds/elevator_open.ogg"
                     )
@@ -210,10 +212,13 @@ class ElevatorRuntime:
                     if state == "arriving":
                         await self._move_occupants(item, current_z)
                     await self.callbacks.broadcast_item(item)
-                    await self.broadcast_direction_sound(item, current_z)
                     continue
                 if state == "door_open":
-                    await asyncio.sleep(ELEVATOR_DOOR_OPEN_SECONDS)
+                    await asyncio.sleep(
+                        self._duration_seconds(
+                            item, "doorOpenSeconds", ELEVATOR_DOOR_OPEN_SECONDS
+                        )
+                    )
                     current_z = int(item.params.get("currentZ", 0))
                     item.params["state"] = "closing"
                     item.params["doorOpen"] = False
@@ -253,21 +258,22 @@ class ElevatorRuntime:
     ) -> None:
         """Publish progressive rider heights over the elevator travel interval."""
 
+        travel_seconds = self._duration_seconds(
+            item, "travelSeconds", ELEVATOR_TRAVEL_SECONDS
+        )
         distance = destination_z - origin_z
         if distance == 0:
-            await asyncio.sleep(ELEVATOR_TRAVEL_SECONDS)
+            await asyncio.sleep(travel_seconds)
             return
         direction = 1 if distance > 0 else -1
-        update_count = max(
-            1, round(ELEVATOR_TRAVEL_SECONDS / ELEVATOR_TRAVEL_UPDATE_SECONDS)
-        )
+        update_count = max(1, round(travel_seconds / ELEVATOR_TRAVEL_UPDATE_SECONDS))
         last_z = origin_z
         if abs(distance) > 1:
             last_z = origin_z + direction
             await self._broadcast_travel_position(item, last_z)
 
         for update_index in range(1, update_count + 1):
-            await asyncio.sleep(ELEVATOR_TRAVEL_SECONDS / update_count)
+            await asyncio.sleep(travel_seconds / update_count)
             if update_index == update_count:
                 continue
             travel_z = round(origin_z + (distance * update_index / update_count))
@@ -298,6 +304,7 @@ class ElevatorRuntime:
         item.params["doorOpen"] = False
         self._touch(item)
         await self.callbacks.broadcast_item(item)
+        await self.broadcast_direction_sound(item, current_z)
         await self._broadcast_sound(item, current_z, "/sounds/elevator_open.ogg")
         self._restart_task(item.id)
 
@@ -446,3 +453,15 @@ class ElevatorRuntime:
         if isinstance(queued_z, int) and queued_z != current_z:
             return queued_z
         return None
+
+    @staticmethod
+    def _duration_seconds(item: WorldItem, key: str, default: float) -> float:
+        """Read one validated duration with a safe default for older items."""
+
+        try:
+            value = float(item.params.get(key, default))
+        except (TypeError, ValueError):
+            return default
+        if not isfinite(value):
+            return default
+        return max(0, min(300, value))

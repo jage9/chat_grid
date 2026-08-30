@@ -171,6 +171,10 @@ class ItemService:
                     ],
                 )
                 if item.type == "elevator":
+                    for timing_key in ("doorOpenSeconds", "travelSeconds"):
+                        item.params.setdefault(
+                            timing_key, item_def.default_params[timing_key]
+                        )
                     configured_floor_zs = item.params.get("floorZs", [0, 40])
                     floor_zs = {
                         int(floor_z)

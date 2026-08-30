@@ -234,6 +234,8 @@
   "departOnCloseZ": null,
   "state": "idle",
   "doorOpen": false,
+  "doorOpenSeconds": 5,
+  "travelSeconds": 5,
   "directional": false,
   "facing": 0,
   "emitRange": 15,
@@ -253,8 +255,9 @@
 - The shaft occupies its single anchor square on both configured floors.
 - Runtime `state` is one of `idle`, `opening`, `door_open`, `closing`, `moving`, or `arriving`; `doorOpen` becomes true only after the opening sound has finished.
 - The full standard emitter control set is editable. It emits from the shaft object's anchor on both configured floors and does not follow the car.
-- Door transitions play `/sounds/elevator_open.ogg` and `/sounds/elevator_close.ogg` spatially. Entry and exit are rejected during either transition, and travel begins only after the closing clip finishes.
-- Once the door is fully open, the landing plays `/sounds/elevator_up.ogg` or `/sounds/elevator_down.ogg` spatially to announce the elevator's next travel direction.
+- `doorOpenSeconds` and `travelSeconds` are editable numbers from `0..300`, with defaults of 5. The open dwell begins after opening audio finishes; floor travel begins after closing audio finishes.
+- Door transitions play `/sounds/elevator_open.ogg` and `/sounds/elevator_close.ogg` spatially. Entry and exit are rejected during either transition.
+- `/sounds/elevator_up.ogg` or `/sounds/elevator_down.ogg` begins with the opening clip to announce the next travel direction without adding another delay.
 - `/sounds/elevator_inside.ogg` loops from a randomized offset for passengers and is spatially audible to nearby users only through a fully open door.
 - Elevator runtime timers are not resumed after a server restart. A loaded elevator returns to a closed, idle state at its last completed floor.
 

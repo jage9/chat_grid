@@ -8,6 +8,8 @@ LABEL = "elevator"
 TOOLTIP = "A two-floor elevator with a shared shaft and timed doors."
 EDITABLE_PROPERTIES: tuple[str, ...] = (
     "title",
+    "doorOpenSeconds",
+    "travelSeconds",
     "directional",
     "facing",
     "emitRange",
@@ -36,6 +38,8 @@ DEFAULT_PARAMS: dict = {
     "departOnCloseZ": None,
     "state": "idle",
     "doorOpen": False,
+    "doorOpenSeconds": 5,
+    "travelSeconds": 5,
     "directional": False,
     "facing": 0,
     "emitRange": 15,
@@ -56,6 +60,8 @@ PARAM_KEYS: tuple[str, ...] = (
     "departOnCloseZ",
     "state",
     "doorOpen",
+    "doorOpenSeconds",
+    "travelSeconds",
     "directional",
     "facing",
     "emitRange",
@@ -109,6 +115,18 @@ PROPERTY_METADATA: dict[str, dict[str, object]] = {
         "valueType": "boolean",
         "label": "Door open",
         "tooltip": "Whether the elevator door is open.",
+    },
+    "doorOpenSeconds": {
+        "valueType": "number",
+        "label": "Door open seconds",
+        "tooltip": "Seconds the door remains fully open after its opening sound finishes.",
+        "range": {"min": 0, "max": 300, "step": 0.1},
+    },
+    "travelSeconds": {
+        "valueType": "number",
+        "label": "Travel seconds",
+        "tooltip": "Seconds the car takes to reach the other floor after its closing sound finishes.",
+        "range": {"min": 0, "max": 300, "step": 0.1},
     },
     "directional": {
         "valueType": "boolean",

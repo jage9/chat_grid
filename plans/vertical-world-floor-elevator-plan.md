@@ -56,7 +56,7 @@ Ordinary items are anchored to one floor. A carried item uses its carrier's curr
 * Before distance or pan calculations, require matching acoustic floors. A different floor always produces silence, regardless of hearing range.
 * LiveKit remains one room so the global user list and connection lifecycle stay simple. The client unsubscribes from other-floor audio publications, which saves voice bandwidth without disconnecting from the shared room.
 * Radio, emitted item audio, footsteps, teleport sounds, item-use sounds, clocks, and piano audio follow the same floor gate.
-* While the elevator is traveling, its interior is an isolated acoustic zone. Riders hear other riders in the car but do not hear either floor. On arrival, they join the destination floor's audio only after the door opens. The elevator will take 5 seconds to go to the next floor after the door closes.
+* While the elevator is traveling, its interior is an isolated acoustic zone. Riders hear other riders in the car but do not hear either floor. On arrival, they join the destination floor's audio only after the door opens. Floor travel defaults to five seconds and starts after the closing sound.
 
 ## Multi-Square Objects
 
@@ -87,8 +87,8 @@ Implemented two-floor behavior:
 1. Use the landing control to call the elevator.
 2. The car travels to that floor and opens its door.
 3. Use the control again while the door is open to enter the car.
-4. Opening and closing take the duration of their supplied sounds and cannot be traversed. Once fully open, the door remains open for five seconds from the most recent entry/arrival.
-5. With only two floors, entering selects the other floor automatically. The car travels after the closing sound finishes.
+4. Opening and closing take the duration of their supplied sounds and cannot be traversed. Once fully open, the door remains open for editable `doorOpenSeconds` (default five) from the most recent completed opening/entry.
+5. With only two floors, entering selects the other floor automatically. After the closing sound finishes, the car travels for editable `travelSeconds` (default five).
 6. At the destination the door opening sound finishes before riders join the landing; use then exits through the fully open door.
 7. A closed door can be reopened when the car is already at that landing.
 
@@ -128,7 +128,7 @@ The automatic other-floor destination is the simplest accessible behavior for tw
 * Add call, enter, travel, arrive, door-open, exit, and timeout actions.
 * Move riders and carried items authoritatively with the car.
 * Broadcast explicit elevator state packets so sounds and UI do not infer state from messages.
-* Play a spatial next-direction cue whenever the door opens and send the rider a destination announcement on arrival.
+* Start the spatial next-direction cue with the opening sound and send the rider a destination announcement after opening completes on arrival.
 * Play the supplied opening and closing sounds as timed, non-traversable server states, and loop the supplied interior ambience for passengers and through an open landing door.
 
 ## Verification Coverage
@@ -143,7 +143,7 @@ The automatic other-floor destination is the simplest accessible behavior for tw
 * Multiple elevator objects operate independently.
 * Calls queue correctly while moving.
 * The car cannot be entered from a floor where it is absent.
-* Door timing resets appropriately and closes after five seconds.
+* Door timing resets appropriately and closes after the configured fully open dwell.
 * Riders and carried items arrive together at the destination.
 
 ## Current Delivery Status
@@ -152,16 +152,16 @@ Shipped on `main`:
 
 * Floor/elevator implementation: commit `f4ec622`.
 * Elevator changed to one square: commit `3c1dc53`.
-* Current versions: client `R379`, server `S374`.
+* Current versions: client `R380`, server `S375`.
 * Ground floor is `z=0`; second floor is `z=40`.
 * Multiple independent elevator items are allowed. Each appears at one anchor coordinate on both floors, while its car remains at one completed landing or an intermediate travel height.
-* Opening and closing durations match the supplied sounds and block entry/exit. The fully open dwell is five seconds, followed by closing, then five seconds of travel.
+* Opening and closing durations match the supplied sounds and block entry/exit. Editable open-dwell and travel properties each default to five seconds and start only after the respective opening/closing sound finishes.
 * Server restart clears unfinished elevator timers and restores a closed, idle car at its last completed landing.
 * A mid-trip disconnect restores the rider and carried item to the last completed landing rather than persisting the intermediate height.
-* Rider coordinates progress through intermediate `z` heights during the five-second trip instead of remaining at one midpoint.
+* Rider coordinates progress through intermediate `z` heights during the configured trip instead of remaining at one midpoint.
 * Elevators expose the standard emitted-sound controls, including direction and facing. The shaft emits independently from its anchor on both floors and is not cabin audio; an inside rider hears it normally while the door is open, but not while the door is closed.
 * Secondary use reports the car's landing and door state, or its destination and direction while traveling.
-* Arrival finishes opening the destination door before riders join that floor and hear the announcement. The fully open landing then plays the spatial cue for the next trip's direction.
+* The next-direction beep begins with opening. Arrival finishes opening the destination door before riders join that floor and hear the announcement.
 * The built-in interior ambience loops from a randomized offset for passengers and is audible to nearby landing users only through a fully open door.
 * A rider remains inside if the arrival door closes before they exit. One use starts reopening a stopped car; a second use after opening finishes exits the rider.
 

@@ -65,8 +65,8 @@ def test_same_xy_on_another_floor_is_not_the_same_item_square() -> None:
     assert not server._item_is_on_client_square(item, client)
 
 
-def test_elevator_emitter_is_editable_but_runtime_state_is_not() -> None:
-    """Elevator edits should accept emitter controls without exposing state mutation."""
+def test_elevator_timing_and_emitter_are_editable_but_runtime_state_is_not() -> None:
+    """Elevator edits should accept timing/audio without exposing runtime state."""
 
     server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
     client = ClientConnection(
@@ -80,6 +80,8 @@ def test_elevator_emitter_is_editable_but_runtime_state_is_not() -> None:
             **elevator.params,
             "directional": True,
             "facing": 123.4,
+            "doorOpenSeconds": 8.25,
+            "travelSeconds": 12.34,
             "emitRange": 12,
             "emitVolume": 65,
             "emitSoundSpeed": 40.5,
@@ -98,6 +100,8 @@ def test_elevator_emitter_is_editable_but_runtime_state_is_not() -> None:
         for key in (
             "directional",
             "facing",
+            "doorOpenSeconds",
+            "travelSeconds",
             "emitRange",
             "emitVolume",
             "emitSoundSpeed",
@@ -111,6 +115,8 @@ def test_elevator_emitter_is_editable_but_runtime_state_is_not() -> None:
     } == {
         "directional": True,
         "facing": 123,
+        "doorOpenSeconds": 8.2,
+        "travelSeconds": 12.3,
         "emitRange": 12,
         "emitVolume": 65,
         "emitSoundSpeed": 40.5,
@@ -122,6 +128,27 @@ def test_elevator_emitter_is_editable_but_runtime_state_is_not() -> None:
         "emitSound": "sounds/elevator_motor.ogg",
     }
     assert params["state"] == "idle"
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("doorOpenSeconds", -0.1),
+        ("doorOpenSeconds", 300.1),
+        ("travelSeconds", "not a number"),
+    ],
+)
+def test_elevator_rejects_invalid_editable_durations(key: str, value: object) -> None:
+    """Editable elevator timing must remain finite and within its UI range."""
+
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    client = ClientConnection(
+        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=0
+    )
+    elevator = server.item_service.default_item(client, "elevator")
+
+    with pytest.raises(ValueError):
+        validate_update(elevator, {**elevator.params, key: value})
 
 
 @pytest.mark.parametrize(
@@ -193,10 +220,13 @@ async def test_elevator_opens_then_second_use_enters(
     assert elevator.params["state"] == "opening"
     assert elevator.params["doorOpen"] is False
     assert client.elevator_id is None
-    door_sound = next(
-        packet for packet in broadcast if isinstance(packet, ItemUseSoundPacket)
-    )
-    assert door_sound.sound == "/sounds/elevator_open.ogg"
+    door_sounds = [
+        packet.sound for packet in broadcast if isinstance(packet, ItemUseSoundPacket)
+    ]
+    assert door_sounds == [
+        "/sounds/elevator_up.ogg",
+        "/sounds/elevator_open.ogg",
+    ]
 
     await server.elevator_runtime.use(client, elevator)
     assert client.elevator_id is None
@@ -406,7 +436,10 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
     )
     assert arrival.message == "Elevator arrives on Second floor. The door opens."
     rider_open_sound = next(
-        packet for packet in sent if isinstance(packet, ItemUseSoundPacket)
+        packet
+        for packet in sent
+        if isinstance(packet, ItemUseSoundPacket)
+        and packet.sound == "/sounds/elevator_open.ogg"
     )
     assert rider_open_sound.sound == "/sounds/elevator_open.ogg"
     assert rider_open_sound.z not in {0, 40}
@@ -414,8 +447,8 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
         packet for packet in broadcast if isinstance(packet, ItemUseSoundPacket)
     ]
     assert [packet.sound for packet in elevator_sounds] == [
-        "/sounds/elevator_open.ogg",
         "/sounds/elevator_down.ogg",
+        "/sounds/elevator_open.ogg",
         "/sounds/elevator_close.ogg",
     ]
     assert (ELEVATOR_DOOR_OPEN_SOUND_SECONDS, "arriving") in sleeps
@@ -423,8 +456,8 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
     assert (ELEVATOR_DOOR_CLOSE_SOUND_SECONDS, "closing") in sleeps
     close_index = sleeps.index((ELEVATOR_DOOR_CLOSE_SOUND_SECONDS, "closing"))
     assert all(state == "moving" for _, state in sleeps[close_index + 1 :])
-    arrival_sound = elevator_sounds[0]
-    assert (arrival_sound.x, arrival_sound.y, arrival_sound.z) == (10, 10, 40)
+    opening_sound = elevator_sounds[1]
+    assert (opening_sound.x, opening_sound.y, opening_sound.z) == (10, 10, 40)
 
 
 @pytest.mark.asyncio
@@ -499,6 +532,45 @@ async def test_elevator_waits_for_closing_sound_before_travel(
 
 
 @pytest.mark.asyncio
+async def test_editable_elevator_durations_drive_runtime_timing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Door dwell and floor travel should use each elevator's editable values."""
+
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    client = ClientConnection(
+        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=0
+    )
+    elevator = server.item_service.default_item(client, "elevator")
+    elevator.params.update(
+        {
+            "state": "door_open",
+            "doorOpen": True,
+            "doorOpenSeconds": 7.5,
+            "travelSeconds": 1.25,
+        }
+    )
+    server.item_service.add_item(elevator)
+    sleeps: list[float] = []
+
+    async def immediate_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    async def fake_broadcast(_packet: object, exclude=None) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", immediate_sleep)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+
+    await server.elevator_runtime.run_cycle(elevator.id)
+    assert sleeps[:2] == [7.5, ELEVATOR_DOOR_CLOSE_SOUND_SECONDS]
+
+    sleeps.clear()
+    await server.elevator_runtime.advance_travel(elevator, 0, 0)
+    assert sleeps == [1.25]
+
+
+@pytest.mark.asyncio
 async def test_stopped_rider_waits_for_reopened_door_before_exiting(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -541,10 +613,13 @@ async def test_stopped_rider_waits_for_reopened_door_before_exiting(
         isinstance(packet, ItemElevatorStatusPacket) and packet.event == "exited"
         for packet in sent
     )
-    door_sound = next(
-        packet for packet in broadcast if isinstance(packet, ItemUseSoundPacket)
-    )
-    assert door_sound.sound == "/sounds/elevator_open.ogg"
+    door_sounds = [
+        packet.sound for packet in broadcast if isinstance(packet, ItemUseSoundPacket)
+    ]
+    assert door_sounds == [
+        "/sounds/elevator_down.ogg",
+        "/sounds/elevator_open.ogg",
+    ]
 
     await server.elevator_runtime.use(client, elevator)
     assert client.elevator_id == elevator.id
@@ -740,6 +815,8 @@ def test_persisted_elevator_resets_to_resting_state(tmp_path: Path) -> None:
     assert elevator.params["departOnCloseZ"] is None
     assert elevator.params["state"] == "idle"
     assert elevator.params["doorOpen"] is False
+    assert elevator.params["doorOpenSeconds"] == 5
+    assert elevator.params["travelSeconds"] == 5
     assert elevator.z == 0
 
 

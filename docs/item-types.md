@@ -219,9 +219,9 @@ This is behavior-focused documentation for item types and their defaults.
 - Title: `Elevator`
 - Floors: ground at `z=0`, second at `z=40`
 - Footprint: one square, present at the same coordinate on both landings
-- Door-open time: 5 seconds
+- Fully open dwell: editable `doorOpenSeconds`, default 5 seconds
 - Door transition sounds: `/sounds/elevator_open.ogg` (about 2.56 seconds) and `/sounds/elevator_close.ogg` (about 3.77 seconds)
-- Travel time: 5 seconds
+- Floor travel time: editable `travelSeconds`, default 5 seconds
 - Built-in interior ambience: `/sounds/elevator_inside.ogg`
 - Emitter defaults: nondirectional at facing `0`, range `15`, volume `100`, normal speed/tempo, no delays, effect off, and empty sound
 - Door-open direction cue: `/sounds/elevator_up.ogg` for the next upward trip or `/sounds/elevator_down.ogg` for the next downward trip
@@ -229,9 +229,9 @@ This is behavior-focused documentation for item types and their defaults.
 ### Use
 - Use once to call the car or open its door when it is already present.
 - Opening and closing are non-traversable phases. Use again only after the opening sound finishes to enter. With two floors, entering selects the other floor.
-- The fully open door closes five seconds after the latest open or entry. The car starts its five-second trip only after the closing sound finishes.
-- On arrival, the opening sound plays first. Once it finishes, riders join the destination floor, receive a floor-and-door announcement, the interior ambience becomes audible outside nearby, and the landing plays the next-direction cue.
-- Use once after arrival to exit through the fully open door. If the five-second timer closes it first, one use starts reopening it; use again after opening finishes to exit.
+- The fully open door closes after the configured `doorOpenSeconds` from the latest completed opening or entry. This dwell starts after the opening sound. The car starts its configured `travelSeconds` trip only after the closing sound finishes.
+- On arrival, the next-direction beep and opening sound begin together. Once opening finishes, riders join the destination floor, receive a floor-and-door announcement, and the interior ambience becomes audible outside nearby.
+- Use once after arrival to exit through the fully open door. If the configured dwell expires first, one use starts reopening it; use again after opening finishes to exit.
 - Secondary use reports the current landing and door state, or the destination and travel direction while moving.
 - Away-floor calls made while the car is moving or a door is transitioning are queued.
 
@@ -244,6 +244,7 @@ This is behavior-focused documentation for item types and their defaults.
 - A configured emitted sound stays on the elevator shaft object and emits from its anchor on both floors. A rider can hear it normally while the door is open; it is suppressed only while that rider is inside with the door closed.
 
 ### Validation
+- `doorOpenSeconds`, `travelSeconds`: number `0..300`, rounded to 0.1 seconds
 - `directional`: boolean; `facing`: degrees `0..360`
 - `emitRange`: integer `1..20`
 - `emitVolume`: integer `0..100`
