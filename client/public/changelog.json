@@ -3,6 +3,7 @@
     {
       "date": "August 29, 2026",
       "items": [
+        "Added a second floor. To make this work, added an Elevator object. The Elevator appears on both floors. Press Enter to use it and Shift+Enter to hear its status. You can only teleport to users or items on your floor, and you can only see items from your floor. More to come in this area.",
         "First pass at touchscreen controls."
       ]
     },
