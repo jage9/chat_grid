@@ -39,7 +39,9 @@ export function shouldPlayElevatorAmbience(
 ): boolean {
   if (item.type !== 'elevator') return false;
   if (occupiedElevatorId === item.id) return true;
-  if (item.params.doorOpen !== true || Number(item.params.currentZ) !== listenerPosition.z) return false;
+  const state = String(item.params.state ?? 'idle');
+  if (!['opening', 'arriving', 'door_open', 'closing'].includes(state)
+    || Number(item.params.currentZ) !== listenerPosition.z) return false;
   return Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y)
     <= Math.max(1, range || HEARING_RADIUS) + SUBSCRIBE_PRELOAD_SQUARES;
 }
@@ -54,6 +56,7 @@ export class ElevatorAudioRuntime {
     private readonly resolveSoundUrl: (soundPath: string) => string,
     private readonly getSpatialConfig: (item: WorldItem) => ElevatorSpatialConfig,
     private readonly getOccupiedElevatorId: () => string | null,
+    private readonly getDoorTransmission: (item: WorldItem) => number,
   ) {}
 
   cleanup(itemId: string): void {
@@ -189,7 +192,7 @@ export class ElevatorAudioRuntime {
       const spatialConfig = this.getSpatialConfig(item);
       const mix = inside
         ? resolveSpatialMix({ dx: 0, dy: 0, range: 1, nearFieldDistance: 1, nearFieldCenterPan: true })
-        : item.params.doorOpen === true && sameLanding
+        : sameLanding
           ? resolveSpatialMix({
               dx: item.x - playerPosition.x,
               dy: item.y - playerPosition.y,
@@ -198,11 +201,14 @@ export class ElevatorAudioRuntime {
               nearFieldCenterPan: true,
             })
           : null;
+      const transmittedMix = mix && !inside
+        ? { ...mix, gain: mix.gain * this.getDoorTransmission(item) }
+        : mix;
       applySpatialMixToNodes({
         audioCtx,
         gainNode: output.gain,
         pannerNode: output.panner,
-        mix,
+        mix: transmittedMix,
         outputMode: this.audio.getOutputMode(),
         transition: 'target',
       });

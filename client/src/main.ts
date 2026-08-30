@@ -9,6 +9,7 @@ import {
 import { getProxyUrlForMedia, shouldProxyExternalMediaUrl } from './audio/mediaUrl';
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
 import { ElevatorAudioRuntime } from './items/types/elevator/runtime';
+import { AcousticZoneRuntime, worldItemAcousticZoneId } from './audio/acousticZones';
 import { ClockAnnouncer } from './audio/clockAnnouncer';
 import { normalizeDegrees } from './audio/spatial';
 import {
@@ -319,18 +320,42 @@ let activeGridName = DEFAULT_GRID_NAME;
 let activeWelcomeMessage = DEFAULT_WELCOME_MESSAGE;
 const messageBuffer: string[] = [];
 let messageCursor = -1;
-const radioRuntime = new RadioStationRuntime(audio, getItemSpatialConfig);
+const acousticZoneRuntime = new AcousticZoneRuntime();
+const radioRuntime = new RadioStationRuntime(
+  audio,
+  getItemSpatialConfig,
+  (item) => acousticZoneRuntime.transmission(
+    state.player.acousticZoneId,
+    worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
+    state.items,
+  ),
+  (item) => acousticZoneRuntime.couldConnect(
+    state.player.acousticZoneId,
+    worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
+    state.items,
+  ),
+);
 const itemEmitRuntime = new ItemEmitRuntime(
   audio,
   resolveIncomingSoundUrl,
   getItemSpatialConfig,
-  (item) => state.elevatorItemId !== item.id || item.params.doorOpen === true,
+  (item) => acousticZoneRuntime.transmission(
+    state.player.acousticZoneId,
+    worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
+    state.items,
+  ),
+  (item) => acousticZoneRuntime.couldConnect(
+    state.player.acousticZoneId,
+    worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
+    state.items,
+  ),
 );
 const elevatorAudioRuntime = new ElevatorAudioRuntime(
   audio,
   resolveIncomingSoundUrl,
   getItemSpatialConfig,
   () => state.elevatorItemId,
+  (item) => acousticZoneRuntime.doorTransmission(item),
 );
 const clockAnnouncer = new ClockAnnouncer(audio, () => ({ x: state.player.x, y: state.player.y, z: state.player.z }));
 let replaceTextOnNextType = false;
@@ -386,6 +411,16 @@ const signalingUrl = `${signalingProtocol}://${window.location.host}${withBase('
 const signaling = new SignalingClient(signalingUrl, handleSignalingStatus);
 
 const peerManager = new PeerManager(audio, updateStatus);
+
+/** Synchronizes voice subscriptions with the server-authoritative acoustic zones. */
+function refreshAcousticModel(): void {
+  acousticZoneRuntime.sync(state.items.values());
+  peerManager.setSubscriptionResolver((peer) => acousticZoneRuntime.couldConnect(
+    state.player.acousticZoneId,
+    peer.acousticZoneId,
+    state.items,
+  ));
+}
 const mediaSession = new MediaSession({
   state,
   audio,
@@ -1287,6 +1322,16 @@ function gameLoop(): void {
     void refreshAudioSubscriptions();
   }
   const listenerPosition = { x: state.player.x, y: state.player.y, z: state.player.z };
+  acousticZoneRuntime.sync(state.items.values());
+  const acousticNow = performance.now();
+  for (const peer of peerManager.getPeers()) {
+    peerManager.setPeerAcousticGain(peer.id, acousticZoneRuntime.transmission(
+      state.player.acousticZoneId,
+      peer.acousticZoneId,
+      state.items,
+      acousticNow,
+    ));
+  }
   audio.updateSpatialAudio(peerManager.getPeers(), listenerPosition);
   audio.updateSpatialSamples(listenerPosition);
   radioRuntime.updateSpatialAudio(state.items, listenerPosition);
@@ -1621,6 +1666,7 @@ const onAppMessage = createOnMessageHandler({
   signalingSend: (message) => signaling.send(message as OutgoingMessage),
   peerManager,
   refreshAudioSubscriptions,
+  refreshAcousticModel,
   cleanupItemAudio: (itemId) => {
     radioRuntime.cleanup(itemId);
     itemEmitRuntime.cleanup(itemId);

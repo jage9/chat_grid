@@ -39,6 +39,7 @@ export const welcomeMessageSchema = z.object({
     x: z.number().int(),
     y: z.number().int(),
     z: z.number().int(),
+    acousticZoneId: z.string().min(1),
   }),
   users: z.array(
     z.object({
@@ -48,6 +49,7 @@ export const welcomeMessageSchema = z.object({
       x: z.number().int(),
       y: z.number().int(),
       z: z.number().int(),
+      acousticZoneId: z.string().min(1),
     }),
   ),
   items: z.array(itemSchema).optional(),
@@ -200,6 +202,7 @@ export const updatePositionSchema = z.object({
   x: z.number().int(),
   y: z.number().int(),
   z: z.number().int(),
+  acousticZoneId: z.string().min(1),
 });
 
 export const teleportCompleteSchema = z.object({
@@ -458,4 +461,5 @@ export type RemoteUser = {
   x: number;
   y: number;
   z: number;
+  acousticZoneId: string;
 };

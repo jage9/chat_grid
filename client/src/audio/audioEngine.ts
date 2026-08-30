@@ -14,6 +14,7 @@ export type SpatialPeerRuntime = {
   x: number;
   y: number;
   z: number;
+  acousticGain?: number;
   listenGain?: number;
   gain?: GainNode;
   panner?: StereoPannerNode;
@@ -303,7 +304,10 @@ export class AudioEngine {
 
     for (const peer of peers) {
       if (!peer.gain) continue;
-      const mix = peer.z === playerPosition.z ? resolveSpatialMix({
+      const acousticGain = Number.isFinite(peer.acousticGain)
+        ? Math.max(0, Math.min(1, peer.acousticGain as number))
+        : peer.z === playerPosition.z ? 1 : 0;
+      const mix = acousticGain > 0 ? resolveSpatialMix({
         dx: peer.x - playerPosition.x,
         dy: peer.y - playerPosition.y,
         range: HEARING_RADIUS,
@@ -311,7 +315,7 @@ export class AudioEngine {
         nearFieldGain: 1,
       }) : null;
       const listenGain = Number.isFinite(peer.listenGain) ? Math.max(0, peer.listenGain as number) : 1;
-      const scaledMix = mix ? { ...mix, gain: mix.gain * listenGain } : null;
+      const scaledMix = mix ? { ...mix, gain: mix.gain * listenGain * acousticGain } : null;
       applySpatialMixToNodes({
         audioCtx: this.audioCtx,
         gainNode: peer.gain,

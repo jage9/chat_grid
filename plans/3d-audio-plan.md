@@ -49,6 +49,8 @@ Ordinary floors remain disconnected by default. Cross-zone sound exists only thr
 
 ## Delivery Phases
 
+Current foundation: floor and elevator-cabin acoustic-zone ids are server authoritative. Elevator doors provide a shared client-side gain ramp for cabin ambience, continuous item emitters, and voice. The broader 3D source and wall work below remains planned.
+
 1. Extract one reusable dynamic spatial-source runtime supporting `x/y/z`, attachment, interpolation, and interior listeners.
 2. Use elevator travel as the first integration: publish car height even when empty, keep cabin audio full for passengers, and fade an exterior travel source away from and toward landings.
 3. Add stable acoustic-zone ids before stairs, jumping, or flying. Model stairwells as explicit connections between floor zones, not as globally open floors.

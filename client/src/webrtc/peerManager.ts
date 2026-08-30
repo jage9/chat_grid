@@ -12,6 +12,7 @@ import type { RemoteUser } from '../network/protocol';
 
 export type PeerRuntime = SpatialPeerRuntime & {
   id: string;
+  acousticZoneId: string;
   remoteStream?: MediaStream;
 };
 
@@ -26,6 +27,7 @@ export class PeerManager {
   private localTrack: LocalAudioTrack | null = null;
   private outboundTrack: MediaStreamTrack | null = null;
   private listenerZ = 0;
+  private subscriptionResolver: (peer: PeerRuntime) => boolean = (peer) => peer.z === this.listenerZ;
 
   constructor(
     private readonly audio: AudioEngine,
@@ -54,7 +56,7 @@ export class PeerManager {
       (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
         if (track.kind !== Track.Kind.Audio || !track.mediaStreamTrack) return;
         const peer = this.peers.get(participant.identity);
-        if (peer && peer.z !== this.listenerZ) {
+        if (peer && !this.shouldSubscribe(peer)) {
           publication.setSubscribed(false);
           return;
         }
@@ -66,7 +68,7 @@ export class PeerManager {
       (publication: RemoteTrackPublication, participant: RemoteParticipant) => {
         if (publication.kind !== Track.Kind.Audio) return;
         const peer = this.peers.get(participant.identity);
-        publication.setSubscribed(Boolean(peer && peer.z === this.listenerZ));
+        publication.setSubscribed(Boolean(peer && this.shouldSubscribe(peer)));
       },
     );
     room.on(
@@ -98,13 +100,15 @@ export class PeerManager {
       x: userData.x ?? 20,
       y: userData.y ?? 20,
       z: userData.z ?? 0,
+      acousticZoneId: userData.acousticZoneId ?? `floor:${userData.z ?? 0}`,
+      acousticGain: 0,
       listenGain: 1,
     };
     this.peers.set(targetId, peer);
     const pending = this.pendingRemoteStreams.get(targetId);
     if (pending) {
       this.pendingRemoteStreams.delete(targetId);
-      if (peer.z === this.listenerZ) {
+      if (this.shouldSubscribe(peer)) {
         this.attachRemoteStream(peer, pending);
       }
     }
@@ -136,12 +140,13 @@ export class PeerManager {
     this.outboundTrack = null;
   }
 
-  setPeerPosition(id: string, x: number, y: number, z: number): void {
+  setPeerPosition(id: string, x: number, y: number, z: number, acousticZoneId: string): void {
     const peer = this.peers.get(id);
     if (peer) {
       peer.x = x;
       peer.y = y;
       peer.z = z;
+      peer.acousticZoneId = acousticZoneId;
     }
     this.syncParticipantFloorSubscription(id);
   }
@@ -151,6 +156,17 @@ export class PeerManager {
     if (this.listenerZ === z) return;
     this.listenerZ = z;
     this.syncFloorSubscriptions();
+  }
+
+  /** Apply the current world acoustic connectivity rule to LiveKit tracks. */
+  setSubscriptionResolver(resolver: (peer: PeerRuntime) => boolean): void {
+    this.subscriptionResolver = resolver;
+    this.syncFloorSubscriptions();
+  }
+
+  setPeerAcousticGain(id: string, gain: number): void {
+    const peer = this.peers.get(id);
+    if (peer) peer.acousticGain = gain;
   }
 
   setPeerNickname(id: string, nickname: string): void {
@@ -199,7 +215,7 @@ export class PeerManager {
 
   private setRemoteStream(participantId: string, stream: MediaStream): void {
     const peer = this.peers.get(participantId);
-    if (peer && peer.z !== this.listenerZ) return;
+    if (peer && !this.shouldSubscribe(peer)) return;
     if (!peer) {
       this.pendingRemoteStreams.set(participantId, stream);
       return;
@@ -233,12 +249,16 @@ export class PeerManager {
     const peer = this.peers.get(participantId);
     const participant = this.room?.remoteParticipants.get(participantId);
     if (!peer || !participant) return;
-    const subscribed = peer.z === this.listenerZ;
+    const subscribed = this.shouldSubscribe(peer);
     for (const publication of participant.audioTrackPublications.values()) {
       publication.setSubscribed(subscribed);
     }
     if (!subscribed) {
       this.clearRemoteStream(participantId);
     }
+  }
+
+  private shouldSubscribe(peer: PeerRuntime): boolean {
+    return this.subscriptionResolver(peer);
   }
 }

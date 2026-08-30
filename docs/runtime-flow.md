@@ -98,12 +98,14 @@ Core incoming message effects:
 - Normal movement and teleport packets must keep the server-owned `z`. Only the elevator changes floors.
 - The client renders only the current floor. Item lists and interactions are current-floor only; the user list remains global and names each floor.
 - Cross-floor user teleport is blocked in the client, and the server rejects any packet that attempts to change `z` directly.
-- Positional voice, media, item, piano, clock, footstep, teleport, and use audio is gated by `z`.
+- Presence snapshots and position updates include a server-authoritative `acousticZoneId`. A user belongs to a floor zone while outside and to an elevator-cabin zone after boarding, including during travel.
+- Floors remain acoustically isolated. LiveKit subscriptions use coarse zone connectivity, while local gain continuously mixes voice across a connected elevator doorway.
 - Each elevator is one independent single-square shaft object at the same coordinate on both landings. Calls, doors, queueing, travel, rider movement, and carried-item movement are server-owned.
 - Opening and closing are explicit server-owned, non-traversable states whose durations match their sound assets. After opening finishes, the fully open dwell uses the elevator's editable `doorOpenSeconds`; after closing finishes, floor travel uses its editable `travelSeconds`. Both default to five seconds. During travel, riders are broadcast at progressively changing intermediate heights and belong to neither floor.
-- The elevator object's own `z` remains canonical while rider and car travel heights change separately. Its optional emitter uses the shaft's multi-floor occupancy and emits independently at both landings; it is suppressed for an inside rider only while the door is closed.
+- The elevator object's own `z` remains canonical while rider and car travel heights change separately.
 - Arrival starts the next-direction cue and opening sound together while riders remain acoustically inside. When opening finishes, the server marks the door open, moves riders onto the destination floor, and sends the arrival announcement. A rider who remains after closing must reopen the door, wait for opening to finish, and use again to exit.
-- The client-owned elevator audio runtime loops the built-in interior ambience from a randomized file offset. It follows an occupant through all car states and is exposed spatially to nearby landing users only while the door is fully open.
+- The client-owned elevator audio runtime loops the built-in interior ambience from a randomized file offset. Passengers hear it at full cabin level. Nearby landing users hear it fade in during opening and fade out during closing.
+- Continuous floor item emitters, radios, and voices crossing between a cabin and its current landing use that same door-transmission ramp. Continuous sources remain alive through the ramp instead of restarting at each door state.
 - On startup, any incomplete persisted elevator timer is cleared and the car becomes closed and idle at its last completed landing.
 - A process restart also drops items whose connection-scoped carrier no longer exists; a carried item caught at an intermediate travel height returns to the ground floor.
 
@@ -123,3 +125,4 @@ On disconnect:
 - `RadioStationRuntime`: shared stream sources + per-item output/effects/spatialization.
 - `ItemEmitRuntime`: per-item looping emit source + spatialization.
 - `AudioEngine`: shared audio context, samples, effects, voice graph.
+- `AcousticZoneRuntime`: shared zone connectivity and opening/closing transmission gain.

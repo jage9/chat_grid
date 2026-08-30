@@ -1,4 +1,4 @@
-import { HEARING_RADIUS, isItemOnFloor, type WorldItem } from '../state/gameState';
+import { HEARING_RADIUS, type WorldItem } from '../state/gameState';
 import { getItemTypeGlobalProperties } from '../items/itemRegistry';
 import { AudioEngine } from './audioEngine';
 import { connectEffectChain, disconnectEffectRuntime, type EffectId, type EffectRuntime } from './effects';
@@ -105,6 +105,8 @@ export class ItemEmitRuntime {
     private readonly audio: AudioEngine,
     private readonly resolveSoundUrl: (soundPath: string) => string,
     private readonly getSpatialConfig: (item: WorldItem) => EmitSpatialConfig,
+    private readonly getAcousticGain: (item: WorldItem) => number = () => 1,
+    private readonly isAcousticallyReachable: (item: WorldItem) => boolean = () => true,
     private readonly isPlaybackAllowed: (item: WorldItem) => boolean = () => true,
   ) {}
 
@@ -410,7 +412,8 @@ export class ItemEmitRuntime {
         output.element.playbackRate = nextPlaybackRate;
       }
       const spatialConfig = this.getSpatialConfig(item);
-      const mix = isItemOnFloor(item, playerPosition.z) ? resolveSpatialMix({
+      const acousticGain = Math.max(0, Math.min(1, this.getAcousticGain(item)));
+      const mix = acousticGain > 0 ? resolveSpatialMix({
         dx: item.x - playerPosition.x,
         dy: item.y - playerPosition.y,
         range: Math.max(1, spatialConfig.range || HEARING_RADIUS),
@@ -426,7 +429,7 @@ export class ItemEmitRuntime {
         },
       }) : null;
       const emitVolume = volumePercentToGain(item.params.emitVolume, 100);
-      const scaledMix = mix ? { ...mix, gain: mix.gain * emitVolume } : null;
+      const scaledMix = mix ? { ...mix, gain: mix.gain * emitVolume * acousticGain } : null;
       applySpatialMixToNodes({
         audioCtx,
         gainNode: output.gain,
@@ -445,12 +448,12 @@ export class ItemEmitRuntime {
     currentlyActive: boolean,
   ): boolean {
     if (listenerPositions.length === 0) return false;
+    if (!this.isAcousticallyReachable(item)) return false;
     const spatialConfig = this.getSpatialConfig(item);
     const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
     const threshold = baseRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);
     return listenerPositions.some((listenerPosition) =>
-      isItemOnFloor(item, listenerPosition.z)
-      && Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold,
+      Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold,
     );
   }
 

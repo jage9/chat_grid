@@ -61,6 +61,7 @@ export type Player = {
   x: number;
   y: number;
   z: number;
+  acousticZoneId: string;
   lastMoveTime: number;
 };
 
@@ -71,6 +72,7 @@ export type PeerState = {
   x: number;
   y: number;
   z: number;
+  acousticZoneId: string;
 };
 
 export type GameState = {
@@ -133,6 +135,7 @@ export function createInitialState(): GameState {
       x: 20,
       y: 20,
       z: 0,
+      acousticZoneId: 'floor:0',
       lastMoveTime: 0,
     },
     peers: new Map(),

@@ -256,6 +256,21 @@ async def test_elevator_opens_then_second_use_enters(
         isinstance(packet, ItemElevatorStatusPacket) and packet.event == "entered"
         for packet in sent
     )
+    presence = next(
+        packet
+        for packet in reversed(broadcast)
+        if isinstance(packet, BroadcastPositionPacket)
+    )
+    assert presence.acousticZoneId == f"elevator:{elevator.id}"
+
+    await server.elevator_runtime.use(client, elevator)
+    assert client.elevator_id is None
+    exit_presence = next(
+        packet
+        for packet in reversed(broadcast)
+        if isinstance(packet, BroadcastPositionPacket)
+    )
+    assert exit_presence.acousticZoneId == "floor:0"
 
     await server.elevator_runtime.cancel(elevator.id)
 

@@ -220,6 +220,7 @@ class RemoteUser(BaseModel):
     x: int
     y: int
     z: int
+    acousticZoneId: str
 
 
 class WelcomePacket(BasePacket):
@@ -276,6 +277,7 @@ class BroadcastPositionPacket(BasePacket):
     x: int
     y: int
     z: int
+    acousticZoneId: str
 
 
 class BroadcastTeleportCompletePacket(BasePacket):

@@ -30,6 +30,7 @@ from websockets.http11 import Request as HttpRequest, Response as HttpResponse
 from websockets.typing import Origin
 
 from .auth_service import AuthError, AuthService
+from .acoustic_zones import client_acoustic_zone_id, client_position_packet
 from .client import ClientConnection
 from .config import load_config
 from .item_catalog import (
@@ -73,7 +74,6 @@ from .models import (
     AdminUsersListResultPacket,
     BroadcastChatMessagePacket,
     BroadcastNicknamePacket,
-    BroadcastPositionPacket,
     BroadcastTeleportCompletePacket,
     ChatMessagePacket,
     ClientPacket,
@@ -2067,6 +2067,7 @@ class SignalingServer:
                 x=other.x,
                 y=other.y,
                 z=other.z,
+                acousticZoneId=client_acoustic_zone_id(other),
             )
             for ws, other in self.clients.items()
             if ws is not client.websocket
@@ -2081,6 +2082,7 @@ class SignalingServer:
                 x=client.x,
                 y=client.y,
                 z=client.z,
+                acousticZoneId=client_acoustic_zone_id(client),
             ),
             users=users,
             items=[
@@ -2903,13 +2905,7 @@ class SignalingServer:
             if client.elevator_id is not None:
                 await self._send(
                     client.websocket,
-                    BroadcastPositionPacket(
-                        type="update_position",
-                        id=client.id,
-                        x=client.x,
-                        y=client.y,
-                        z=client.z,
-                    ),
+                    client_position_packet(client),
                 )
                 return
             if not self._is_in_bounds(packet.x, packet.y) or packet.z != client.z:
@@ -2922,13 +2918,7 @@ class SignalingServer:
                 )
                 await self._send(
                     client.websocket,
-                    BroadcastPositionPacket(
-                        type="update_position",
-                        id=client.id,
-                        x=client.x,
-                        y=client.y,
-                        z=client.z,
-                    ),
+                    client_position_packet(client),
                 )
                 return
             now_ms = self.item_service.now_ms()
@@ -2952,13 +2942,7 @@ class SignalingServer:
                 )
                 await self._send(
                     client.websocket,
-                    BroadcastPositionPacket(
-                        type="update_position",
-                        id=client.id,
-                        x=client.x,
-                        y=client.y,
-                        z=client.z,
-                    ),
+                    client_position_packet(client),
                 )
                 return
             client.x = packet.x
@@ -2967,22 +2951,10 @@ class SignalingServer:
             self._persist_client_position(client)
             await self._send(
                 client.websocket,
-                BroadcastPositionPacket(
-                    type="update_position",
-                    id=client.id,
-                    x=client.x,
-                    y=client.y,
-                    z=client.z,
-                ),
+                client_position_packet(client),
             )
             await self._broadcast(
-                BroadcastPositionPacket(
-                    type="update_position",
-                    id=client.id,
-                    x=client.x,
-                    y=client.y,
-                    z=client.z,
-                ),
+                client_position_packet(client),
                 exclude=client.websocket,
             )
             carried = self.item_service.find_carried_item(client.id)
@@ -3001,13 +2973,7 @@ class SignalingServer:
             if client.elevator_id is not None:
                 await self._send(
                     client.websocket,
-                    BroadcastPositionPacket(
-                        type="update_position",
-                        id=client.id,
-                        x=client.x,
-                        y=client.y,
-                        z=client.z,
-                    ),
+                    client_position_packet(client),
                 )
                 return
             if not self._is_in_bounds(packet.x, packet.y) or packet.z != client.z:
@@ -3020,13 +2986,7 @@ class SignalingServer:
                 )
                 await self._send(
                     client.websocket,
-                    BroadcastPositionPacket(
-                        type="update_position",
-                        id=client.id,
-                        x=client.x,
-                        y=client.y,
-                        z=client.z,
-                    ),
+                    client_position_packet(client),
                 )
                 return
 
@@ -3036,22 +2996,10 @@ class SignalingServer:
             self._persist_client_position(client, force=True)
             await self._send(
                 client.websocket,
-                BroadcastPositionPacket(
-                    type="update_position",
-                    id=client.id,
-                    x=client.x,
-                    y=client.y,
-                    z=client.z,
-                ),
+                client_position_packet(client),
             )
             await self._broadcast(
-                BroadcastPositionPacket(
-                    type="update_position",
-                    id=client.id,
-                    x=client.x,
-                    y=client.y,
-                    z=client.z,
-                ),
+                client_position_packet(client),
                 exclude=client.websocket,
             )
             carried = self.item_service.find_carried_item(client.id)

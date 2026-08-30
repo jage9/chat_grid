@@ -14,9 +14,9 @@ type MessageHandlerDeps = {
   applyServerItemUiDefinitions: (defs: unknown) => boolean;
   state: {
     addItemTypeIndex: number;
-    player: { id: string | null; nickname: string; x: number; y: number; z: number };
+    player: { id: string | null; nickname: string; x: number; y: number; z: number; acousticZoneId: string };
     running: boolean;
-    peers: Map<string, { id: string; userId?: string | null; nickname: string; x: number; y: number; z: number }>;
+    peers: Map<string, { id: string; userId?: string | null; nickname: string; x: number; y: number; z: number; acousticZoneId: string }>;
     items: Map<string, WorldItem>;
     mode: string;
     selectedItemId: string | null;
@@ -34,13 +34,14 @@ type MessageHandlerDeps = {
   };
   signalingSend: (message: unknown) => void;
   peerManager: {
-    ensurePeer: (id: string, user: { id: string; nickname: string; x: number; y: number; z: number }) => unknown;
-    setPeerPosition: (id: string, x: number, y: number, z: number) => void;
+    ensurePeer: (id: string, user: { id: string; nickname: string; x: number; y: number; z: number; acousticZoneId: string }) => unknown;
+    setPeerPosition: (id: string, x: number, y: number, z: number, acousticZoneId: string) => void;
     setListenerFloor: (z: number) => void;
     setPeerNickname: (id: string, nickname: string) => void;
     removePeer: (id: string) => void;
   };
   refreshAudioSubscriptions: (force?: boolean) => Promise<void>;
+  refreshAcousticModel: () => void;
   cleanupItemAudio: (itemId: string) => void;
   applyAudioLayerState: () => Promise<void>;
   gameLoop: () => void;
@@ -133,6 +134,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.state.player.x = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.x));
         deps.state.player.y = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.y));
         deps.state.player.z = message.player.z;
+        deps.state.player.acousticZoneId = message.player.acousticZoneId;
         deps.peerManager.setListenerFloor(message.player.z);
         deps.dom.connectButton.classList.add('hidden');
         deps.dom.disconnectButton.classList.remove('hidden');
@@ -155,6 +157,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
             carrierId: item.carrierId ?? null,
           });
         }
+        deps.refreshAcousticModel();
         await deps.refreshAudioSubscriptions(true);
         await deps.applyAudioLayerState();
         deps.gameLoop();
@@ -171,8 +174,13 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           deps.state.player.x = message.x;
           deps.state.player.y = message.y;
           deps.state.player.z = message.z;
+          const zoneChanged = deps.state.player.acousticZoneId !== message.acousticZoneId;
+          deps.state.player.acousticZoneId = message.acousticZoneId;
           if (floorChanged) {
             deps.peerManager.setListenerFloor(message.z);
+          }
+          if (floorChanged || zoneChanged) {
+            deps.refreshAcousticModel();
             await deps.refreshAudioSubscriptions(true);
           }
           break;
@@ -184,6 +192,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           peer.x = message.x;
           peer.y = message.y;
           peer.z = message.z;
+          peer.acousticZoneId = message.acousticZoneId;
         } else {
           deps.state.peers.set(message.id, {
             id: message.id,
@@ -192,10 +201,12 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
             x: message.x,
             y: message.y,
             z: message.z,
+            acousticZoneId: message.acousticZoneId,
           });
         }
         deps.peerManager.ensurePeer(message.id, deps.state.peers.get(message.id)!);
-        deps.peerManager.setPeerPosition(message.id, message.x, message.y, message.z);
+        deps.peerManager.setPeerPosition(message.id, message.x, message.y, message.z, message.acousticZoneId);
+        deps.refreshAcousticModel();
         if (peer) {
           const movementDelta = Math.hypot(message.x - prevX, message.y - prevY);
           if (
@@ -279,6 +290,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           ...message.item,
           carrierId: message.item.carrierId ?? null,
         });
+        deps.refreshAcousticModel();
         deps.state.carriedItemId = deps.getCarriedItemId();
         deps.recomputeActiveItemPropertyKeys(message.item.id);
         if (deps.state.mode === 'itemProperties' && deps.state.selectedItemId === message.item.id) {
@@ -298,6 +310,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           deps.updateStatus(message.message);
         }
         if (previousElevatorItemId !== deps.state.elevatorItemId) {
+          deps.refreshAcousticModel();
           await deps.refreshAudioSubscriptions(true);
         }
         break;
@@ -305,6 +318,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
 
       case 'item_remove': {
         deps.state.items.delete(message.itemId);
+        deps.refreshAcousticModel();
         deps.state.carriedItemId = deps.getCarriedItemId();
         deps.cleanupItemAudio(message.itemId);
         await deps.refreshAudioSubscriptions(true);

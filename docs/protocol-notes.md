@@ -50,7 +50,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `livekit_token`: short-lived authenticated LiveKit room token and public WebSocket URL.
   - Issued only after authentication when complete LiveKit configuration is enabled.
   - The API secret is never sent to the browser.
-- `update_position`, `update_nickname`, `user_left`: presence updates.
+- `update_position`, `update_nickname`, `user_left`: presence updates. `welcome.player`, `welcome.users[]`, and `update_position` carry the server-owned `acousticZoneId` (`floor:<z>` or `elevator:<itemId>`).
 - `teleport_complete`: peer teleport landing event with spatial coordinates.
 - `chat_message`: system and user chat stream.
 - `pong`: ping response.
@@ -90,6 +90,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - absolute source coordinates `x`, `y`, `z`
 - `item_upsert.item.occupiedOffsets` contains the server-owned horizontal footprint relative to the item anchor.
 - Elevator travel sends progressive intermediate `update_position.z` values so rider coordinates advance throughout the trip while remaining outside both floor audio and visibility groups until arrival.
+- Elevator entry and exit also broadcast `update_position` even when coordinates do not change, so every client updates the rider's acoustic-zone membership immediately.
 - Elevator opening, closing, and direction cues send `item_use_sound` at the landing `z`; the direction cue is sent immediately before opening so both sounds overlap. A rider still between floors receives the opening and cue sounds at the rider's current `z` so the normal acoustic-floor gate does not suppress cabin playback.
 
 ## Welcome Metadata

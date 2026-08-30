@@ -140,6 +140,8 @@ export class RadioStationRuntime {
   constructor(
     private readonly audio: AudioEngine,
     private readonly getSpatialConfig: (item: WorldItem) => RadioSpatialConfig,
+    private readonly getAcousticGain: (item: WorldItem) => number = () => 1,
+    private readonly isAcousticallyReachable: (item: WorldItem) => boolean = () => true,
   ) {}
 
   cleanup(itemId: string): void {
@@ -243,7 +245,8 @@ export class RadioStationRuntime {
         continue;
       }
       const spatialConfig = this.getSpatialConfig(item);
-      const mix = item.z === playerPosition.z ? resolveSpatialMix({
+      const acousticGain = Math.max(0, Math.min(1, this.getAcousticGain(item)));
+      const mix = acousticGain > 0 ? resolveSpatialMix({
         dx: item.x - playerPosition.x,
         dy: item.y - playerPosition.y,
         range: Math.max(1, spatialConfig.range || HEARING_RADIUS),
@@ -258,7 +261,8 @@ export class RadioStationRuntime {
           rearGain: 0.4,
         },
       }) : null;
-      const isAudible = mix !== null && mix.gain > 0;
+      const transmittedMix = mix ? { ...mix, gain: mix.gain * acousticGain } : null;
+      const isAudible = transmittedMix !== null && transmittedMix.gain > 0;
       if (isAudible && !output.wasAudible) {
         this.nextSharedStartAtMs.delete(output.streamUrl);
         this.sharedStartFailureCount.delete(output.streamUrl);
@@ -272,7 +276,7 @@ export class RadioStationRuntime {
         audioCtx,
         gainNode: output.gain,
         pannerNode: output.panner,
-        mix,
+        mix: transmittedMix,
         outputMode: this.audio.getOutputMode(),
         transition: 'target',
       });
@@ -473,12 +477,12 @@ export class RadioStationRuntime {
     if (!streamUrl || item.params.enabled === false || listenerPositions.length === 0) {
       return false;
     }
+    if (!this.isAcousticallyReachable(item)) return false;
     const spatialConfig = this.getSpatialConfig(item);
     const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
     const threshold = baseRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);
     return listenerPositions.some((listenerPosition) =>
-      item.z === listenerPosition.z
-      && Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold,
+      Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y) <= threshold,
     );
   }
 }
