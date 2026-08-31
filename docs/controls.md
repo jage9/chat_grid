@@ -59,6 +59,7 @@ This document is the authoritative keymap for the client.
 - Walls are edited live. Other connected clients receive and render changes immediately.
 - Wall deletion uses a `No`/`Yes` confirmation menu.
 - Brick, glass, and fence walls block movement. Curtains may be crossed; wall impacts and curtain crossings play the structure's contact sound locally and spatially for nearby users.
+- New curtain, glass, and fence walls use their matching contact sounds; brick uses the standard wall sound. Builders may edit any wall's sound URL.
 
 ### Audio
 - `P`: Ping server

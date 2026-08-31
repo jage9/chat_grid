@@ -51,6 +51,7 @@ Each frame:
 - Update spatial radio audio.
 - Update spatial item emit audio.
 - Trace intervening wall edges for positional audio, multiply their transmission gains, and apply the lowest crossed low-pass cutoff.
+- A ray grazing the actual endpoint of a wall run applies half-strength occlusion; exact corners inside a continuing run or formed by two walls remain fully occluded.
 - Draw canvas scene.
 
 Radio metadata polling is limited to stations near a listener, deduplicated by stream URL, and uses bounded concurrent fetches so slow stations do not hold up the others. Failed fetches preserve the last known title. Requesting now-playing triggers one immediate fetch when no metadata has been collected yet.

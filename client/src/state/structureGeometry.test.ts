@@ -67,13 +67,18 @@ describe('wall structure geometry', () => {
     expect(wallTransmissionBetween([first, second], { x: 0, y: 1, z: 0 }, { x: 4, y: 1, z: 0 })).toBe(0.125);
   });
 
-  it('counts every wall touched at an exact acoustic corner', () => {
+  it('tapers an actual wall endpoint but fully blocks a closed corner', () => {
     const north = wall({ id: 'north', startX: 4, startY: 5, length: 1, soundTransmission: 0 });
     const east = wall({ id: 'east', startX: 5, startY: 4, orientation: 'vertical', length: 1, soundTransmission: 0.5 });
     const listener = { x: 4, y: 4, z: 0 };
     const source = { x: 5, y: 5, z: 0 };
-    expect(wallTransmissionBetween([north], listener, source)).toBe(0);
+    expect(wallAcousticMixBetween([north], listener, source)).toEqual({ gain: 0.5, lowpassHz: 4000 });
     expect(wallTransmissionBetween([north, east], listener, source)).toBe(0);
+  });
+
+  it('fully occludes an exact corner where the wall continues', () => {
+    const run = wall({ startX: 4, startY: 5, length: 2, soundTransmission: 0 });
+    expect(wallTransmissionBetween([run], { x: 4, y: 4, z: 0 }, { x: 5, y: 5, z: 0 })).toBe(0);
   });
 
   it('multiplies gain and uses the lowest crossed low-pass cutoff', () => {

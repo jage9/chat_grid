@@ -16,7 +16,10 @@ def test_load_config_defaults_when_path_none() -> None:
     assert cfg.world.grid_size == 41
     assert set(cfg.world.structure_presets) == {"brick", "curtain", "glass", "fence"}
     assert cfg.world.structure_presets["curtain"].movement_blocked is False
+    assert cfg.world.structure_presets["curtain"].contact_sound == "/sounds/curtain.ogg"
     assert cfg.world.structure_presets["glass"].occlusion_lowpass_hz == 7000
+    assert cfg.world.structure_presets["glass"].contact_sound == "/sounds/glass.ogg"
+    assert cfg.world.structure_presets["fence"].contact_sound == "/sounds/fence.ogg"
     assert cfg.livekit.room_name == "chatgrid"
 
 

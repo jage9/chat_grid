@@ -151,7 +151,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - Server is authoritative for all action validation and normalization.
 - Server is authoritative for movement acceptance (bounds + wall crossing + rate/delta checks) and rejects client attempts to change `z`.
 - Cardinal movement is blocked by a wall on its crossed edge. Diagonal movement is blocked only when both component edges from the origin are blocked.
-- Acoustic rays use a stricter corner rule than movement: every touched wall edge contributes gain and filtering, including a lone edge at an exact grid corner.
+- Acoustic rays distinguish wall endpoints from interior joints: grazing an actual run endpoint contributes half-strength gain/filtering, while a continuing wall or two-wall corner contributes fully.
 - Structure mutations require `world.structure.edit`, which defaults to the built-in `editor` and `admin` roles.
 - Server persists account state (last nickname + last position) and restores spawn from that state on auth login/resume.
 - Server also supports websocket handshake cookie resume:

@@ -3,6 +3,7 @@ import type { WallStructure } from './gameState';
 export type WallEdgeIndex = ReadonlyMap<string, WallStructure>;
 export type WallAcousticMix = { gain: number; lowpassHz: number };
 export const OPEN_AIR_LOWPASS_HZ = 20_000;
+const ENDPOINT_GRAZE_STRENGTH = 0.5;
 
 function edgeKey(
   floorZ: number,
@@ -78,11 +79,16 @@ export function wallAcousticMixBetween(
   let transmission = 1;
   let lowpassHz = OPEN_AIR_LOWPASS_HZ;
 
-  const applyWall = (wall: WallStructure | null): void => {
+  const applyWall = (wall: WallStructure | null, strength = 1): void => {
     if (!wall) return;
-    transmission *= Math.max(0, Math.min(1, wall.soundTransmission));
+    const clampedStrength = Math.max(0, Math.min(1, strength));
+    const wallTransmission = Math.max(0, Math.min(1, wall.soundTransmission));
+    transmission *= 1 - clampedStrength * (1 - wallTransmission);
     const cutoff = Number.isFinite(wall.occlusionLowpassHz) ? wall.occlusionLowpassHz : OPEN_AIR_LOWPASS_HZ;
-    lowpassHz = Math.min(lowpassHz, Math.max(20, Math.min(OPEN_AIR_LOWPASS_HZ, cutoff)));
+    const clampedCutoff = Math.max(20, Math.min(OPEN_AIR_LOWPASS_HZ, cutoff));
+    const effectiveCutoff = OPEN_AIR_LOWPASS_HZ
+      * ((clampedCutoff / OPEN_AIR_LOWPASS_HZ) ** clampedStrength);
+    lowpassHz = Math.min(lowpassHz, effectiveCutoff);
   };
 
   while (cellX !== sourceX || cellY !== sourceY) {
@@ -98,10 +104,18 @@ export function wallAcousticMixBetween(
     } else {
       const vertical = wallAt(index, listener.z, 'vertical', cellX + (stepX > 0 ? 1 : 0), cellY);
       const horizontal = wallAt(index, listener.z, 'horizontal', cellX, cellY + (stepY > 0 ? 1 : 0));
-      // Acoustic rays count every touched edge. This intentionally differs
-      // from the permissive diagonal movement rule at wall corners.
-      applyWall(vertical);
-      applyWall(horizontal);
+      if (vertical && horizontal) {
+        applyWall(vertical);
+        applyWall(horizontal);
+      } else if (vertical) {
+        const lineX = cellX + (stepX > 0 ? 1 : 0);
+        const continues = wallAt(index, listener.z, 'vertical', lineX, cellY + stepY);
+        applyWall(vertical, continues ? 1 : ENDPOINT_GRAZE_STRENGTH);
+      } else if (horizontal) {
+        const lineY = cellY + (stepY > 0 ? 1 : 0);
+        const continues = wallAt(index, listener.z, 'horizontal', cellX + stepX, lineY);
+        applyWall(horizontal, continues ? 1 : ENDPOINT_GRAZE_STRENGTH);
+      }
       cellX += stepX;
       cellY += stepY;
       nextTX += deltaTX;

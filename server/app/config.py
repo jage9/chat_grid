@@ -72,12 +72,19 @@ class WorldConfigSection(BaseModel):
                 movement_blocked=False,
                 sound_transmission=0.5,
                 occlusion_lowpass_hz=2_200,
+                contact_sound="/sounds/curtain.ogg",
             ),
             "glass": StructurePresetConfig(
-                title="Glass", sound_transmission=0.65, occlusion_lowpass_hz=7_000
+                title="Glass",
+                sound_transmission=0.65,
+                occlusion_lowpass_hz=7_000,
+                contact_sound="/sounds/glass.ogg",
             ),
             "fence": StructurePresetConfig(
-                title="Fence", sound_transmission=0.9, occlusion_lowpass_hz=12_000
+                title="Fence",
+                sound_transmission=0.9,
+                occlusion_lowpass_hz=12_000,
+                contact_sound="/sounds/fence.ogg",
             ),
         }
     )

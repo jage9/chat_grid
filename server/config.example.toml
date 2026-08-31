@@ -53,7 +53,7 @@ movement_blocked = false
 sound_transmission = 0.5
 occlusion_lowpass_hz = 2200
 height = 40
-contact_sound = "/sounds/wall.ogg"
+contact_sound = "/sounds/curtain.ogg"
 
 [world.structure_presets.glass]
 title = "Glass"
@@ -61,7 +61,7 @@ movement_blocked = true
 sound_transmission = 0.65
 occlusion_lowpass_hz = 7000
 height = 40
-contact_sound = "/sounds/wall.ogg"
+contact_sound = "/sounds/glass.ogg"
 
 [world.structure_presets.fence]
 title = "Fence"
@@ -69,7 +69,7 @@ movement_blocked = true
 sound_transmission = 0.9
 occlusion_lowpass_hz = 12000
 height = 40
-contact_sound = "/sounds/wall.ogg"
+contact_sound = "/sounds/fence.ogg"
 
 [auth]
 # SQLite file for account/session data. Relative paths resolve from this config file directory.
