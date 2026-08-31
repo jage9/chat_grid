@@ -36,6 +36,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_piano_recording`: piano record/playback control (`toggle_record`, `playback`, `stop_playback`).
 - `structure_add_wall`: create a one-edge wall from a server preset on the requested side of the builder's current square.
 - `structure_resize_wall`: extend or shorten one complete wall run at its start or end by one edge.
+- `structure_update_wall`: update one wall run's explicit `soundTransmission`, `occlusionLowpassHz`, and/or `contactSound`.
 - `structure_delete`: delete one complete wall run.
 
 ## Server -> Client
@@ -68,9 +69,9 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_piano_note`: broadcast piano note on/off with resolved instrument/envelope/spatial params.
 - `item_piano_status`: structured piano mode/record/playback state events for client runtime control.
 - `item_elevator_status`: targeted rider state (`entered`, `moving`, `arrived`, or `exited`) with `itemId`, `z`, and an optional user-facing `message`.
-- `structure_upsert`: full wall-run replacement after a live create or resize.
+- `structure_upsert`: full wall-run replacement after a live create, resize, or property update.
 - `structure_remove`: removal of one wall run.
-- `structure_action_result`: success/error and user-facing status for add, resize, or delete.
+- `structure_action_result`: success/error and user-facing status for add, resize, update, or delete.
 - `world_sound`: server-validated positional structure contact sound (`sound`, `x`, `y`, `z`, optional `range`) sent to users other than the mover.
 
 ## Item Packet Behavior
@@ -150,6 +151,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - Server is authoritative for all action validation and normalization.
 - Server is authoritative for movement acceptance (bounds + wall crossing + rate/delta checks) and rejects client attempts to change `z`.
 - Cardinal movement is blocked by a wall on its crossed edge. Diagonal movement is blocked only when both component edges from the origin are blocked.
+- Acoustic rays use a stricter corner rule than movement: every touched wall edge contributes gain and filtering, including a lone edge at an exact grid corner.
 - Structure mutations require `world.structure.edit`, which defaults to the built-in `editor` and `admin` roles.
 - Server persists account state (last nickname + last position) and restores spawn from that state on auth login/resume.
 - Server also supports websocket handshake cookie resume:

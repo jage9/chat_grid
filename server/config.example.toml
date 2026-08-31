@@ -39,10 +39,11 @@ state_save_max_delay_ms = 1000
 grid_size = 41
 
 # World Builder wall presets. Add more named tables as needed.
-[world.structure_presets.solid]
-title = "Wall"
+[world.structure_presets.brick]
+title = "Brick"
 movement_blocked = true
 sound_transmission = 0.0
+occlusion_lowpass_hz = 800
 height = 40
 contact_sound = "/sounds/wall.ogg"
 
@@ -50,6 +51,23 @@ contact_sound = "/sounds/wall.ogg"
 title = "Curtain"
 movement_blocked = false
 sound_transmission = 0.5
+occlusion_lowpass_hz = 2200
+height = 40
+contact_sound = "/sounds/wall.ogg"
+
+[world.structure_presets.glass]
+title = "Glass"
+movement_blocked = true
+sound_transmission = 0.65
+occlusion_lowpass_hz = 7000
+height = 40
+contact_sound = "/sounds/wall.ogg"
+
+[world.structure_presets.fence]
+title = "Fence"
+movement_blocked = true
+sound_transmission = 0.9
+occlusion_lowpass_hz = 12000
 height = 40
 contact_sound = "/sounds/wall.ogg"
 

@@ -50,6 +50,7 @@ type PianoSpatialSource = {
   y: number;
   range: number;
   acousticGain?: number;
+  occlusionLowpassHz?: number;
 };
 
 type InstrumentPreset = {
@@ -343,6 +344,11 @@ export class PianoSynth {
       voiceGain.connect(filter);
       tailNode = filter;
     }
+    const occlusionFilter = context.audioCtx.createBiquadFilter();
+    occlusionFilter.type = 'lowpass';
+    occlusionFilter.frequency.setValueAtTime(spatial.occlusionLowpassHz ?? 20_000, now);
+    tailNode.connect(occlusionFilter);
+    tailNode = occlusionFilter;
 
     let panner: StereoPannerNode | null = null;
     if (typeof context.audioCtx.createStereoPanner === 'function') {
@@ -462,12 +468,16 @@ export class PianoSynth {
     gain.gain.exponentialRampToValueAtTime(0.22 * spatialMix.gain, now + attackSeconds);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + decaySeconds);
 
+    const occlusionFilter = context.audioCtx.createBiquadFilter();
+    occlusionFilter.type = 'lowpass';
+    occlusionFilter.frequency.setValueAtTime(spatial.occlusionLowpassHz ?? 20_000, now);
+
     if (typeof context.audioCtx.createStereoPanner === 'function') {
       const panner = context.audioCtx.createStereoPanner();
       panner.pan.setValueAtTime(spatialMix.pan, now);
-      gain.connect(panner).connect(context.destination);
+      gain.connect(occlusionFilter).connect(panner).connect(context.destination);
     } else {
-      gain.connect(context.destination);
+      gain.connect(occlusionFilter).connect(context.destination);
     }
 
     if (variant === 'kick_sub') {

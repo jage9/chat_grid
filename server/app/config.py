@@ -55,6 +55,7 @@ class StructurePresetConfig(BaseModel):
     title: str = Field(default="Wall", min_length=1, max_length=80)
     movement_blocked: bool = True
     sound_transmission: float = Field(default=0.0, ge=0.0, le=1.0)
+    occlusion_lowpass_hz: int = Field(default=800, ge=20, le=20_000)
     height: int = Field(default=40, ge=0)
     contact_sound: str = "/sounds/wall.ogg"
 
@@ -65,9 +66,18 @@ class WorldConfigSection(BaseModel):
     grid_size: int = Field(default=41, ge=1)
     structure_presets: dict[str, StructurePresetConfig] = Field(
         default_factory=lambda: {
-            "solid": StructurePresetConfig(),
+            "brick": StructurePresetConfig(title="Brick"),
             "curtain": StructurePresetConfig(
-                title="Curtain", movement_blocked=False, sound_transmission=0.5
+                title="Curtain",
+                movement_blocked=False,
+                sound_transmission=0.5,
+                occlusion_lowpass_hz=2_200,
+            ),
+            "glass": StructurePresetConfig(
+                title="Glass", sound_transmission=0.65, occlusion_lowpass_hz=7_000
+            ),
+            "fence": StructurePresetConfig(
+                title="Fence", sound_transmission=0.9, occlusion_lowpass_hz=12_000
             ),
         }
     )

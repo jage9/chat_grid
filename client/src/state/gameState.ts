@@ -35,6 +35,7 @@ export type WallStructure = {
   title: string;
   movementBlocked: boolean;
   soundTransmission: number;
+  occlusionLowpassHz: number;
   height: number;
   preset: string;
   contactSound: string;
@@ -77,6 +78,8 @@ export type GameMode =
   | 'worldBuilderDirection'
   | 'worldBuilderWallList'
   | 'worldBuilderWallActions'
+  | 'worldBuilderPropertyList'
+  | 'worldBuilderPropertyEdit'
   | 'worldBuilderDeleteConfirm'
   | 'pianoUse';
 

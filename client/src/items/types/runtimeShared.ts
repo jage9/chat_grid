@@ -20,7 +20,7 @@ export type ItemBehaviorDeps = {
   updateStatus: (message: string) => void;
   openHelpViewer: (lines: string[], returnMode: GameMode) => void;
   withBase: (path: string) => string;
-  getWallTransmission: (sourceX: number, sourceY: number, sourceZ: number) => number;
+  getWallAcousticMix: (sourceX: number, sourceY: number, sourceZ: number) => { gain: number; lowpassHz: number };
 };
 
 /** Optional per-item behavior hooks used by the client runtime. */

@@ -103,7 +103,7 @@ type PianoControllerDeps = {
   signalingSend: (message: OutgoingMessage) => void;
   updateStatus: (message: string) => void;
   openHelpViewer: (lines: string[], returnMode: GameMode) => void;
-  getWallTransmission: (sourceX: number, sourceY: number, sourceZ: number) => number;
+  getWallAcousticMix: (sourceX: number, sourceY: number, sourceZ: number) => { gain: number; lowpassHz: number };
 };
 
 /** Encapsulates all client-side piano item behavior and per-mode runtime state. */
@@ -489,6 +489,7 @@ export class PianoController {
       this.stopRemoteNotesForSource(note.senderId, note.itemId);
     }
     this.activeRemotePianoKeys.add(runtimeKey);
+    const wallAcousticMix = this.deps.getWallAcousticMix(note.x, note.y, note.z);
     this.pianoSynth.noteOn(
       runtimeKey,
       `remote:${note.senderId}:${note.itemId}`,
@@ -504,7 +505,8 @@ export class PianoController {
         x: note.x - this.deps.state.player.x,
         y: note.y - this.deps.state.player.y,
         range: Math.max(1, Math.round(note.emitRange)),
-        acousticGain: this.deps.getWallTransmission(note.x, note.y, note.z),
+        acousticGain: wallAcousticMix.gain,
+        occlusionLowpassHz: wallAcousticMix.lowpassHz,
       },
     );
   }

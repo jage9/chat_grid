@@ -39,6 +39,7 @@ export const wallStructureSchema = z.object({
   title: z.string(),
   movementBlocked: z.boolean(),
   soundTransmission: z.number().min(0).max(1),
+  occlusionLowpassHz: z.number().int().min(20).max(20_000),
   height: z.number().int().nonnegative(),
   preset: z.string(),
   contactSound: z.string(),
@@ -49,6 +50,7 @@ const structurePresetSchema = z.object({
   title: z.string(),
   movementBlocked: z.boolean(),
   soundTransmission: z.number().min(0).max(1),
+  occlusionLowpassHz: z.number().int().min(20).max(20_000),
   height: z.number().int().nonnegative(),
   contactSound: z.string(),
 });
@@ -429,7 +431,7 @@ export const structureRemoveSchema = z.object({
 export const structureActionResultSchema = z.object({
   type: z.literal('structure_action_result'),
   ok: z.boolean(),
-  action: z.enum(['add', 'resize', 'delete']),
+  action: z.enum(['add', 'resize', 'update', 'delete']),
   message: z.string(),
   structureId: z.string().optional(),
 });
@@ -506,6 +508,13 @@ export type OutgoingMessage =
   | { type: 'item_secondary_use'; itemId: string }
   | { type: 'structure_add_wall'; preset: string; direction: 'north' | 'south' | 'east' | 'west' }
   | { type: 'structure_resize_wall'; structureId: string; endpoint: 'start' | 'end'; delta: -1 | 1 }
+  | {
+      type: 'structure_update_wall';
+      structureId: string;
+      soundTransmission?: number;
+      occlusionLowpassHz?: number;
+      contactSound?: string;
+    }
   | { type: 'structure_delete'; structureId: string }
   | { type: 'item_piano_note'; itemId: string; keyId: string; midi: number; on: boolean }
   | { type: 'item_piano_recording'; itemId: string; action: 'toggle_record' | 'playback' | 'stop_playback' | 'stop_record' }

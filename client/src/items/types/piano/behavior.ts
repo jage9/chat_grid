@@ -9,7 +9,7 @@ export function createPianoBehavior(deps: ItemBehaviorDeps): ItemBehavior {
     signalingSend: deps.signalingSend,
     updateStatus: deps.updateStatus,
     openHelpViewer: deps.openHelpViewer,
-    getWallTransmission: deps.getWallTransmission,
+    getWallAcousticMix: deps.getWallAcousticMix,
   });
 
   return {

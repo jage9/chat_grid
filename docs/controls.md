@@ -53,10 +53,12 @@ This document is the authoritative keymap for the client.
 
 - `W`: Open World Builder when the account has `world.structure.edit`.
 - `Add wall`: Select a server-configured preset, then select the north, south, east, or west edge of the current square.
-- `Manage walls`: List current-floor walls nearest first, then extend or shorten either endpoint or delete the complete wall.
+- `Edit walls`: List current-floor walls nearest first, then edit acoustic properties, extend or shorten either endpoint, or delete the complete wall.
+- `Edit properties`: Change sound transmission (`0..1`), occlusion low-pass (`20..20000` hertz), or the contact-sound URL. Presets only seed these values.
+- `Space`: Read specific help for the selected World Builder action, preset, direction, wall, or property.
 - Walls are edited live. Other connected clients receive and render changes immediately.
 - Wall deletion uses a `No`/`Yes` confirmation menu.
-- Solid walls block movement. Curtains may be crossed; wall impacts and curtain crossings play the structure's contact sound locally and spatially for nearby users.
+- Brick, glass, and fence walls block movement. Curtains may be crossed; wall impacts and curtain crossings play the structure's contact sound locally and spatially for nearby users.
 
 ### Audio
 - `P`: Ping server
@@ -73,7 +75,7 @@ This document is the authoritative keymap for the client.
 - `-` / `=`: Lower/raise master volume
 - `_` / `+` (`Shift+-` / `Shift+=`): Lower/raise active effect value
 
-## Text Entry Modes (`nickname`, `chat`, `itemPropertyEdit`)
+## Text Entry Modes (`nickname`, `chat`, `itemPropertyEdit`, `worldBuilderPropertyEdit`)
 
 - `Enter`: Confirm
 - `Escape`: Cancel

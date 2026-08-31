@@ -169,6 +169,13 @@ export class PeerManager {
     if (peer) peer.acousticGain = gain;
   }
 
+  setPeerAcousticMix(id: string, gain: number, lowpassHz: number): void {
+    const peer = this.peers.get(id);
+    if (!peer) return;
+    peer.acousticGain = gain;
+    peer.occlusionLowpassHz = lowpassHz;
+  }
+
   setPeerNickname(id: string, nickname: string): void {
     const peer = this.peers.get(id);
     if (peer) peer.nickname = nickname;

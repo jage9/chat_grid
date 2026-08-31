@@ -23,6 +23,7 @@ def service(tmp_path: Path) -> StructureService:
                 "title": "Wall",
                 "movementBlocked": True,
                 "soundTransmission": 0.0,
+                "occlusionLowpassHz": 800,
                 "height": 40,
                 "contactSound": "/sounds/wall.ogg",
             },
@@ -30,6 +31,7 @@ def service(tmp_path: Path) -> StructureService:
                 "title": "Curtain",
                 "movementBlocked": False,
                 "soundTransmission": 0.5,
+                "occlusionLowpassHz": 2200,
                 "height": 40,
                 "contactSound": "/sounds/wall.ogg",
             },
@@ -93,3 +95,23 @@ def test_overlapping_and_out_of_bounds_runs_are_rejected(tmp_path: Path) -> None
     with pytest.raises(StructureError, match="outside"):
         structures.resize_wall(edge_wall.id, endpoint="end", delta=1)
     assert structures.structures[wall.id] == wall
+
+
+def test_wall_acoustic_properties_are_independently_editable(tmp_path: Path) -> None:
+    structures = service(tmp_path)
+    wall = structures.add_wall(builder(), preset_id="solid", direction="north")
+
+    updated = structures.update_wall(
+        wall.id,
+        sound_transmission=0.35,
+        occlusion_lowpass_hz=3200,
+        contact_sound="/sounds/custom-wall.ogg",
+    )
+
+    assert updated.soundTransmission == 0.35
+    assert updated.occlusionLowpassHz == 3200
+    assert updated.contactSound == "/sounds/custom-wall.ogg"
+    assert updated.preset == "solid"
+    assert (
+        structures.blocking_wall_for_move(x=4, y=4, z=0, next_x=4, next_y=5) == updated
+    )

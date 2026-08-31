@@ -1,11 +1,13 @@
 import { HEARING_RADIUS, type WorldItem } from '../../../state/gameState';
 import { AudioEngine } from '../../../audio/audioEngine';
 import { applySpatialMixToNodes, resolveSpatialMix } from '../../../audio/spatial';
+import { applyAcousticLowpass, normalizeAcousticMix, type AcousticMix } from '../../../audio/acoustics';
 
 type ElevatorOutput = {
   element: HTMLAudioElement;
   source: MediaElementAudioSourceNode;
   gain: GainNode;
+  occlusionFilter: BiquadFilterNode;
   panner: StereoPannerNode | null;
   onLoadedMetadata: () => void;
   onCanPlay: () => void;
@@ -56,7 +58,7 @@ export class ElevatorAudioRuntime {
     private readonly resolveSoundUrl: (soundPath: string) => string,
     private readonly getSpatialConfig: (item: WorldItem) => ElevatorSpatialConfig,
     private readonly getOccupiedElevatorId: () => string | null,
-    private readonly getDoorTransmission: (item: WorldItem) => number,
+    private readonly getDoorAcousticMix: (item: WorldItem) => AcousticMix,
   ) {}
 
   cleanup(itemId: string): void {
@@ -68,6 +70,7 @@ export class ElevatorAudioRuntime {
     output.element.src = '';
     output.source.disconnect();
     output.gain.disconnect();
+    output.occlusionFilter.disconnect();
     output.panner?.disconnect();
     this.outputs.delete(itemId);
   }
@@ -121,14 +124,17 @@ export class ElevatorAudioRuntime {
       element.crossOrigin = 'anonymous';
       const source = audioCtx.createMediaElementSource(element);
       const gain = audioCtx.createGain();
+      const occlusionFilter = audioCtx.createBiquadFilter();
+      occlusionFilter.type = 'lowpass';
+      occlusionFilter.frequency.value = 20_000;
       gain.gain.value = 0;
       let panner: StereoPannerNode | null = null;
       const destination = this.audio.getOutputDestinationNode() ?? audioCtx.destination;
       if (this.audio.supportsStereoPanner()) {
         panner = audioCtx.createStereoPanner();
-        source.connect(gain).connect(panner).connect(destination);
+        source.connect(gain).connect(occlusionFilter).connect(panner).connect(destination);
       } else {
-        source.connect(gain).connect(destination);
+        source.connect(gain).connect(occlusionFilter).connect(destination);
       }
       const startAtRandomOffset = (): boolean => {
         const startSeconds = resolveElevatorAmbienceStart(element.duration);
@@ -158,6 +164,7 @@ export class ElevatorAudioRuntime {
         element,
         source,
         gain,
+        occlusionFilter,
         panner,
         onLoadedMetadata,
         onCanPlay,
@@ -201,8 +208,10 @@ export class ElevatorAudioRuntime {
               nearFieldCenterPan: true,
             })
           : null;
+      const acoustic = inside ? { gain: 1, lowpassHz: 20_000 } : normalizeAcousticMix(this.getDoorAcousticMix(item));
+      applyAcousticLowpass(audioCtx, output.occlusionFilter, acoustic.lowpassHz);
       const transmittedMix = mix && !inside
-        ? { ...mix, gain: mix.gain * this.getDoorTransmission(item) }
+        ? { ...mix, gain: mix.gain * acoustic.gain }
         : mix;
       applySpatialMixToNodes({
         audioCtx,

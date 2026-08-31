@@ -87,6 +87,9 @@ class StructureService:
             title=str(preset.get("title", "Wall")),
             movementBlocked=bool(preset.get("movementBlocked", True)),
             soundTransmission=self._preset_number(preset, "soundTransmission", 0.0),
+            occlusionLowpassHz=int(
+                self._preset_number(preset, "occlusionLowpassHz", 800)
+            ),
             height=int(self._preset_number(preset, "height", 40)),
             preset=preset_id,
             contactSound=str(preset.get("contactSound", "/sounds/wall.ogg")),
@@ -124,6 +127,35 @@ class StructureService:
         self._remove_from_index(wall)
         self._insert(resized)
         return resized
+
+    def update_wall(
+        self,
+        structure_id: str,
+        *,
+        sound_transmission: float | None,
+        occlusion_lowpass_hz: int | None,
+        contact_sound: str | None,
+    ) -> WallStructure:
+        """Update user-editable acoustic properties on one complete wall run."""
+
+        wall = self.structures.get(structure_id)
+        if wall is None:
+            raise StructureError("Wall not found.")
+        if all(
+            value is None
+            for value in (sound_transmission, occlusion_lowpass_hz, contact_sound)
+        ):
+            raise StructureError("No wall property was supplied.")
+        values = wall.model_dump()
+        if sound_transmission is not None:
+            values["soundTransmission"] = sound_transmission
+        if occlusion_lowpass_hz is not None:
+            values["occlusionLowpassHz"] = occlusion_lowpass_hz
+        if contact_sound is not None:
+            values["contactSound"] = contact_sound.strip()
+        updated = WallStructure.model_validate(values)
+        self.structures[wall.id] = updated
+        return updated
 
     def remove(self, structure_id: str) -> WallStructure:
         """Remove and return one complete wall structure."""

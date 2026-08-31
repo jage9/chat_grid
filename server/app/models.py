@@ -196,6 +196,16 @@ class StructureResizeWallPacket(BasePacket):
     delta: Literal[-1, 1]
 
 
+class StructureUpdateWallPacket(BasePacket):
+    """Update editable acoustic properties of an existing wall run."""
+
+    type: Literal["structure_update_wall"]
+    structureId: str
+    soundTransmission: float | None = Field(default=None, ge=0.0, le=1.0)
+    occlusionLowpassHz: int | None = Field(default=None, ge=20, le=20_000)
+    contactSound: str | None = Field(default=None, max_length=200)
+
+
 class StructureDeletePacket(BasePacket):
     """Delete one complete world structure."""
 
@@ -236,6 +246,7 @@ ClientPacket = (
     | ItemUpdatePacket
     | StructureAddWallPacket
     | StructureResizeWallPacket
+    | StructureUpdateWallPacket
     | StructureDeletePacket
 )
 
@@ -418,6 +429,7 @@ class WallStructure(BaseModel):
     title: str = Field(default="Wall", min_length=1, max_length=80)
     movementBlocked: bool = True
     soundTransmission: float = Field(default=0.0, ge=0.0, le=1.0)
+    occlusionLowpassHz: int = Field(default=800, ge=20, le=20_000)
     height: int = Field(default=40, ge=0)
     preset: str = Field(default="solid", min_length=1, max_length=40)
     contactSound: str = "/sounds/wall.ogg"
@@ -442,7 +454,7 @@ class StructureActionResultPacket(BasePacket):
 
     type: Literal["structure_action_result"]
     ok: bool
-    action: Literal["add", "resize", "delete"]
+    action: Literal["add", "resize", "update", "delete"]
     message: str
     structureId: str | None = None
 

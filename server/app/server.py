@@ -79,6 +79,7 @@ from .models import (
     StructureDeletePacket,
     StructureRemovePacket,
     StructureResizeWallPacket,
+    StructureUpdateWallPacket,
     StructureUpsertPacket,
     TeleportCompletePacket,
     UpdateNicknamePacket,
@@ -1314,14 +1315,21 @@ class SignalingServer:
 
         if not isinstance(
             packet,
-            (StructureAddWallPacket, StructureResizeWallPacket, StructureDeletePacket),
+            (
+                StructureAddWallPacket,
+                StructureResizeWallPacket,
+                StructureUpdateWallPacket,
+                StructureDeletePacket,
+            ),
         ):
             return False
-        action: Literal["add", "resize", "delete"] = (
+        action: Literal["add", "resize", "update", "delete"] = (
             "add"
             if isinstance(packet, StructureAddWallPacket)
             else "resize"
             if isinstance(packet, StructureResizeWallPacket)
+            else "update"
+            if isinstance(packet, StructureUpdateWallPacket)
             else "delete"
         )
         if not self._client_has_permission(client, "world.structure.edit"):
@@ -1348,6 +1356,14 @@ class SignalingServer:
                     delta=packet.delta,
                 )
                 result_message = f"Resized {wall.title} to {wall.length} squares."
+            elif isinstance(packet, StructureUpdateWallPacket):
+                wall = self.structure_service.update_wall(
+                    packet.structureId,
+                    sound_transmission=packet.soundTransmission,
+                    occlusion_lowpass_hz=packet.occlusionLowpassHz,
+                    contact_sound=packet.contactSound,
+                )
+                result_message = f"Updated {wall.title}."
             else:
                 wall = self.structure_service.remove(packet.structureId)
                 self._request_state_save()
@@ -2412,6 +2428,7 @@ def run() -> None:
                 "title": preset.title,
                 "movementBlocked": preset.movement_blocked,
                 "soundTransmission": preset.sound_transmission,
+                "occlusionLowpassHz": preset.occlusion_lowpass_hz,
                 "height": preset.height,
                 "contactSound": preset.contact_sound,
             }

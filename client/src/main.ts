@@ -64,7 +64,7 @@ import {
   blockingWallForMove,
   buildWallEdgeIndex,
   wallsCrossedForMove,
-  wallTransmissionBetween,
+  wallAcousticMixBetween,
 } from './state/structureGeometry';
 import {
   applyServerItemUiDefinitions,
@@ -333,11 +333,11 @@ const messageBuffer: string[] = [];
 let messageCursor = -1;
 const acousticZoneRuntime = new AcousticZoneRuntime();
 audio.setSpatialTransmissionResolver((source, listener) => (
-  wallTransmissionBetween(state.structures.values(), listener, source, wallEdgeIndex)
+  wallAcousticMixBetween(state.structures.values(), listener, source, wallEdgeIndex)
 ));
 
-function wallTransmissionTo(sourceX: number, sourceY: number, sourceZ: number): number {
-  return wallTransmissionBetween(
+function wallAcousticMixTo(sourceX: number, sourceY: number, sourceZ: number) {
+  return wallAcousticMixBetween(
     state.structures.values(),
     { x: state.player.x, y: state.player.y, z: state.player.z },
     { x: sourceX, y: sourceY, z: sourceZ },
@@ -345,24 +345,25 @@ function wallTransmissionTo(sourceX: number, sourceY: number, sourceZ: number): 
   );
 }
 
-function itemWallTransmission(item: WorldItem): number {
+function itemWallAcousticMix(item: WorldItem) {
   const floorZs = item.params.floorZs;
   const sourceZ = Array.isArray(floorZs) && floorZs.some((floorZ) => Number(floorZ) === state.player.z)
     ? state.player.z
     : item.z;
-  return wallTransmissionTo(item.x, item.y, sourceZ);
+  return wallAcousticMixTo(item.x, item.y, sourceZ);
 }
 
 const radioRuntime = new RadioStationRuntime(
   audio,
   getItemSpatialConfig,
-  (item) => (
-    acousticZoneRuntime.transmission(
+  (item) => {
+    const wall = itemWallAcousticMix(item);
+    return { gain: acousticZoneRuntime.transmission(
       state.player.acousticZoneId,
       worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
       state.items,
-    ) * itemWallTransmission(item)
-  ),
+    ) * wall.gain, lowpassHz: wall.lowpassHz };
+  },
   (item) => acousticZoneRuntime.couldConnect(
     state.player.acousticZoneId,
     worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
@@ -373,13 +374,14 @@ const itemEmitRuntime = new ItemEmitRuntime(
   audio,
   resolveIncomingSoundUrl,
   getItemSpatialConfig,
-  (item) => (
-    acousticZoneRuntime.transmission(
+  (item) => {
+    const wall = itemWallAcousticMix(item);
+    return { gain: acousticZoneRuntime.transmission(
       state.player.acousticZoneId,
       worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
       state.items,
-    ) * itemWallTransmission(item)
-  ),
+    ) * wall.gain, lowpassHz: wall.lowpassHz };
+  },
   (item) => acousticZoneRuntime.couldConnect(
     state.player.acousticZoneId,
     worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
@@ -391,7 +393,10 @@ const elevatorAudioRuntime = new ElevatorAudioRuntime(
   resolveIncomingSoundUrl,
   getItemSpatialConfig,
   () => state.elevatorItemId,
-  (item) => acousticZoneRuntime.doorTransmission(item) * itemWallTransmission(item),
+  (item) => {
+    const wall = itemWallAcousticMix(item);
+    return { gain: acousticZoneRuntime.doorTransmission(item) * wall.gain, lowpassHz: wall.lowpassHz };
+  },
 );
 const clockAnnouncer = new ClockAnnouncer(audio, () => ({ x: state.player.x, y: state.player.y, z: state.player.z }));
 let replaceTextOnNextType = false;
@@ -481,7 +486,7 @@ const itemBehaviorRegistry = new ItemBehaviorRegistry({
   updateStatus,
   openHelpViewer: (lines, returnMode) => openHelpViewer(lines, returnMode),
   withBase,
-  getWallTransmission: (sourceX, sourceY, sourceZ) => wallTransmissionTo(sourceX, sourceY, sourceZ),
+  getWallAcousticMix: (sourceX, sourceY, sourceZ) => wallAcousticMixTo(sourceX, sourceY, sourceZ),
 });
 
 audio.setOutputMode(outputMode);
@@ -587,6 +592,10 @@ const worldBuilderController = createWorldBuilderController({
   blip: () => audio.sfxUiBlip(),
   confirm: () => audio.sfxUiConfirm(),
   cancel: () => audio.sfxUiCancel(),
+  applyTextInputEdit,
+  setReplaceTextOnNextType: (value) => {
+    replaceTextOnNextType = value;
+  },
 });
 const itemInteractionController = createItemInteractionController({
   state,
@@ -1168,6 +1177,7 @@ function textInputMaxLengthForMode(mode: typeof state.mode): number | null {
   if (mode === 'itemPropertyEdit') return 500;
   if (mode === 'micGainEdit') return 8;
   if (mode === 'adminRoleNameEdit') return 32;
+  if (mode === 'worldBuilderPropertyEdit') return 200;
   return null;
 }
 
@@ -1192,7 +1202,8 @@ function isTextEditingMode(mode: typeof state.mode): boolean {
     mode === 'chat' ||
     mode === 'itemPropertyEdit' ||
     mode === 'micGainEdit' ||
-    mode === 'adminRoleNameEdit'
+    mode === 'adminRoleNameEdit' ||
+    mode === 'worldBuilderPropertyEdit'
   );
 }
 
@@ -1372,14 +1383,16 @@ function gameLoop(): void {
   acousticZoneRuntime.sync(state.items.values());
   const acousticNow = performance.now();
   for (const peer of peerManager.getPeers()) {
-    peerManager.setPeerAcousticGain(
+    const wall = wallAcousticMixTo(peer.x, peer.y, peer.z);
+    peerManager.setPeerAcousticMix(
       peer.id,
       acousticZoneRuntime.transmission(
         state.player.acousticZoneId,
         peer.acousticZoneId,
         state.items,
         acousticNow,
-      ) * wallTransmissionTo(peer.x, peer.y, peer.z),
+      ) * wall.gain,
+      wall.lowpassHz,
     );
   }
   audio.updateSpatialAudio(peerManager.getPeers(), listenerPosition);
@@ -2880,6 +2893,9 @@ function handleModeInput(input: ModeInput): void {
       worldBuilderDirection: ({ code: currentCode, key: currentKey }) => worldBuilderController.handleDirection(currentCode, currentKey),
       worldBuilderWallList: ({ code: currentCode, key: currentKey }) => worldBuilderController.handleWallList(currentCode, currentKey),
       worldBuilderWallActions: ({ code: currentCode, key: currentKey }) => worldBuilderController.handleWallActions(currentCode, currentKey),
+      worldBuilderPropertyList: ({ code: currentCode, key: currentKey }) => worldBuilderController.handlePropertyList(currentCode, currentKey),
+      worldBuilderPropertyEdit: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>
+        worldBuilderController.handlePropertyEdit(currentCode, currentKey, currentCtrlKey),
       worldBuilderDeleteConfirm: ({ code: currentCode, key: currentKey }) => worldBuilderController.handleDeleteConfirm(currentCode, currentKey),
       itemProperties: ({ code: currentCode, key: currentKey }) =>
         itemPropertyEditor.handleItemPropertiesModeInput(currentCode, currentKey),
@@ -2936,6 +2952,16 @@ function getMobileTextEntry(): MobileTextEntry | null {
   }
   if (state.mode === 'micGainEdit') {
     return { label: 'Microphone gain', value: state.nicknameInput, maxLength, inputMode: 'decimal', submitLabel: 'Save' };
+  }
+  if (state.mode === 'worldBuilderPropertyEdit') {
+    const label = worldBuilderController.getEditingPropertyLabel();
+    return {
+      label,
+      value: state.nicknameInput,
+      maxLength,
+      inputMode: label === 'Contact sound' ? 'text' : 'decimal',
+      submitLabel: 'Save',
+    };
   }
   return { label: 'Role name', value: state.nicknameInput, maxLength, inputMode: 'text', submitLabel: 'Save' };
 }

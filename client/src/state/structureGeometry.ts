@@ -1,6 +1,8 @@
 import type { WallStructure } from './gameState';
 
 export type WallEdgeIndex = ReadonlyMap<string, WallStructure>;
+export type WallAcousticMix = { gain: number; lowpassHz: number };
+export const OPEN_AIR_LOWPASS_HZ = 20_000;
 
 function edgeKey(
   floorZ: number,
@@ -49,13 +51,13 @@ function wallAt(
 }
 
 /** Multiply transmission for every wall edge crossed by a center-to-center ray. */
-export function wallTransmissionBetween(
+export function wallAcousticMixBetween(
   structures: Iterable<WallStructure>,
   listener: { x: number; y: number; z: number },
   source: { x: number; y: number; z: number },
   existingIndex?: WallEdgeIndex,
-): number {
-  if (listener.z !== source.z) return 1;
+): WallAcousticMix {
+  if (listener.z !== source.z) return { gain: 1, lowpassHz: OPEN_AIR_LOWPASS_HZ };
   const index = existingIndex ?? buildWallEdgeIndex(structures);
   const listenerX = Math.round(listener.x);
   const listenerY = Math.round(listener.y);
@@ -63,7 +65,7 @@ export function wallTransmissionBetween(
   const sourceY = Math.round(source.y);
   const deltaX = sourceX - listenerX;
   const deltaY = sourceY - listenerY;
-  if (deltaX === 0 && deltaY === 0) return 1;
+  if (deltaX === 0 && deltaY === 0) return { gain: 1, lowpassHz: OPEN_AIR_LOWPASS_HZ };
 
   const stepX = Math.sign(deltaX);
   const stepY = Math.sign(deltaY);
@@ -74,10 +76,13 @@ export function wallTransmissionBetween(
   let cellX = listenerX;
   let cellY = listenerY;
   let transmission = 1;
+  let lowpassHz = OPEN_AIR_LOWPASS_HZ;
 
   const applyWall = (wall: WallStructure | null): void => {
     if (!wall) return;
     transmission *= Math.max(0, Math.min(1, wall.soundTransmission));
+    const cutoff = Number.isFinite(wall.occlusionLowpassHz) ? wall.occlusionLowpassHz : OPEN_AIR_LOWPASS_HZ;
+    lowpassHz = Math.min(lowpassHz, Math.max(20, Math.min(OPEN_AIR_LOWPASS_HZ, cutoff)));
   };
 
   while (cellX !== sourceX || cellY !== sourceY) {
@@ -93,20 +98,28 @@ export function wallTransmissionBetween(
     } else {
       const vertical = wallAt(index, listener.z, 'vertical', cellX + (stepX > 0 ? 1 : 0), cellY);
       const horizontal = wallAt(index, listener.z, 'horizontal', cellX, cellY + (stepY > 0 ? 1 : 0));
-      // Match diagonal movement at an exact corner: one wall leaves a path,
-      // while two walls contribute both transmissions.
-      if (vertical && horizontal) {
-        applyWall(vertical);
-        applyWall(horizontal);
-      }
+      // Acoustic rays count every touched edge. This intentionally differs
+      // from the permissive diagonal movement rule at wall corners.
+      applyWall(vertical);
+      applyWall(horizontal);
       cellX += stepX;
       cellY += stepY;
       nextTX += deltaTX;
       nextTY += deltaTY;
     }
-    if (transmission <= 0) return 0;
+    if (transmission <= 0) return { gain: 0, lowpassHz };
   }
-  return transmission;
+  return { gain: transmission, lowpassHz };
+}
+
+/** Return only wall gain for callers that do not render filtering. */
+export function wallTransmissionBetween(
+  structures: Iterable<WallStructure>,
+  listener: { x: number; y: number; z: number },
+  source: { x: number; y: number; z: number },
+  existingIndex?: WallEdgeIndex,
+): number {
+  return wallAcousticMixBetween(structures, listener, source, existingIndex).gain;
 }
 
 /** Resolve movement collision using the shared cardinal/diagonal corner rule. */
