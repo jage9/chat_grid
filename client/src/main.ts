@@ -39,6 +39,8 @@ import {
   type MobileTextEntry,
 } from './input/mobileController';
 import { getEditSessionAction } from './input/editSession';
+import { createOptionSelector } from './input/optionSelector';
+import { createConfirmationController } from './input/confirmationController';
 import { formatSteppedNumber, snapNumberToStep } from './input/numeric';
 import { type IncomingMessage, type OutgoingMessage } from './network/protocol';
 import { createOnMessageHandler } from './network/messageHandlers';
@@ -583,6 +585,20 @@ const adminController = createAdminController({
     replaceTextOnNextType = value;
   },
 });
+const optionSelector = createOptionSelector({
+  state,
+  announceMenuEntry,
+  updateStatus,
+  blip: () => audio.sfxUiBlip(),
+  cancel: () => audio.sfxUiCancel(),
+});
+const confirmationController = createConfirmationController({
+  state,
+  announceMenuEntry,
+  updateStatus,
+  blip: () => audio.sfxUiBlip(),
+  cancel: () => audio.sfxUiCancel(),
+});
 const worldBuilderController = createWorldBuilderController({
   state,
   hasPermission: (key) => authController.hasPermission(key),
@@ -596,6 +612,8 @@ const worldBuilderController = createWorldBuilderController({
   setReplaceTextOnNextType: (value) => {
     replaceTextOnNextType = value;
   },
+  openOptionSelector: (request) => optionSelector.open(request),
+  openConfirmation: (request) => confirmationController.open(request),
 });
 const itemInteractionController = createItemInteractionController({
   state,
@@ -614,6 +632,7 @@ const itemInteractionController = createItemInteractionController({
   itemPropertyLabel,
   useItem: (item) => useItem(item),
   secondaryUseItem: (item) => secondaryUseItem(item),
+  openConfirmation: (request) => confirmationController.open(request),
 });
 
 /** Toggles updates panel visibility and syncs associated ARIA state. */
@@ -1152,22 +1171,6 @@ function useItem(item: WorldItem): void {
 /** Sends an item secondary-use request for the selected item. */
 function secondaryUseItem(item: WorldItem): void {
   signaling.send({ type: 'item_secondary_use', itemId: item.id });
-}
-
-/** Opens option-list selection mode for list-based item properties. */
-function openItemPropertyOptionSelect(item: WorldItem, key: string): void {
-  const options = getItemPropertyOptionValues(item.type, key);
-  if (!options || options.length === 0) {
-    return;
-  }
-  state.mode = 'itemPropertyOptionSelect';
-  state.editingPropertyKey = key;
-  state.itemPropertyOptionValues = options;
-  const currentValue = getItemPropertyValue(item, key);
-  const currentIndex = options.indexOf(currentValue);
-  state.itemPropertyOptionIndex = currentIndex >= 0 ? currentIndex : 0;
-  updateStatus(`Select ${itemPropertyLabel(key)}: ${state.itemPropertyOptionValues[state.itemPropertyOptionIndex]}`);
-  audio.sfxUiBlip();
 }
 
 /** Returns the active text-input max length for the current UI mode, if applicable. */
@@ -2752,11 +2755,6 @@ function handleItemManageTransferUserModeInput(code: string, key: string): void 
   itemInteractionController.handleItemManageTransferUserModeInput(code, key);
 }
 
-/** Handles standardized yes/no confirmation for pending item-management actions. */
-function handleConfirmYesNoModeInput(code: string, key: string): void {
-  itemInteractionController.handleConfirmYesNoModeInput(code, key);
-}
-
 /** Handles top-level Shift+Z admin menu action selection. */
 function handleAdminMenuModeInput(code: string, key: string): void {
   adminController.handleAdminMenuModeInput(code, key);
@@ -2804,7 +2802,7 @@ const itemPropertyEditor = createItemPropertyEditor({
   itemPropertyLabel,
   isItemPropertyEditable,
   getItemPropertyOptionValues,
-  openItemPropertyOptionSelect,
+  openOptionSelector: (request) => optionSelector.open(request),
   describeItemPropertyHelp,
   getItemPropertyMetadata,
   validateNumericItemPropertyInput,
@@ -2876,7 +2874,8 @@ function handleModeInput(input: ModeInput): void {
       itemManageOptions: ({ code: currentCode, key: currentKey }) => handleItemManageOptionsModeInput(currentCode, currentKey),
       itemManageTransferUser: ({ code: currentCode, key: currentKey }) =>
         handleItemManageTransferUserModeInput(currentCode, currentKey),
-      confirmYesNo: ({ code: currentCode, key: currentKey }) => handleConfirmYesNoModeInput(currentCode, currentKey),
+      confirmYesNo: ({ code: currentCode, key: currentKey }) => confirmationController.handleInput(currentCode, currentKey),
+      optionSelect: ({ code: currentCode, key: currentKey }) => optionSelector.handleInput(currentCode, currentKey),
       adminMenu: ({ code: currentCode, key: currentKey }) => handleAdminMenuModeInput(currentCode, currentKey),
       adminRoleList: ({ code: currentCode, key: currentKey }) => handleAdminRoleListModeInput(currentCode, currentKey),
       adminRolePermissionList: ({ code: currentCode, key: currentKey }) =>
@@ -2896,15 +2895,10 @@ function handleModeInput(input: ModeInput): void {
       worldBuilderPropertyList: ({ code: currentCode, key: currentKey }) => worldBuilderController.handlePropertyList(currentCode, currentKey),
       worldBuilderPropertyEdit: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>
         worldBuilderController.handlePropertyEdit(currentCode, currentKey, currentCtrlKey),
-      worldBuilderTypeSelect: ({ code: currentCode, key: currentKey }) =>
-        worldBuilderController.handleTypeSelect(currentCode, currentKey),
-      worldBuilderDeleteConfirm: ({ code: currentCode, key: currentKey }) => worldBuilderController.handleDeleteConfirm(currentCode, currentKey),
       itemProperties: ({ code: currentCode, key: currentKey }) =>
         itemPropertyEditor.handleItemPropertiesModeInput(currentCode, currentKey),
       itemPropertyEdit: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>
         itemPropertyEditor.handleItemPropertyEditModeInput(currentCode, currentKey, currentCtrlKey),
-      itemPropertyOptionSelect: ({ code: currentCode, key: currentKey }) =>
-        itemPropertyEditor.handleItemPropertyOptionSelectModeInput(currentCode, currentKey),
     },
     onNormalMode: handleNormalModeInput,
   });

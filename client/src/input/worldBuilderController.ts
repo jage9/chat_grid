@@ -4,6 +4,8 @@ import type { GameState, StructurePreset, WallStructure } from '../state/gameSta
 import type { OutgoingMessage } from '../network/protocol';
 import { getEditSessionAction } from './editSession';
 import { formatSteppedNumber, snapNumberToStep } from './numeric';
+import type { OptionSelectorRequest } from './optionSelector';
+import type { ConfirmationRequest } from './confirmationController';
 
 type MenuEntry<T extends string = string> = { id: T; label: string; tooltip: string };
 
@@ -18,6 +20,8 @@ type WorldBuilderDeps = {
   cancel: () => void;
   applyTextInputEdit: (code: string, key: string, maxLength: number, ctrlKey?: boolean, allowReplaceOnNextType?: boolean) => void;
   setReplaceTextOnNextType: (value: boolean) => void;
+  openOptionSelector: (request: OptionSelectorRequest) => void;
+  openConfirmation: (request: ConfirmationRequest) => void;
 };
 
 const ROOT_ACTIONS = [
@@ -41,10 +45,6 @@ const PROPERTY_ACTIONS = [
   { id: 'soundTransmission', label: 'Sound transmission', tooltip: 'Set gain from 0, silent, to 1, unchanged. Use Left or Right for 0.05 steps and Page Up or Page Down for 0.5.' },
   { id: 'occlusionLowpassHz', label: 'Occlusion low-pass', tooltip: 'Set the highest transmitted frequency from 20 to 20000 hertz. Use Left or Right for 100 hertz and Page Up or Page Down for 1000.' },
   { id: 'contactSound', label: 'Contact sound', tooltip: 'Set the sound URL played when someone hits or passes through this wall.' },
-] as const;
-const DELETE_CHOICES = [
-  { id: 'no', label: 'No', tooltip: 'Keep this wall.' },
-  { id: 'yes', label: 'Yes', tooltip: 'Permanently delete this entire wall run.' },
 ] as const;
 type PropertyId = typeof PROPERTY_ACTIONS[number]['id'];
 type EditablePropertyId = Exclude<PropertyId, 'preset'>;
@@ -233,9 +233,18 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
         return;
       }
       if (action === 'delete') {
-        index = 0;
-        deps.state.mode = 'worldBuilderDeleteConfirm';
-        deps.announceMenuEntry(`Delete ${wall.title}?`, DELETE_CHOICES[0].label);
+        deps.openConfirmation({
+          prompt: `Delete ${wall.title}?`,
+          onConfirm: () => {
+            deps.send({ type: 'structure_delete', structureId: wall.id });
+            deps.state.mode = 'normal';
+          },
+          onCancel: () => {
+            index = 0;
+            deps.state.mode = 'worldBuilderWallActions';
+            deps.announceMenuEntry('Wall actions', WALL_ACTIONS[0].label);
+          },
+        });
         return;
       }
       deps.updateStatus(entries[index].tooltip);
@@ -282,10 +291,21 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
           deps.cancel();
           return;
         }
-        const currentIndex = presets.findIndex((preset) => preset.id === wall.preset);
-        index = currentIndex >= 0 ? currentIndex : 0;
-        deps.state.mode = 'worldBuilderTypeSelect';
-        deps.announceMenuEntry('Wall type', presets[index].title);
+        deps.openOptionSelector({
+          title: 'Wall type',
+          options: presets.map((preset) => ({ id: preset.id, label: preset.title })),
+          selectedId: wall.preset,
+          onSelect: (preset) => {
+            deps.send({ type: 'structure_update_wall', structureId: wall.id, preset });
+            index = 0;
+            deps.state.mode = 'worldBuilderPropertyList';
+          },
+          onCancel: () => {
+            index = 0;
+            deps.state.mode = 'worldBuilderPropertyList';
+            deps.announceMenuEntry('Wall properties', PROPERTY_ACTIONS[0].label);
+          },
+        });
         return;
       }
       editingProperty = property;
@@ -298,26 +318,6 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
       index = 0;
       deps.state.mode = 'worldBuilderWallActions';
       deps.announceMenuEntry('Wall actions', WALL_ACTIONS[0].label);
-    });
-  }
-
-  function handleTypeSelect(code: string, key: string): void {
-    const entries = presets.map((preset) => ({
-      id: preset.id,
-      label: preset.title,
-      tooltip: `Reset this wall to the complete ${preset.title} preset, including movement, height, sound transmission, low-pass, and contact sound.`,
-    }));
-    handleList(code, key, entries, (preset) => {
-      const wall = selectedWall();
-      if (!wall) return;
-      deps.send({ type: 'structure_update_wall', structureId: wall.id, preset });
-      index = 0;
-      deps.state.mode = 'worldBuilderPropertyList';
-      deps.updateStatus(`Resetting wall to ${entries.find((entry) => entry.id === preset)?.label ?? preset}.`);
-    }, 'Wall type', () => {
-      index = 0;
-      deps.state.mode = 'worldBuilderPropertyList';
-      deps.announceMenuEntry('Wall properties', PROPERTY_ACTIONS[0].label);
     });
   }
 
@@ -380,25 +380,6 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
     deps.applyTextInputEdit(code, key, editingProperty === 'contactSound' ? 200 : 10, ctrlKey, true);
   }
 
-  function handleDeleteConfirm(code: string, key: string): void {
-    handleList(code, key, DELETE_CHOICES, (choice) => {
-      const wall = selectedWall();
-      if (choice === 'yes' && wall) {
-        deps.send({ type: 'structure_delete', structureId: wall.id });
-        deps.state.mode = 'normal';
-        return;
-      }
-      index = 0;
-      deps.state.mode = 'worldBuilderWallActions';
-      deps.announceMenuEntry('Wall actions', WALL_ACTIONS[0].label);
-      deps.cancel();
-    }, 'Delete wall?', () => {
-      index = 0;
-      deps.state.mode = 'worldBuilderWallActions';
-      deps.announceMenuEntry('Wall actions', WALL_ACTIONS[0].label);
-    });
-  }
-
   return {
     setPresets(next: StructurePreset[]) {
       presets = [...next];
@@ -413,9 +394,7 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
     handleWallList,
     handleWallActions,
     handlePropertyList,
-    handleTypeSelect,
     handlePropertyEdit,
-    handleDeleteConfirm,
     handleActionResult(message: { ok: boolean; message: string }) {
       deps.updateStatus(message.message);
       if (message.ok) deps.confirm();

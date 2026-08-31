@@ -91,8 +91,6 @@ export function runDisconnectFlow(deps: ConnectFlowDeps): void {
   deps.state.itemPropertyKeys = [];
   deps.state.itemPropertyIndex = 0;
   deps.state.editingPropertyKey = null;
-  deps.state.itemPropertyOptionValues = [];
-  deps.state.itemPropertyOptionIndex = 0;
   deps.state.effectSelectIndex = 0;
 
   deps.mediaSetConnecting(false);

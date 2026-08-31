@@ -61,7 +61,7 @@ export type GameMode =
   | 'selectItem'
   | 'itemProperties'
   | 'itemPropertyEdit'
-  | 'itemPropertyOptionSelect'
+  | 'optionSelect'
   | 'itemManageOptions'
   | 'itemManageTransferUser'
   | 'confirmYesNo'
@@ -80,8 +80,6 @@ export type GameMode =
   | 'worldBuilderWallActions'
   | 'worldBuilderPropertyList'
   | 'worldBuilderPropertyEdit'
-  | 'worldBuilderTypeSelect'
-  | 'worldBuilderDeleteConfirm'
   | 'pianoUse';
 
 export type Player = {
@@ -122,8 +120,6 @@ export type GameState = {
   itemPropertyKeys: string[];
   itemPropertyIndex: number;
   editingPropertyKey: string | null;
-  itemPropertyOptionValues: string[];
-  itemPropertyOptionIndex: number;
   effectSelectIndex: number;
   addItemTypeIndex: number;
   isMuted: boolean;
@@ -154,8 +150,6 @@ export function createInitialState(): GameState {
     itemPropertyKeys: [],
     itemPropertyIndex: 0,
     editingPropertyKey: null,
-    itemPropertyOptionValues: [],
-    itemPropertyOptionIndex: 0,
     effectSelectIndex: 0,
     addItemTypeIndex: 0,
     isMuted: false,

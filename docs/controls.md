@@ -54,13 +54,13 @@ This document is the authoritative keymap for the client.
 - `W`: Open World Builder when the account has `world.structure.edit`.
 - `Add wall`: Select a server-configured preset, then select the north, south, east, or west edge of the current square.
 - `Edit walls`: List current-floor walls nearest first, then edit properties, adjust either endpoint, or delete the complete wall.
-- `Set start` / `Set finish`: Each entry shows its current `x, y, z`. `ArrowLeft` decreases that endpoint's run-axis coordinate by one; `ArrowRight` increases it. The result announces whether the wall extended or retracted and gives the authoritative new coordinate.
+- `Set start` / `Set finish`: Each entry shows its current `x, y, z`. `ArrowLeft` decreases that endpoint's run-axis coordinate by one; `ArrowRight` increases it. The result announces only the authoritative new coordinate.
 - `Edit properties`: Change wall type, sound transmission (`0..1`), occlusion low-pass (`20..20000` hertz), or the contact-sound URL.
-- `Type`: Choose a server preset again. This resets title, movement behavior, height, transmission, low-pass, and contact sound to that preset's defaults.
+- `Type`: Uses the same shared option selector as list-based item properties. Choosing a server preset resets title, movement behavior, height, transmission, low-pass, and contact sound to that preset's defaults.
 - On transmission or low-pass, `ArrowLeft`/`ArrowRight` changes one numeric step and `PageDown`/`PageUp` changes ten steps. Inside the numeric editor, use `ArrowDown`/`ArrowUp` and the corresponding page keys.
 - `Space`: Read specific help for the selected World Builder action, preset, direction, wall, or property.
 - Walls are edited live. Other connected clients receive and render changes immediately.
-- Wall deletion uses a `No`/`Yes` confirmation menu.
+- Wall deletion uses the same default-No confirmation flow as item deletion; confirmation choices do not have tooltips.
 - Brick, glass, and fence walls block movement. Curtains may be crossed; wall impacts and curtain crossings play the structure's contact sound locally and spatially for nearby users.
 - New curtain, glass, and fence walls use their matching contact sounds; brick uses the standard wall sound. Builders may edit any wall's sound URL.
 
@@ -101,11 +101,11 @@ This document is the authoritative keymap for the client.
 
 ## Menu/List Navigation Modes
 
-Applies to effect select, user/item list modes, item selection, item property list, and property option select.
+Applies to effect select, user/item list modes, item selection, item property list, and the shared option selector.
 
 - `ArrowUp` / `ArrowDown`: Move selection
 - `PageUp` / `PageDown` in item property list: Jump 10 values for left/right-editable option fields
-- `PageUp` / `PageDown` in item property option select: Jump 10 options backward/forward
+- `PageUp` / `PageDown` in the option selector: Jump 10 options backward/forward
 - `ArrowLeft` / `ArrowRight` in user list: Lower/raise selected user listen volume (`0.5..4.0`)
 - `Enter`: Confirm selection
 - `Escape`: Exit/cancel

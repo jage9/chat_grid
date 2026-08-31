@@ -1355,17 +1355,11 @@ class SignalingServer:
                     endpoint=packet.endpoint,
                     delta=packet.delta,
                 )
-                extended = (packet.endpoint == "start" and packet.delta < 0) or (
-                    packet.endpoint == "end" and packet.delta > 0
-                )
                 endpoint: Literal["start", "finish"] = (
                     "start" if packet.endpoint == "start" else "finish"
                 )
                 coordinate = self.structure_service.wall_endpoint(wall, endpoint)
-                result_message = (
-                    f"{'Extended' if extended else 'Retracted'} {wall.title} "
-                    f"{endpoint} to {coordinate[0]}, {coordinate[1]}, {coordinate[2]}."
-                )
+                result_message = f"{coordinate[0]}, {coordinate[1]}, {coordinate[2]}"
             elif isinstance(packet, StructureUpdateWallPacket):
                 wall = self.structure_service.update_wall(
                     packet.structureId,
@@ -1374,7 +1368,14 @@ class SignalingServer:
                     occlusion_lowpass_hz=packet.occlusionLowpassHz,
                     contact_sound=packet.contactSound,
                 )
-                result_message = f"Updated {wall.title}."
+                if packet.preset is not None:
+                    result_message = wall.title
+                elif packet.soundTransmission is not None:
+                    result_message = f"{wall.soundTransmission:g}"
+                elif packet.occlusionLowpassHz is not None:
+                    result_message = str(wall.occlusionLowpassHz)
+                else:
+                    result_message = wall.contactSound or "none"
             else:
                 wall = self.structure_service.remove(packet.structureId)
                 self._request_state_save()

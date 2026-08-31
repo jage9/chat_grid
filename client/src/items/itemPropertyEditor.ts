@@ -2,6 +2,7 @@ import { handleListControlKey } from '../input/listController';
 import { getEditSessionAction } from '../input/editSession';
 import { formatSteppedNumber, snapNumberToStep } from '../input/numeric';
 import { type WorldItem } from '../state/gameState';
+import type { OptionSelectorRequest } from '../input/optionSelector';
 
 /**
  * Dependencies required to drive item property inspect/edit flows.
@@ -11,8 +12,6 @@ type EditorDeps = {
     mode: string;
     selectedItemId: string | null;
     editingPropertyKey: string | null;
-    itemPropertyOptionValues: string[];
-    itemPropertyOptionIndex: number;
     itemPropertyKeys: string[];
     itemPropertyIndex: number;
     nicknameInput: string;
@@ -24,7 +23,7 @@ type EditorDeps = {
   itemPropertyLabel: (key: string) => string;
   isItemPropertyEditable: (item: WorldItem, key: string) => boolean;
   getItemPropertyOptionValues: (itemType: WorldItem['type'], key: string) => string[] | undefined;
-  openItemPropertyOptionSelect: (item: WorldItem, key: string) => void;
+  openOptionSelector: (request: OptionSelectorRequest) => void;
   describeItemPropertyHelp: (item: WorldItem, key: string) => string;
   getItemPropertyMetadata: (
     itemType: WorldItem['type'],
@@ -55,23 +54,18 @@ type EditorDeps = {
 export function createItemPropertyEditor(deps: EditorDeps): {
   handleItemPropertiesModeInput: (code: string, key: string) => void;
   handleItemPropertyEditModeInput: (code: string, key: string, ctrlKey: boolean) => void;
-  handleItemPropertyOptionSelectModeInput: (code: string, key: string) => void;
 } {
   function handleItemPropertiesModeInput(code: string, key: string): void {
     const itemId = deps.state.selectedItemId;
     if (!itemId) {
       deps.state.mode = 'normal';
       deps.state.editingPropertyKey = null;
-      deps.state.itemPropertyOptionValues = [];
-      deps.state.itemPropertyOptionIndex = 0;
       return;
     }
     const item = deps.state.items.get(itemId);
     if (!item) {
       deps.state.mode = 'normal';
       deps.state.editingPropertyKey = null;
-      deps.state.itemPropertyOptionValues = [];
-      deps.state.itemPropertyOptionIndex = 0;
       deps.updateStatus('Item no longer exists.');
       deps.sfxUiCancel();
       return;
@@ -184,7 +178,24 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         return;
       }
       if (deps.getItemPropertyOptionValues(item.type, selectedKey)) {
-        deps.openItemPropertyOptionSelect(item, selectedKey);
+        const options = deps.getItemPropertyOptionValues(item.type, selectedKey) ?? [];
+        deps.state.editingPropertyKey = selectedKey;
+        deps.openOptionSelector({
+          title: `Select ${deps.itemPropertyLabel(selectedKey)}`,
+          options: options.map((value) => ({ id: value, label: value })),
+          selectedId: deps.getItemPropertyValue(item, selectedKey),
+          onSelect: (selectedValue) => {
+            deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: selectedValue } });
+            deps.onPreviewPropertyChange?.(item, selectedKey, selectedValue);
+            deps.state.mode = 'itemProperties';
+            deps.state.editingPropertyKey = null;
+          },
+          onCancel: () => {
+            deps.state.mode = 'itemProperties';
+            deps.state.editingPropertyKey = null;
+            deps.updateStatus('Cancelled.');
+          },
+        });
         return;
       }
       deps.state.mode = 'itemPropertyEdit';
@@ -210,8 +221,6 @@ export function createItemPropertyEditor(deps: EditorDeps): {
       deps.state.itemPropertyKeys = [];
       deps.state.itemPropertyIndex = 0;
       deps.state.editingPropertyKey = null;
-      deps.state.itemPropertyOptionValues = [];
-      deps.state.itemPropertyOptionIndex = 0;
       deps.updateStatus('Closed item properties.');
       deps.sfxUiCancel();
     }
@@ -351,69 +360,8 @@ export function createItemPropertyEditor(deps: EditorDeps): {
     deps.applyTextInputEdit(code, key, maxLength, ctrlKey, true);
   }
 
-  function handleItemPropertyOptionSelectModeInput(code: string, key: string): void {
-    const itemId = deps.state.selectedItemId;
-    const propertyKey = deps.state.editingPropertyKey;
-    if (!itemId || !propertyKey || deps.state.itemPropertyOptionValues.length === 0) {
-      deps.state.mode = 'itemProperties';
-      deps.state.editingPropertyKey = null;
-      deps.state.itemPropertyOptionValues = [];
-      deps.state.itemPropertyOptionIndex = 0;
-      return;
-    }
-
-    if (code === 'PageUp' || code === 'PageDown') {
-      const length = deps.state.itemPropertyOptionValues.length;
-      const jump = Math.min(10, Math.max(1, length - 1));
-      const delta = code === 'PageUp' ? -jump : jump;
-      const nextIndex = (deps.state.itemPropertyOptionIndex + delta + length * 1000) % length;
-      deps.state.itemPropertyOptionIndex = nextIndex;
-      deps.updateStatus(deps.state.itemPropertyOptionValues[nextIndex]);
-      deps.sfxUiBlip();
-      return;
-    }
-
-    const control = handleListControlKey(
-      code,
-      key,
-      deps.state.itemPropertyOptionValues,
-      deps.state.itemPropertyOptionIndex,
-      (value) => value,
-    );
-    if (control.type === 'move') {
-      deps.state.itemPropertyOptionIndex = control.index;
-      deps.updateStatus(deps.state.itemPropertyOptionValues[deps.state.itemPropertyOptionIndex]);
-      deps.sfxUiBlip();
-      return;
-    }
-
-    if (control.type === 'select') {
-      const selectedValue = deps.state.itemPropertyOptionValues[deps.state.itemPropertyOptionIndex];
-      deps.signalingSend({ type: 'item_update', itemId, params: { [propertyKey]: selectedValue } });
-      const item = deps.state.items.get(itemId);
-      if (item) {
-        deps.onPreviewPropertyChange?.(item, propertyKey, selectedValue);
-      }
-      deps.state.mode = 'itemProperties';
-      deps.state.editingPropertyKey = null;
-      deps.state.itemPropertyOptionValues = [];
-      deps.state.itemPropertyOptionIndex = 0;
-      return;
-    }
-
-    if (control.type === 'cancel') {
-      deps.state.mode = 'itemProperties';
-      deps.state.editingPropertyKey = null;
-      deps.state.itemPropertyOptionValues = [];
-      deps.state.itemPropertyOptionIndex = 0;
-      deps.updateStatus('Cancelled.');
-      deps.sfxUiCancel();
-    }
-  }
-
   return {
     handleItemPropertiesModeInput,
     handleItemPropertyEditModeInput,
-    handleItemPropertyOptionSelectModeInput,
   };
 }

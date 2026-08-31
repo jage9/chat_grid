@@ -71,7 +71,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_elevator_status`: targeted rider state (`entered`, `moving`, `arrived`, or `exited`) with `itemId`, `z`, and an optional user-facing `message`.
 - `structure_upsert`: full wall-run replacement after a live create, resize, or property update.
 - `structure_remove`: removal of one wall run.
-- `structure_action_result`: success/error and user-facing status for add, resize, update, or delete.
+- `structure_action_result`: success/error and user-facing status for add, resize, update, or delete. Successful resize/update results contain only the authoritative new coordinate/property value so shared controls do not receive a second narrative announcement.
 - `world_sound`: server-validated positional structure contact sound (`sound`, `x`, `y`, `z`, optional `range`) sent to users other than the mover.
 
 ## Item Packet Behavior

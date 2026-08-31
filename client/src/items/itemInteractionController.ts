@@ -1,5 +1,5 @@
 import { handleListControlKey } from '../input/listController';
-import { handleYesNoMenuInput, YES_NO_OPTIONS } from '../input/yesNoMenu';
+import type { ConfirmationRequest } from '../input/confirmationController';
 import type { IncomingMessage, OutgoingMessage } from '../network/protocol';
 import type { GameMode, SelectionContext, WorldItem } from '../state/gameState';
 
@@ -11,7 +11,7 @@ export type ItemManagementOption = {
   tooltip?: string;
 };
 
-export type ItemManagementConfirmContext = {
+type ItemManagementConfirmContext = {
   itemId: string;
   action: ItemManagementAction;
   prompt: string;
@@ -34,8 +34,6 @@ type ItemControllerDeps = {
     itemPropertyKeys: string[];
     itemPropertyIndex: number;
     editingPropertyKey: string | null;
-    itemPropertyOptionValues: string[];
-    itemPropertyOptionIndex: number;
     items: Map<string, WorldItem>;
     peers: Map<string, unknown>;
     player: { id: string | null };
@@ -64,6 +62,7 @@ type ItemControllerDeps = {
   itemPropertyLabel: (key: string) => string;
   useItem: (item: WorldItem) => void;
   secondaryUseItem: (item: WorldItem) => void;
+  openConfirmation: (request: ConfirmationRequest) => void;
 };
 
 /**
@@ -80,15 +79,12 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
   handleSelectItemModeInput: (code: string, key: string) => void;
   handleItemManageOptionsModeInput: (code: string, key: string) => void;
   handleItemManageTransferUserModeInput: (code: string, key: string) => void;
-  handleConfirmYesNoModeInput: (code: string, key: string) => void;
 } {
   let itemManagementSelectedItemId: string | null = null;
   let itemManagementOptions: ItemManagementOption[] = [];
   let itemManagementOptionIndex = 0;
   let itemManagementTargetUserIndex = 0;
   let itemManagementTransferTargets: ItemTransferTarget[] = [];
-  let itemManagementConfirmIndex = 0;
-  let itemManagementConfirmContext: ItemManagementConfirmContext | null = null;
   let itemPropertiesShowAll = false;
 
   function canManageDeleteItem(item: WorldItem): boolean {
@@ -134,15 +130,29 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     itemManagementOptionIndex = 0;
     itemManagementTransferTargets = [];
     itemManagementTargetUserIndex = 0;
-    itemManagementConfirmIndex = 0;
-    itemManagementConfirmContext = null;
   }
 
   function openItemManagementConfirm(context: ItemManagementConfirmContext): void {
-    itemManagementConfirmContext = context;
-    itemManagementConfirmIndex = 0;
-    deps.state.mode = 'confirmYesNo';
-    deps.announceMenuEntry(context.prompt, YES_NO_OPTIONS[itemManagementConfirmIndex].label);
+    deps.openConfirmation({
+      prompt: context.prompt,
+      onConfirm: () => {
+        deps.state.mode = 'normal';
+        if (context.action === 'delete') {
+          deps.signalingSend({ type: 'item_delete', itemId: context.itemId });
+        } else if (context.targetUserId) {
+          deps.signalingSend({
+            type: 'item_transfer',
+            itemId: context.itemId,
+            targetUserId: context.targetUserId,
+          });
+        }
+        resetItemManagementState();
+      },
+      onCancel: () => {
+        deps.state.mode = 'itemManageOptions';
+        deps.updateStatus(itemManagementOptions[itemManagementOptionIndex]?.label ?? 'Item management.');
+      },
+    });
   }
 
   function beginItemSelection(context: Exclude<SelectionContext, 'drop' | null>, items: WorldItem[]): void {
@@ -177,8 +187,6 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     deps.state.selectedItemId = item.id;
     deps.state.mode = 'itemProperties';
     deps.state.editingPropertyKey = null;
-    deps.state.itemPropertyOptionValues = [];
-    deps.state.itemPropertyOptionIndex = 0;
     deps.state.itemPropertyKeys = showAll ? deps.getInspectItemPropertyKeys(item) : deps.getEditableItemPropertyKeys(item);
     deps.state.itemPropertyIndex = 0;
     if (deps.state.itemPropertyKeys.length === 0) {
@@ -400,46 +408,6 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     }
   }
 
-  function handleConfirmYesNoModeInput(code: string, key: string): void {
-    if (!itemManagementConfirmContext) {
-      deps.state.mode = 'normal';
-      resetItemManagementState();
-      return;
-    }
-    const control = handleYesNoMenuInput(code, key, itemManagementConfirmIndex);
-    if (control.type === 'move') {
-      itemManagementConfirmIndex = control.index;
-      deps.updateStatus(YES_NO_OPTIONS[itemManagementConfirmIndex].label);
-      deps.sfxUiBlip();
-      return;
-    }
-    if (control.type === 'cancel') {
-      deps.state.mode = 'itemManageOptions';
-      itemManagementConfirmContext = null;
-      deps.updateStatus(itemManagementOptions[itemManagementOptionIndex]?.label ?? 'Item management.');
-      deps.sfxUiCancel();
-      return;
-    }
-    if (control.type === 'select') {
-      const selected = YES_NO_OPTIONS[itemManagementConfirmIndex];
-      const context = itemManagementConfirmContext;
-      itemManagementConfirmContext = null;
-      if (selected.id === 'no') {
-        deps.state.mode = 'itemManageOptions';
-        deps.updateStatus(itemManagementOptions[itemManagementOptionIndex]?.label ?? 'Cancelled.');
-        deps.sfxUiCancel();
-        return;
-      }
-      deps.state.mode = 'normal';
-      if (context.action === 'delete') {
-        deps.signalingSend({ type: 'item_delete', itemId: context.itemId });
-      } else if (context.action === 'transfer' && context.targetUserId) {
-        deps.signalingSend({ type: 'item_transfer', itemId: context.itemId, targetUserId: context.targetUserId });
-      }
-      resetItemManagementState();
-    }
-  }
-
   return {
     reset: resetItemManagementState,
     beginItemSelection,
@@ -451,6 +419,5 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     handleSelectItemModeInput,
     handleItemManageOptionsModeInput,
     handleItemManageTransferUserModeInput,
-    handleConfirmYesNoModeInput,
   };
 }
