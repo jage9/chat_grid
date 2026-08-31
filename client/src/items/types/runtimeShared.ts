@@ -20,6 +20,7 @@ export type ItemBehaviorDeps = {
   updateStatus: (message: string) => void;
   openHelpViewer: (lines: string[], returnMode: GameMode) => void;
   withBase: (path: string) => string;
+  getWallTransmission: (sourceX: number, sourceY: number, sourceZ: number) => number;
 };
 
 /** Optional per-item behavior hooks used by the client runtime. */

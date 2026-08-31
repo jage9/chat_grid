@@ -49,6 +49,7 @@ type PianoSpatialSource = {
   x: number;
   y: number;
   range: number;
+  acousticGain?: number;
 };
 
 type InstrumentPreset = {
@@ -310,12 +311,13 @@ export class PianoSynth {
     const decaySeconds = decayPercentToSeconds(decayPercent);
     const releaseSeconds = Math.max(0.02, releasePercentToSeconds(releasePercent) * (preset.releaseScale ?? 1));
 
-    const spatialMix = resolveSpatialMix({
+    const acousticGain = Math.max(0, Math.min(1, spatial.acousticGain ?? 1));
+    const spatialMix = acousticGain > 0 ? resolveSpatialMix({
       dx: spatial.x,
       dy: spatial.y,
       range: spatial.range,
-      baseGain: 1,
-    });
+      baseGain: acousticGain,
+    }) : null;
     if (!spatialMix || spatialMix.gain <= 0) return;
 
     const voiceGain = context.audioCtx.createGain();
@@ -440,12 +442,13 @@ export class PianoSynth {
     brightnessPercent: number,
   ): void {
     const now = context.audioCtx.currentTime;
-    const spatialMix = resolveSpatialMix({
+    const acousticGain = Math.max(0, Math.min(1, spatial.acousticGain ?? 1));
+    const spatialMix = acousticGain > 0 ? resolveSpatialMix({
       dx: spatial.x,
       dy: spatial.y,
       range: spatial.range,
-      baseGain: 1,
-    });
+      baseGain: acousticGain,
+    }) : null;
     if (!spatialMix || spatialMix.gain <= 0) return;
     const variant = drumVariantForMidi(midi);
     const midiOffset = (Math.round(midi) - 60) / 24;

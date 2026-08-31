@@ -59,7 +59,12 @@ import {
   type GameMode,
   type WorldItem,
 } from './state/gameState';
-import { adjacentWallDescriptions, blockingWallForMove } from './state/structureGeometry';
+import {
+  adjacentWallDescriptions,
+  blockingWallForMove,
+  buildWallEdgeIndex,
+  wallTransmissionBetween,
+} from './state/structureGeometry';
 import {
   applyServerItemUiDefinitions,
   getItemManagementActionMetadata,
@@ -314,6 +319,7 @@ let worldFloors = new Map<number, string>([
   [0, 'Ground floor'],
   [40, 'Second floor'],
 ]);
+let wallEdgeIndex = buildWallEdgeIndex(state.structures.values());
 let lastWallCollisionDirection: string | null = null;
 let statusTimeout: number | null = null;
 let lastFocusedElement: Element | null = null;
@@ -325,13 +331,36 @@ let activeWelcomeMessage = DEFAULT_WELCOME_MESSAGE;
 const messageBuffer: string[] = [];
 let messageCursor = -1;
 const acousticZoneRuntime = new AcousticZoneRuntime();
+audio.setSpatialTransmissionResolver((source, listener) => (
+  wallTransmissionBetween(state.structures.values(), listener, source, wallEdgeIndex)
+));
+
+function wallTransmissionTo(sourceX: number, sourceY: number, sourceZ: number): number {
+  return wallTransmissionBetween(
+    state.structures.values(),
+    { x: state.player.x, y: state.player.y, z: state.player.z },
+    { x: sourceX, y: sourceY, z: sourceZ },
+    wallEdgeIndex,
+  );
+}
+
+function itemWallTransmission(item: WorldItem): number {
+  const floorZs = item.params.floorZs;
+  const sourceZ = Array.isArray(floorZs) && floorZs.some((floorZ) => Number(floorZ) === state.player.z)
+    ? state.player.z
+    : item.z;
+  return wallTransmissionTo(item.x, item.y, sourceZ);
+}
+
 const radioRuntime = new RadioStationRuntime(
   audio,
   getItemSpatialConfig,
-  (item) => acousticZoneRuntime.transmission(
-    state.player.acousticZoneId,
-    worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
-    state.items,
+  (item) => (
+    acousticZoneRuntime.transmission(
+      state.player.acousticZoneId,
+      worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
+      state.items,
+    ) * itemWallTransmission(item)
   ),
   (item) => acousticZoneRuntime.couldConnect(
     state.player.acousticZoneId,
@@ -343,10 +372,12 @@ const itemEmitRuntime = new ItemEmitRuntime(
   audio,
   resolveIncomingSoundUrl,
   getItemSpatialConfig,
-  (item) => acousticZoneRuntime.transmission(
-    state.player.acousticZoneId,
-    worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
-    state.items,
+  (item) => (
+    acousticZoneRuntime.transmission(
+      state.player.acousticZoneId,
+      worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
+      state.items,
+    ) * itemWallTransmission(item)
   ),
   (item) => acousticZoneRuntime.couldConnect(
     state.player.acousticZoneId,
@@ -359,7 +390,7 @@ const elevatorAudioRuntime = new ElevatorAudioRuntime(
   resolveIncomingSoundUrl,
   getItemSpatialConfig,
   () => state.elevatorItemId,
-  (item) => acousticZoneRuntime.doorTransmission(item),
+  (item) => acousticZoneRuntime.doorTransmission(item) * itemWallTransmission(item),
 );
 const clockAnnouncer = new ClockAnnouncer(audio, () => ({ x: state.player.x, y: state.player.y, z: state.player.z }));
 let replaceTextOnNextType = false;
@@ -449,6 +480,7 @@ const itemBehaviorRegistry = new ItemBehaviorRegistry({
   updateStatus,
   openHelpViewer: (lines, returnMode) => openHelpViewer(lines, returnMode),
   withBase,
+  getWallTransmission: (sourceX, sourceY, sourceZ) => wallTransmissionTo(sourceX, sourceY, sourceZ),
 });
 
 audio.setOutputMode(outputMode);
@@ -1339,12 +1371,15 @@ function gameLoop(): void {
   acousticZoneRuntime.sync(state.items.values());
   const acousticNow = performance.now();
   for (const peer of peerManager.getPeers()) {
-    peerManager.setPeerAcousticGain(peer.id, acousticZoneRuntime.transmission(
-      state.player.acousticZoneId,
-      peer.acousticZoneId,
-      state.items,
-      acousticNow,
-    ));
+    peerManager.setPeerAcousticGain(
+      peer.id,
+      acousticZoneRuntime.transmission(
+        state.player.acousticZoneId,
+        peer.acousticZoneId,
+        state.items,
+        acousticNow,
+      ) * wallTransmissionTo(peer.x, peer.y, peer.z),
+    );
   }
   audio.updateSpatialAudio(peerManager.getPeers(), listenerPosition);
   audio.updateSpatialSamples(listenerPosition);
@@ -1394,6 +1429,7 @@ function handleMovement(): void {
     state.player.z,
     nextX,
     nextY,
+    wallEdgeIndex,
   );
   if (blockingWall) {
     state.player.lastMoveTime = now;
@@ -1683,6 +1719,9 @@ const onAppMessage = createOnMessageHandler({
     worldFloors = new Map(floors.map((floor) => [floor.z, floor.name]));
   },
   setStructurePresets: (presets: StructurePreset[]) => worldBuilderController.setPresets(presets),
+  refreshStructureGeometry: () => {
+    wallEdgeIndex = buildWallEdgeIndex(state.structures.values());
+  },
   setMovementTickMs: (value) => {
     movementTickMs = Math.max(1, value);
   },

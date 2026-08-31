@@ -9,6 +9,7 @@ type MessageHandlerDeps = {
   setWorldGridSize: (size: number) => void;
   setWorldFloors: (floors: Array<{ id: string; name: string; z: number }>) => void;
   setStructurePresets: (presets: StructurePreset[]) => void;
+  refreshStructureGeometry: () => void;
   setMovementTickMs: (value: number) => void;
   setConnecting: (value: boolean) => void;
   rendererSetGridSize: (size: number) => void;
@@ -119,9 +120,11 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         break;
       case 'structure_upsert':
         deps.state.structures.set(message.structure.id, message.structure);
+        deps.refreshStructureGeometry();
         break;
       case 'structure_remove':
         deps.state.structures.delete(message.structureId);
+        deps.refreshStructureGeometry();
         break;
 
       case 'welcome':
@@ -174,6 +177,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         for (const structure of message.structures || []) {
           deps.state.structures.set(structure.id, structure);
         }
+        deps.refreshStructureGeometry();
         deps.refreshAcousticModel();
         await deps.refreshAudioSubscriptions(true);
         await deps.applyAudioLayerState();

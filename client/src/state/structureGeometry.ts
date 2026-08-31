@@ -1,5 +1,29 @@
 import type { WallStructure } from './gameState';
 
+export type WallEdgeIndex = ReadonlyMap<string, WallStructure>;
+
+function edgeKey(
+  floorZ: number,
+  orientation: WallStructure['orientation'],
+  lineX: number,
+  lineY: number,
+): string {
+  return `${floorZ}:${orientation}:${lineX}:${lineY}`;
+}
+
+/** Build a constant-time lookup index for every unit edge in wall runs. */
+export function buildWallEdgeIndex(structures: Iterable<WallStructure>): WallEdgeIndex {
+  const index = new Map<string, WallStructure>();
+  for (const wall of structures) {
+    for (let offset = 0; offset < wall.length; offset += 1) {
+      const lineX = wall.startX + (wall.orientation === 'horizontal' ? offset : 0);
+      const lineY = wall.startY + (wall.orientation === 'vertical' ? offset : 0);
+      index.set(edgeKey(wall.floorZ, wall.orientation, lineX, lineY), wall);
+    }
+  }
+  return index;
+}
+
 /** Return whether one wall run contains a canonical unit edge. */
 export function wallContainsEdge(
   wall: WallStructure,
@@ -15,22 +39,85 @@ export function wallContainsEdge(
 }
 
 function blockingWallAt(
-  structures: Iterable<WallStructure>,
+  index: WallEdgeIndex,
   floorZ: number,
   orientation: WallStructure['orientation'],
   lineX: number,
   lineY: number,
 ): WallStructure | null {
-  for (const wall of structures) {
-    if (
-      wall.floorZ === floorZ
-      && wall.movementBlocked
-      && wallContainsEdge(wall, orientation, lineX, lineY)
-    ) {
-      return wall;
+  const wall = index.get(edgeKey(floorZ, orientation, lineX, lineY)) ?? null;
+  return wall?.movementBlocked ? wall : null;
+}
+
+function wallAt(
+  index: WallEdgeIndex,
+  floorZ: number,
+  orientation: WallStructure['orientation'],
+  lineX: number,
+  lineY: number,
+): WallStructure | null {
+  return index.get(edgeKey(floorZ, orientation, lineX, lineY)) ?? null;
+}
+
+/** Multiply transmission for every wall edge crossed by a center-to-center ray. */
+export function wallTransmissionBetween(
+  structures: Iterable<WallStructure>,
+  listener: { x: number; y: number; z: number },
+  source: { x: number; y: number; z: number },
+  existingIndex?: WallEdgeIndex,
+): number {
+  if (listener.z !== source.z) return 1;
+  const index = existingIndex ?? buildWallEdgeIndex(structures);
+  const listenerX = Math.round(listener.x);
+  const listenerY = Math.round(listener.y);
+  const sourceX = Math.round(source.x);
+  const sourceY = Math.round(source.y);
+  const deltaX = sourceX - listenerX;
+  const deltaY = sourceY - listenerY;
+  if (deltaX === 0 && deltaY === 0) return 1;
+
+  const stepX = Math.sign(deltaX);
+  const stepY = Math.sign(deltaY);
+  const deltaTX = deltaX === 0 ? Number.POSITIVE_INFINITY : 1 / Math.abs(deltaX);
+  const deltaTY = deltaY === 0 ? Number.POSITIVE_INFINITY : 1 / Math.abs(deltaY);
+  let nextTX = deltaTX / 2;
+  let nextTY = deltaTY / 2;
+  let cellX = listenerX;
+  let cellY = listenerY;
+  let transmission = 1;
+
+  const applyWall = (wall: WallStructure | null): void => {
+    if (!wall) return;
+    transmission *= Math.max(0, Math.min(1, wall.soundTransmission));
+  };
+
+  while (cellX !== sourceX || cellY !== sourceY) {
+    const crossesCorner = Math.abs(nextTX - nextTY) < 1e-10;
+    if (!crossesCorner && nextTX < nextTY) {
+      applyWall(wallAt(index, listener.z, 'vertical', cellX + (stepX > 0 ? 1 : 0), cellY));
+      cellX += stepX;
+      nextTX += deltaTX;
+    } else if (!crossesCorner && nextTY < nextTX) {
+      applyWall(wallAt(index, listener.z, 'horizontal', cellX, cellY + (stepY > 0 ? 1 : 0)));
+      cellY += stepY;
+      nextTY += deltaTY;
+    } else {
+      const vertical = wallAt(index, listener.z, 'vertical', cellX + (stepX > 0 ? 1 : 0), cellY);
+      const horizontal = wallAt(index, listener.z, 'horizontal', cellX, cellY + (stepY > 0 ? 1 : 0));
+      // Match diagonal movement at an exact corner: one wall leaves a path,
+      // while two walls contribute both transmissions.
+      if (vertical && horizontal) {
+        applyWall(vertical);
+        applyWall(horizontal);
+      }
+      cellX += stepX;
+      cellY += stepY;
+      nextTX += deltaTX;
+      nextTY += deltaTY;
     }
+    if (transmission <= 0) return 0;
   }
-  return null;
+  return transmission;
 }
 
 /** Resolve movement collision using the shared cardinal/diagonal corner rule. */
@@ -41,16 +128,18 @@ export function blockingWallForMove(
   floorZ: number,
   nextX: number,
   nextY: number,
+  existingIndex?: WallEdgeIndex,
 ): WallStructure | null {
+  const index = existingIndex ?? buildWallEdgeIndex(structures);
   const dx = nextX - x;
   const dy = nextY - y;
   const crossed: WallStructure[] = [];
   if (dx !== 0) {
-    const wall = blockingWallAt(structures, floorZ, 'vertical', x + (dx > 0 ? 1 : 0), y);
+    const wall = blockingWallAt(index, floorZ, 'vertical', x + (dx > 0 ? 1 : 0), y);
     if (wall) crossed.push(wall);
   }
   if (dy !== 0) {
-    const wall = blockingWallAt(structures, floorZ, 'horizontal', x, y + (dy > 0 ? 1 : 0));
+    const wall = blockingWallAt(index, floorZ, 'horizontal', x, y + (dy > 0 ? 1 : 0));
     if (wall) crossed.push(wall);
   }
   if (dx !== 0 && dy !== 0) return crossed.length === 2 ? crossed[0] : null;

@@ -17,7 +17,9 @@ Wall presets are configured under `world.structure_presets` in `server/config.to
 - `solid`: title `Wall`, height `40`, sound transmission `0`, movement blocked, collision sound `/sounds/wall.ogg`.
 - `curtain`: title `Curtain`, height `40`, sound transmission `0.5`, movement blocked, collision sound `/sounds/wall.ogg`.
 
-Preset values are copied into each wall when it is created. Later preset edits therefore do not silently rewrite existing structures. Height is stored for future geometry but does not change ordinary floor movement while jumping and flying are deferred. Sound transmission is also stored now; gain-only sound occlusion is the next separate implementation phase.
+Preset values are copied into each wall when it is created. Later preset edits therefore do not silently rewrite existing structures. Height is stored for future geometry but does not change ordinary floor movement while jumping and flying are deferred.
+
+For same-floor positional audio, the client traces the center-to-center listener/source ray and multiplies every crossed wall's sound transmission into distance gain. This covers voice, radios, item emitters, elevator landing audio, footsteps, teleports, clocks, piano, and positional item-use sounds. Floor/acoustic-zone connectivity remains the LiveKit subscription gate; wall changes affect local gain without restarting or resubscribing continuous audio.
 
 ## Persistence And Authorization
 

@@ -50,6 +50,7 @@ Each frame:
 - Update spatial voice audio.
 - Update spatial radio audio.
 - Update spatial item emit audio.
+- Trace intervening wall edges and multiply their transmission into positional audio gain.
 - Draw canvas scene.
 
 Radio metadata polling is limited to stations near a listener, deduplicated by stream URL, and uses bounded concurrent fetches so slow stations do not hold up the others. Failed fetches preserve the last known title. Requesting now-playing triggers one immediate fetch when no metadata has been collected yet.

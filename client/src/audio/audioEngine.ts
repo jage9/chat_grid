@@ -31,6 +31,10 @@ type SoundSpec = {
 };
 
 type OutputMode = 'stereo' | 'mono';
+type SpatialTransmissionResolver = (
+  source: { x: number; y: number; z: number },
+  listener: { x: number; y: number; z: number },
+) => number;
 const ONE_SHOT_ATTACK_SECONDS = 0.02;
 type ActiveSpatialSampleRuntime = {
   sourceX: number;
@@ -50,6 +54,7 @@ export class AudioEngine {
   private readonly sampleCache = new Map<string, AudioBuffer>();
   private readonly sampleLoaders = new Map<string, Promise<AudioBuffer>>();
   private readonly activeSpatialSamples = new Set<ActiveSpatialSampleRuntime>();
+  private spatialTransmissionResolver: SpatialTransmissionResolver = () => 1;
 
   private outboundSource: MediaStreamAudioSourceNode | null = null;
   private outboundInputGain: GainNode | null = null;
@@ -190,6 +195,11 @@ export class AudioEngine {
 
   setOutputMode(mode: OutputMode): void {
     this.outputMode = mode;
+  }
+
+  /** Set the shared geometry transmission applied to active positional one-shots. */
+  setSpatialTransmissionResolver(resolver: SpatialTransmissionResolver): void {
+    this.spatialTransmissionResolver = resolver;
   }
 
   setMasterVolume(value: number): number {
@@ -629,12 +639,19 @@ export class AudioEngine {
     initial = false,
   ): void {
     if (!this.audioCtx) return;
-    const mix = sample.sourceZ === playerPosition.z ? resolveSpatialMix({
+    const acousticGain = sample.sourceZ === playerPosition.z
+      ? Math.max(0, Math.min(1, this.spatialTransmissionResolver(
+          { x: sample.sourceX, y: sample.sourceY, z: sample.sourceZ },
+          playerPosition,
+        )))
+      : 0;
+    const baseMix = acousticGain > 0 ? resolveSpatialMix({
       dx: sample.sourceX - playerPosition.x,
       dy: sample.sourceY - playerPosition.y,
       range: sample.range,
       baseGain: sample.baseGain,
     }) : null;
+    const mix = baseMix ? { ...baseMix, gain: baseMix.gain * acousticGain } : null;
     if (initial) {
       const gainValue = mix?.gain ?? 0;
       sample.gainNode.gain.setTargetAtTime(gainValue, this.audioCtx.currentTime, ONE_SHOT_ATTACK_SECONDS);

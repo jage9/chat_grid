@@ -103,6 +103,7 @@ type PianoControllerDeps = {
   signalingSend: (message: OutgoingMessage) => void;
   updateStatus: (message: string) => void;
   openHelpViewer: (lines: string[], returnMode: GameMode) => void;
+  getWallTransmission: (sourceX: number, sourceY: number, sourceZ: number) => number;
 };
 
 /** Encapsulates all client-side piano item behavior and per-mode runtime state. */
@@ -503,6 +504,7 @@ export class PianoController {
         x: note.x - this.deps.state.player.x,
         y: note.y - this.deps.state.player.y,
         range: Math.max(1, Math.round(note.emitRange)),
+        acousticGain: this.deps.getWallTransmission(note.x, note.y, note.z),
       },
     );
   }

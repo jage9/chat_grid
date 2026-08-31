@@ -56,6 +56,11 @@ Current defaults:
 - The dedicated client elevator runtime loops `/sounds/elevator_inside.ogg` from a randomized offset. A passenger hears it in every car state; a landing listener hears it spatially only when nearby on the same floor with the door fully open.
 - An elevator's optional `emitSound` remains on the multi-floor shaft object rather than following the car, so it emits independently from both landings. A rider hears it through normal distance rules while the door is open; the client suppresses it only while that rider is inside with the door closed.
 - Door opening and closing play their spatial clips for landing listeners and riders. Entry/exit remains blocked for each clip's duration. `/sounds/elevator_up.ogg` or `/sounds/elevator_down.ogg` starts alongside the opening clip so the direction beep adds no delay.
+- On the same floor, the client traces a center-to-center ray through canonical wall edges and multiplies every crossed wall's `soundTransmission` into the existing distance gain.
+- Solid walls use transmission `0`; curtains default to `0.5`. Multiple crossed walls multiply (for example, two curtains produce `0.25`).
+- Wall gain applies to LiveKit voice, radios, item emitters, elevator landing audio, footsteps, teleports, clocks, piano notes, and positional item-use sounds. Active continuous and one-shot mixes update as the listener or wall layout changes.
+- Wall occlusion never drives LiveKit subscription changes. Floor/acoustic-zone connectivity remains the stable bandwidth gate; walls are a fast local gain adjustment.
+- A ray passing exactly through a grid corner follows diagonal movement semantics: one occupied component edge leaves an open route, while two occupied edges apply both transmissions.
 
 ## Stale Stream Mitigation
 
