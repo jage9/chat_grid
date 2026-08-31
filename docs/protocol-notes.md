@@ -36,7 +36,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_piano_recording`: piano record/playback control (`toggle_record`, `playback`, `stop_playback`).
 - `structure_add_wall`: create a one-edge wall from a server preset on the requested side of the builder's current square.
 - `structure_resize_wall`: extend or shorten one complete wall run at its start or end by one edge.
-- `structure_update_wall`: update one wall run's explicit `soundTransmission`, `occlusionLowpassHz`, and/or `contactSound`.
+- `structure_update_wall`: update one wall run's explicit `soundTransmission`, `occlusionLowpassHz`, and/or `contactSound`; supplying `preset` reapplies all server-owned defaults for that type before optional explicit overrides.
 - `structure_delete`: delete one complete wall run.
 
 ## Server -> Client

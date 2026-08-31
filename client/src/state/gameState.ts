@@ -80,6 +80,7 @@ export type GameMode =
   | 'worldBuilderWallActions'
   | 'worldBuilderPropertyList'
   | 'worldBuilderPropertyEdit'
+  | 'worldBuilderTypeSelect'
   | 'worldBuilderDeleteConfirm'
   | 'pianoUse';
 

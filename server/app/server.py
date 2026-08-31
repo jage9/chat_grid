@@ -1359,6 +1359,7 @@ class SignalingServer:
             elif isinstance(packet, StructureUpdateWallPacket):
                 wall = self.structure_service.update_wall(
                     packet.structureId,
+                    preset_id=packet.preset,
                     sound_transmission=packet.soundTransmission,
                     occlusion_lowpass_hz=packet.occlusionLowpassHz,
                     contact_sound=packet.contactSound,

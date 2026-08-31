@@ -511,6 +511,7 @@ export type OutgoingMessage =
   | {
       type: 'structure_update_wall';
       structureId: string;
+      preset?: string;
       soundTransmission?: number;
       occlusionLowpassHz?: number;
       contactSound?: string;

@@ -2896,6 +2896,8 @@ function handleModeInput(input: ModeInput): void {
       worldBuilderPropertyList: ({ code: currentCode, key: currentKey }) => worldBuilderController.handlePropertyList(currentCode, currentKey),
       worldBuilderPropertyEdit: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>
         worldBuilderController.handlePropertyEdit(currentCode, currentKey, currentCtrlKey),
+      worldBuilderTypeSelect: ({ code: currentCode, key: currentKey }) =>
+        worldBuilderController.handleTypeSelect(currentCode, currentKey),
       worldBuilderDeleteConfirm: ({ code: currentCode, key: currentKey }) => worldBuilderController.handleDeleteConfirm(currentCode, currentKey),
       itemProperties: ({ code: currentCode, key: currentKey }) =>
         itemPropertyEditor.handleItemPropertiesModeInput(currentCode, currentKey),

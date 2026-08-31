@@ -3,6 +3,7 @@ import { nearbyWalls } from '../state/structureGeometry';
 import type { GameState, StructurePreset, WallStructure } from '../state/gameState';
 import type { OutgoingMessage } from '../network/protocol';
 import { getEditSessionAction } from './editSession';
+import { formatSteppedNumber, snapNumberToStep } from './numeric';
 
 type MenuEntry<T extends string = string> = { id: T; label: string; tooltip: string };
 
@@ -30,7 +31,7 @@ const DIRECTIONS = [
   { id: 'west', label: 'West', tooltip: 'Place the wall along the west edge of your current square.' },
 ] as const;
 const WALL_ACTIONS = [
-  { id: 'properties', label: 'Edit properties', tooltip: 'Edit sound transmission, occlusion low-pass, or contact sound.' },
+  { id: 'properties', label: 'Edit properties', tooltip: 'Change the wall type or edit its sound properties.' },
   { id: 'extendStart', label: 'Extend start', tooltip: 'Add one square at the wall run’s starting end.' },
   { id: 'shortenStart', label: 'Shorten start', tooltip: 'Remove one square from the wall run’s starting end.' },
   { id: 'extendEnd', label: 'Extend end', tooltip: 'Add one square at the wall run’s ending end.' },
@@ -38,8 +39,9 @@ const WALL_ACTIONS = [
   { id: 'delete', label: 'Delete wall', tooltip: 'Delete this entire wall run.' },
 ] as const;
 const PROPERTY_ACTIONS = [
-  { id: 'soundTransmission', label: 'Sound transmission', tooltip: 'Set gain passing through the wall from 0, silent, to 1, unchanged.' },
-  { id: 'occlusionLowpassHz', label: 'Occlusion low-pass', tooltip: 'Set the highest frequency passing through the wall, from 20 to 20000 hertz.' },
+  { id: 'preset', label: 'Type', tooltip: 'Choose a wall type and reset all wall properties to that preset’s defaults.' },
+  { id: 'soundTransmission', label: 'Sound transmission', tooltip: 'Set gain from 0, silent, to 1, unchanged. Use Left or Right for 0.05 steps and Page Up or Page Down for 0.5.' },
+  { id: 'occlusionLowpassHz', label: 'Occlusion low-pass', tooltip: 'Set the highest transmitted frequency from 20 to 20000 hertz. Use Left or Right for 100 hertz and Page Up or Page Down for 1000.' },
   { id: 'contactSound', label: 'Contact sound', tooltip: 'Set the sound URL played when someone hits or passes through this wall.' },
 ] as const;
 const DELETE_CHOICES = [
@@ -47,6 +49,12 @@ const DELETE_CHOICES = [
   { id: 'yes', label: 'Yes', tooltip: 'Permanently delete this entire wall run.' },
 ] as const;
 type PropertyId = typeof PROPERTY_ACTIONS[number]['id'];
+type EditablePropertyId = Exclude<PropertyId, 'preset'>;
+
+const NUMERIC_PROPERTIES = {
+  soundTransmission: { min: 0, max: 1, step: 0.05, anchor: 0 },
+  occlusionLowpassHz: { min: 20, max: 20_000, step: 100, anchor: 0 },
+} as const;
 
 /** Create the accessible menu controller for live wall editing. */
 export function createWorldBuilderController(deps: WorldBuilderDeps) {
@@ -55,7 +63,7 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
   let selectedPreset: StructurePreset | null = null;
   let walls: WallStructure[] = [];
   let selectedWallId: string | null = null;
-  let editingProperty: PropertyId | null = null;
+  let editingProperty: EditablePropertyId | null = null;
 
   function selectedWall(): WallStructure | null {
     return selectedWallId ? deps.state.structures.get(selectedWallId) ?? null : null;
@@ -63,6 +71,23 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
 
   function wallLabel(wall: WallStructure): string {
     return `${wall.title}, ${wall.length} squares, ${wall.orientation}, start ${wall.startX}, ${wall.startY}`;
+  }
+
+  function propertyEntries(wall: WallStructure | null): MenuEntry<PropertyId>[] {
+    return PROPERTY_ACTIONS.map((entry) => {
+      if (!wall) return entry;
+      if (entry.id === 'preset') {
+        const typeTitle = presets.find((preset) => preset.id === wall.preset)?.title ?? wall.title;
+        return { ...entry, label: `${entry.label}: ${typeTitle}` };
+      }
+      if (entry.id === 'soundTransmission') {
+        return { ...entry, label: `${entry.label}: ${formatSteppedNumber(wall.soundTransmission, 0.05)}` };
+      }
+      if (entry.id === 'occlusionLowpassHz') {
+        return { ...entry, label: `${entry.label}: ${wall.occlusionLowpassHz} hertz` };
+      }
+      return { ...entry, label: `${entry.label}: ${wall.contactSound || 'none'}` };
+    });
   }
 
   function open(): void {
@@ -197,9 +222,47 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
   }
 
   function handlePropertyList(code: string, key: string): void {
-    handleList(code, key, PROPERTY_ACTIONS, (property) => {
+    const entries = propertyEntries(selectedWall());
+    const property = PROPERTY_ACTIONS[index]?.id;
+    const numeric = property === 'soundTransmission' || property === 'occlusionLowpassHz'
+      ? NUMERIC_PROPERTIES[property]
+      : null;
+    if (
+      numeric
+      && (property === 'soundTransmission' || property === 'occlusionLowpassHz')
+      && ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown'].includes(code)
+    ) {
       const wall = selectedWall();
       if (!wall) return;
+      const currentValue = property === 'soundTransmission'
+        ? wall.soundTransmission
+        : wall.occlusionLowpassHz;
+      const multiplier = code === 'PageUp' || code === 'PageDown' ? 10 : 1;
+      const delta = (code === 'ArrowRight' || code === 'PageUp' ? numeric.step : -numeric.step) * multiplier;
+      const attempted = snapNumberToStep(currentValue + delta, numeric.step, numeric.anchor);
+      const nextValue = Math.max(numeric.min, Math.min(numeric.max, attempted));
+      deps.state.structures.set(wall.id, { ...wall, [property]: nextValue });
+      deps.send({ type: 'structure_update_wall', structureId: wall.id, [property]: nextValue });
+      deps.updateStatus(formatSteppedNumber(nextValue, numeric.step));
+      if (Math.abs(nextValue - currentValue) < 1e-9) deps.cancel();
+      else deps.blip();
+      return;
+    }
+    handleList(code, key, entries, (property) => {
+      const wall = selectedWall();
+      if (!wall) return;
+      if (property === 'preset') {
+        if (presets.length === 0) {
+          deps.updateStatus('No wall presets are configured.');
+          deps.cancel();
+          return;
+        }
+        const currentIndex = presets.findIndex((preset) => preset.id === wall.preset);
+        index = currentIndex >= 0 ? currentIndex : 0;
+        deps.state.mode = 'worldBuilderTypeSelect';
+        deps.announceMenuEntry('Wall type', presets[index].title);
+        return;
+      }
       editingProperty = property;
       deps.state.nicknameInput = String(wall[property]);
       deps.state.cursorPos = deps.state.nicknameInput.length;
@@ -213,7 +276,49 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
     });
   }
 
+  function handleTypeSelect(code: string, key: string): void {
+    const entries = presets.map((preset) => ({
+      id: preset.id,
+      label: preset.title,
+      tooltip: `Reset this wall to the complete ${preset.title} preset, including movement, height, sound transmission, low-pass, and contact sound.`,
+    }));
+    handleList(code, key, entries, (preset) => {
+      const wall = selectedWall();
+      if (!wall) return;
+      deps.send({ type: 'structure_update_wall', structureId: wall.id, preset });
+      index = 0;
+      deps.state.mode = 'worldBuilderPropertyList';
+      deps.updateStatus(`Resetting wall to ${entries.find((entry) => entry.id === preset)?.label ?? preset}.`);
+    }, 'Wall type', () => {
+      index = 0;
+      deps.state.mode = 'worldBuilderPropertyList';
+      deps.announceMenuEntry('Wall properties', PROPERTY_ACTIONS[0].label);
+    });
+  }
+
   function handlePropertyEdit(code: string, key: string, ctrlKey = false): void {
+    if (
+      editingProperty
+      && editingProperty !== 'contactSound'
+      && ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'].includes(code)
+    ) {
+      const numeric = NUMERIC_PROPERTIES[editingProperty];
+      const wall = selectedWall();
+      if (!wall) return;
+      const rawCurrent = Number(deps.state.nicknameInput.trim());
+      const currentValue = Number.isFinite(rawCurrent) ? rawCurrent : wall[editingProperty];
+      const multiplier = code === 'PageUp' || code === 'PageDown' ? 10 : 1;
+      const delta = (code === 'ArrowUp' || code === 'PageUp' ? numeric.step : -numeric.step) * multiplier;
+      const attempted = snapNumberToStep(currentValue + delta, numeric.step, numeric.anchor);
+      const nextValue = Math.max(numeric.min, Math.min(numeric.max, attempted));
+      deps.state.nicknameInput = formatSteppedNumber(nextValue, numeric.step);
+      deps.state.cursorPos = deps.state.nicknameInput.length;
+      deps.setReplaceTextOnNextType(false);
+      deps.updateStatus(deps.state.nicknameInput);
+      if (Math.abs(nextValue - currentValue) < 1e-9) deps.cancel();
+      else deps.blip();
+      return;
+    }
     const action = getEditSessionAction(code);
     if (action === 'cancel') {
       index = 0;
@@ -283,6 +388,7 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
     handleWallList,
     handleWallActions,
     handlePropertyList,
+    handleTypeSelect,
     handlePropertyEdit,
     handleDeleteConfirm,
     handleActionResult(message: { ok: boolean; message: string }) {

@@ -197,10 +197,11 @@ class StructureResizeWallPacket(BasePacket):
 
 
 class StructureUpdateWallPacket(BasePacket):
-    """Update editable acoustic properties of an existing wall run."""
+    """Update editable properties or reapply a preset to a wall run."""
 
     type: Literal["structure_update_wall"]
     structureId: str
+    preset: str | None = Field(default=None, min_length=1, max_length=40)
     soundTransmission: float | None = Field(default=None, ge=0.0, le=1.0)
     occlusionLowpassHz: int | None = Field(default=None, ge=20, le=20_000)
     contactSound: str | None = Field(default=None, max_length=200)

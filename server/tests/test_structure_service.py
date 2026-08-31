@@ -103,6 +103,7 @@ def test_wall_acoustic_properties_are_independently_editable(tmp_path: Path) -> 
 
     updated = structures.update_wall(
         wall.id,
+        preset_id=None,
         sound_transmission=0.35,
         occlusion_lowpass_hz=3200,
         contact_sound="/sounds/custom-wall.ogg",
@@ -115,3 +116,16 @@ def test_wall_acoustic_properties_are_independently_editable(tmp_path: Path) -> 
     assert (
         structures.blocking_wall_for_move(x=4, y=4, z=0, next_x=4, next_y=5) == updated
     )
+
+    reset = structures.update_wall(
+        wall.id,
+        preset_id="curtain",
+        sound_transmission=None,
+        occlusion_lowpass_hz=None,
+        contact_sound=None,
+    )
+    assert reset.title == "Curtain"
+    assert reset.preset == "curtain"
+    assert reset.movementBlocked is False
+    assert reset.soundTransmission == 0.5
+    assert reset.occlusionLowpassHz == 2200

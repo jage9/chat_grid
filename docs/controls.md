@@ -54,7 +54,9 @@ This document is the authoritative keymap for the client.
 - `W`: Open World Builder when the account has `world.structure.edit`.
 - `Add wall`: Select a server-configured preset, then select the north, south, east, or west edge of the current square.
 - `Edit walls`: List current-floor walls nearest first, then edit acoustic properties, extend or shorten either endpoint, or delete the complete wall.
-- `Edit properties`: Change sound transmission (`0..1`), occlusion low-pass (`20..20000` hertz), or the contact-sound URL. Presets only seed these values.
+- `Edit properties`: Change wall type, sound transmission (`0..1`), occlusion low-pass (`20..20000` hertz), or the contact-sound URL.
+- `Type`: Choose a server preset again. This resets title, movement behavior, height, transmission, low-pass, and contact sound to that preset's defaults.
+- On transmission or low-pass, `ArrowLeft`/`ArrowRight` changes one numeric step and `PageDown`/`PageUp` changes ten steps. Inside the numeric editor, use `ArrowDown`/`ArrowUp` and the corresponding page keys.
 - `Space`: Read specific help for the selected World Builder action, preset, direction, wall, or property.
 - Walls are edited live. Other connected clients receive and render changes immediately.
 - Wall deletion uses a `No`/`Yes` confirmation menu.

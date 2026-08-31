@@ -58,16 +58,16 @@ contact_sound = "/sounds/curtain.ogg"
 [world.structure_presets.glass]
 title = "Glass"
 movement_blocked = true
-sound_transmission = 0.65
-occlusion_lowpass_hz = 7000
+sound_transmission = 0.35
+occlusion_lowpass_hz = 4500
 height = 40
 contact_sound = "/sounds/glass.ogg"
 
 [world.structure_presets.fence]
 title = "Fence"
 movement_blocked = true
-sound_transmission = 0.9
-occlusion_lowpass_hz = 12000
+sound_transmission = 0.7
+occlusion_lowpass_hz = 9000
 height = 40
 contact_sound = "/sounds/fence.ogg"
 
