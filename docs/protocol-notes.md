@@ -35,7 +35,9 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_piano_note`: realtime piano note on/off for active piano use mode.
 - `item_piano_recording`: piano record/playback control (`toggle_record`, `playback`, `stop_playback`).
 - `structure_add_wall`: create a one-edge wall from a server preset on the requested side of the builder's current square.
-- `structure_resize_wall`: decrease or increase one complete wall run's start/finish coordinate by one edge; the result reports extend/retract semantics and the authoritative endpoint `x, y, z`.
+- `structure_resize_wall`: decrease or increase one complete wall run's start/finish coordinate by one edge; the result reports only the authoritative endpoint `x, y, z`.
+- `structure_slide_wall`: move a complete horizontal run along x or a complete vertical run along y by one edge, preserving its length.
+- `structure_rotate_wall`: set a run to horizontal or vertical while preserving its canonical start coordinate and length.
 - `structure_update_wall`: update one wall run's explicit `soundTransmission`, `occlusionLowpassHz`, and/or `contactSound`; supplying `preset` reapplies all server-owned defaults for that type before optional explicit overrides.
 - `structure_delete`: delete one complete wall run.
 
@@ -69,9 +71,9 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_piano_note`: broadcast piano note on/off with resolved instrument/envelope/spatial params.
 - `item_piano_status`: structured piano mode/record/playback state events for client runtime control.
 - `item_elevator_status`: targeted rider state (`entered`, `moving`, `arrived`, or `exited`) with `itemId`, `z`, and an optional user-facing `message`.
-- `structure_upsert`: full wall-run replacement after a live create, resize, or property update.
+- `structure_upsert`: full wall-run replacement after a live create, resize, slide, rotation, or property update.
 - `structure_remove`: removal of one wall run.
-- `structure_action_result`: success/error and user-facing status for add, resize, update, or delete. Successful resize/update results contain only the authoritative new coordinate/property value so shared controls do not receive a second narrative announcement.
+- `structure_action_result`: success/error and user-facing status for add, resize, slide, rotate, update, or delete. Successful edit results contain only the authoritative new coordinate/property value so shared controls do not receive a second narrative announcement.
 - `world_sound`: server-validated positional structure contact sound (`sound`, `x`, `y`, `z`, optional `range`) sent to users other than the mover.
 
 ## Item Packet Behavior

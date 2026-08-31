@@ -196,6 +196,22 @@ class StructureResizeWallPacket(BasePacket):
     delta: Literal[-1, 1]
 
 
+class StructureSlideWallPacket(BasePacket):
+    """Translate a complete wall run by one edge along its own axis."""
+
+    type: Literal["structure_slide_wall"]
+    structureId: str
+    delta: Literal[-1, 1]
+
+
+class StructureRotateWallPacket(BasePacket):
+    """Rotate a wall run around its canonical start coordinate."""
+
+    type: Literal["structure_rotate_wall"]
+    structureId: str
+    orientation: Literal["horizontal", "vertical"]
+
+
 class StructureUpdateWallPacket(BasePacket):
     """Update editable properties or reapply a preset to a wall run."""
 
@@ -247,6 +263,8 @@ ClientPacket = (
     | ItemUpdatePacket
     | StructureAddWallPacket
     | StructureResizeWallPacket
+    | StructureSlideWallPacket
+    | StructureRotateWallPacket
     | StructureUpdateWallPacket
     | StructureDeletePacket
 )
@@ -455,7 +473,7 @@ class StructureActionResultPacket(BasePacket):
 
     type: Literal["structure_action_result"]
     ok: bool
-    action: Literal["add", "resize", "update", "delete"]
+    action: Literal["add", "resize", "slide", "rotate", "update", "delete"]
     message: str
     structureId: str | None = None
 

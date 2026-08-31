@@ -60,6 +60,34 @@ def test_wall_run_resizes_and_persists(tmp_path: Path) -> None:
     assert reloaded.structures[wall.id] == wall
 
 
+def test_wall_run_slides_and_rotates_around_its_start(tmp_path: Path) -> None:
+    structures = service(tmp_path)
+    wall = structures.add_wall(builder(), preset_id="solid", direction="north")
+    wall = structures.resize_wall(wall.id, endpoint="end", delta=1)
+
+    wall = structures.slide_wall(wall.id, delta=1)
+    assert structures.wall_endpoint(wall, "start") == (5, 5, 0)
+    assert structures.wall_endpoint(wall, "finish") == (7, 5, 0)
+
+    wall = structures.rotate_wall(wall.id, orientation="vertical")
+    assert structures.wall_endpoint(wall, "start") == (5, 5, 0)
+    assert structures.wall_endpoint(wall, "finish") == (5, 7, 0)
+
+
+def test_failed_wall_rotation_preserves_the_original_run(tmp_path: Path) -> None:
+    structures = service(tmp_path)
+    edge_builder = builder()
+    edge_builder.y = 9
+    wall = structures.add_wall(edge_builder, preset_id="solid", direction="south")
+    wall = structures.resize_wall(wall.id, endpoint="end", delta=1)
+
+    with pytest.raises(StructureError, match="outside"):
+        structures.rotate_wall(wall.id, orientation="vertical")
+
+    assert structures.structures[wall.id] == wall
+    assert structures.wall_endpoint(wall, "finish") == (6, 9, 0)
+
+
 def test_diagonal_requires_both_origin_edges_to_be_blocked(tmp_path: Path) -> None:
     structures = service(tmp_path)
     north = structures.add_wall(builder(), preset_id="solid", direction="north")

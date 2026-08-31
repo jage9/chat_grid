@@ -6,6 +6,7 @@ import {
   getItemTypeGlobalProperties,
   itemPropertyLabel,
 } from './itemRegistry';
+import { describePropertyHelp } from '../input/propertyHelp';
 
 /** Builds shared item-property presentation/validation helpers used by item menus and message echoes. */
 export function createItemPropertyPresentation(): {
@@ -64,30 +65,11 @@ export function createItemPropertyPresentation(): {
 
   const describeItemPropertyHelp = (item: WorldItem, key: string): string => {
     const metadata = getItemPropertyMetadata(item.type, key);
-    const parts: string[] = [];
-    parts.push(metadata?.tooltip ?? 'No tooltip available.');
-
-    if (metadata?.valueType) {
-      const valueType = metadata.valueType;
-      parts.push(`Type: ${valueType}.`);
-    }
-
-    if (metadata?.range) {
-      const stepText = metadata.range.step !== undefined ? ` step ${metadata.range.step}` : '';
-      parts.push(`Range: ${metadata.range.min} to ${metadata.range.max}${stepText}.`);
-    } else {
-      const options = getItemPropertyOptionValues(item.type, key);
-      if (options && options.length > 0) {
-        parts.push(`Options: ${options.join(', ')}.`);
-      }
-    }
-
-    if (metadata?.maxLength !== undefined) {
-      parts.push(`Max length: ${metadata.maxLength} characters.`);
-    }
-
-    parts.push(isItemPropertyEditable(item, key) ? 'Editable.' : 'Read only.');
-    return parts.join(' ');
+    return describePropertyHelp(
+      itemPropertyLabel(key),
+      { ...metadata, options: getItemPropertyOptionValues(item.type, key) },
+      isItemPropertyEditable(item, key),
+    );
   };
 
   const validateNumericItemPropertyInput = (

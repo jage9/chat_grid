@@ -431,7 +431,7 @@ export const structureRemoveSchema = z.object({
 export const structureActionResultSchema = z.object({
   type: z.literal('structure_action_result'),
   ok: z.boolean(),
-  action: z.enum(['add', 'resize', 'update', 'delete']),
+  action: z.enum(['add', 'resize', 'slide', 'rotate', 'update', 'delete']),
   message: z.string(),
   structureId: z.string().optional(),
 });
@@ -508,6 +508,8 @@ export type OutgoingMessage =
   | { type: 'item_secondary_use'; itemId: string }
   | { type: 'structure_add_wall'; preset: string; direction: 'north' | 'south' | 'east' | 'west' }
   | { type: 'structure_resize_wall'; structureId: string; endpoint: 'start' | 'end'; delta: -1 | 1 }
+  | { type: 'structure_slide_wall'; structureId: string; delta: -1 | 1 }
+  | { type: 'structure_rotate_wall'; structureId: string; orientation: 'horizontal' | 'vertical' }
   | {
       type: 'structure_update_wall';
       structureId: string;

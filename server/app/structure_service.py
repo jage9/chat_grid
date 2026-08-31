@@ -142,6 +142,38 @@ class StructureService:
             wall.floorZ,
         )
 
+    def slide_wall(self, structure_id: str, *, delta: int) -> WallStructure:
+        """Translate a complete wall run by one edge along its own axis."""
+
+        wall = self.structures.get(structure_id)
+        if wall is None:
+            raise StructureError("Wall not found.")
+        values = wall.model_dump()
+        values["startX" if wall.orientation == "horizontal" else "startY"] += delta
+        moved = WallStructure.model_validate(values)
+        self._validate_wall(moved, exclude_id=wall.id)
+        self._remove_from_index(wall)
+        self._insert(moved)
+        return moved
+
+    def rotate_wall(
+        self, structure_id: str, *, orientation: Literal["horizontal", "vertical"]
+    ) -> WallStructure:
+        """Rotate a wall around its start coordinate when the new run fits."""
+
+        wall = self.structures.get(structure_id)
+        if wall is None:
+            raise StructureError("Wall not found.")
+        if wall.orientation == orientation:
+            return wall
+        values = wall.model_dump()
+        values["orientation"] = orientation
+        rotated = WallStructure.model_validate(values)
+        self._validate_wall(rotated, exclude_id=wall.id)
+        self._remove_from_index(wall)
+        self._insert(rotated)
+        return rotated
+
     def update_wall(
         self,
         structure_id: str,

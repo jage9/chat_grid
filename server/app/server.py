@@ -79,6 +79,8 @@ from .models import (
     StructureDeletePacket,
     StructureRemovePacket,
     StructureResizeWallPacket,
+    StructureRotateWallPacket,
+    StructureSlideWallPacket,
     StructureUpdateWallPacket,
     StructureUpsertPacket,
     TeleportCompletePacket,
@@ -1318,16 +1320,22 @@ class SignalingServer:
             (
                 StructureAddWallPacket,
                 StructureResizeWallPacket,
+                StructureSlideWallPacket,
+                StructureRotateWallPacket,
                 StructureUpdateWallPacket,
                 StructureDeletePacket,
             ),
         ):
             return False
-        action: Literal["add", "resize", "update", "delete"] = (
+        action: Literal["add", "resize", "slide", "rotate", "update", "delete"] = (
             "add"
             if isinstance(packet, StructureAddWallPacket)
             else "resize"
             if isinstance(packet, StructureResizeWallPacket)
+            else "slide"
+            if isinstance(packet, StructureSlideWallPacket)
+            else "rotate"
+            if isinstance(packet, StructureRotateWallPacket)
             else "update"
             if isinstance(packet, StructureUpdateWallPacket)
             else "delete"
@@ -1360,6 +1368,18 @@ class SignalingServer:
                 )
                 coordinate = self.structure_service.wall_endpoint(wall, endpoint)
                 result_message = f"{coordinate[0]}, {coordinate[1]}, {coordinate[2]}"
+            elif isinstance(packet, StructureSlideWallPacket):
+                wall = self.structure_service.slide_wall(
+                    packet.structureId, delta=packet.delta
+                )
+                result_message = str(
+                    wall.startX if wall.orientation == "horizontal" else wall.startY
+                )
+            elif isinstance(packet, StructureRotateWallPacket):
+                wall = self.structure_service.rotate_wall(
+                    packet.structureId, orientation=packet.orientation
+                )
+                result_message = wall.orientation.capitalize()
             elif isinstance(packet, StructureUpdateWallPacket):
                 wall = self.structure_service.update_wall(
                     packet.structureId,

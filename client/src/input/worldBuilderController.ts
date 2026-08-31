@@ -6,8 +6,9 @@ import { getEditSessionAction } from './editSession';
 import { formatSteppedNumber, snapNumberToStep } from './numeric';
 import type { OptionSelectorRequest } from './optionSelector';
 import type { ConfirmationRequest } from './confirmationController';
+import { describePropertyHelp, type PropertyHelpMetadata } from './propertyHelp';
 
-type MenuEntry<T extends string = string> = { id: T; label: string; tooltip: string };
+type MenuEntry<T extends string = string> = { id: T; label: string; tooltip?: string };
 
 type WorldBuilderDeps = {
   state: GameState;
@@ -38,13 +39,15 @@ const WALL_ACTIONS = [
   { id: 'properties', label: 'Edit properties', tooltip: 'Change the wall type or edit its sound properties.' },
   { id: 'setStart', label: 'Set start', tooltip: 'Use Left or Right to decrease or increase the wall start coordinate by one square.' },
   { id: 'setFinish', label: 'Set finish', tooltip: 'Use Left or Right to decrease or increase the wall finish coordinate by one square.' },
+  { id: 'slide', label: 'Slide', tooltip: 'Use Left or Right to move the complete wall by one square along its own axis.' },
+  { id: 'orientation', label: 'Orientation', tooltip: 'Choose horizontal or vertical. Rotation keeps the start coordinate fixed and succeeds only if the run fits.' },
   { id: 'delete', label: 'Delete wall', tooltip: 'Delete this entire wall run.' },
 ] as const;
 const PROPERTY_ACTIONS = [
-  { id: 'preset', label: 'Type', tooltip: 'Choose a wall type and reset all wall properties to that preset’s defaults.' },
-  { id: 'soundTransmission', label: 'Sound transmission', tooltip: 'Set gain from 0, silent, to 1, unchanged. Use Left or Right for 0.05 steps and Page Up or Page Down for 0.5.' },
-  { id: 'occlusionLowpassHz', label: 'Occlusion low-pass', tooltip: 'Set the highest transmitted frequency from 20 to 20000 hertz. Use Left or Right for 100 hertz and Page Up or Page Down for 1000.' },
-  { id: 'contactSound', label: 'Contact sound', tooltip: 'Set the sound URL played when someone hits or passes through this wall.' },
+  { id: 'preset', label: 'Type' },
+  { id: 'soundTransmission', label: 'Sound transmission' },
+  { id: 'occlusionLowpassHz', label: 'Occlusion low-pass' },
+  { id: 'contactSound', label: 'Contact sound' },
 ] as const;
 type PropertyId = typeof PROPERTY_ACTIONS[number]['id'];
 type EditablePropertyId = Exclude<PropertyId, 'preset'>;
@@ -53,6 +56,19 @@ const NUMERIC_PROPERTIES = {
   soundTransmission: { min: 0, max: 1, step: 0.05, anchor: 0 },
   occlusionLowpassHz: { min: 20, max: 20_000, step: 100, anchor: 0 },
 } as const;
+
+function propertyMetadata(property: PropertyId, presets: StructurePreset[]): PropertyHelpMetadata {
+  if (property === 'preset') {
+    return { valueType: 'list', options: presets.map((preset) => preset.title) };
+  }
+  if (property === 'soundTransmission') {
+    return { valueType: 'number', range: NUMERIC_PROPERTIES.soundTransmission };
+  }
+  if (property === 'occlusionLowpassHz') {
+    return { valueType: 'number', range: NUMERIC_PROPERTIES.occlusionLowpassHz };
+  }
+  return { valueType: 'sound', maxLength: 200 };
+}
 
 /** Create the accessible menu controller for live wall editing. */
 export function createWorldBuilderController(deps: WorldBuilderDeps) {
@@ -82,9 +98,23 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
 
   function wallActionEntries(wall: WallStructure | null): MenuEntry<typeof WALL_ACTIONS[number]['id']>[] {
     return WALL_ACTIONS.map((entry) => {
-      if (!wall || (entry.id !== 'setStart' && entry.id !== 'setFinish')) return entry;
-      const endpoint = entry.id === 'setStart' ? 'start' : 'finish';
-      return { ...entry, label: `${entry.label}: ${wallEndpoint(wall, endpoint).join(', ')}` };
+      if (!wall) return entry;
+      if (entry.id === 'setStart' || entry.id === 'setFinish') {
+        const endpoint = entry.id === 'setStart' ? 'start' : 'finish';
+        return { ...entry, label: `${entry.label}: ${wallEndpoint(wall, endpoint).join(', ')}` };
+      }
+      if (entry.id === 'slide') {
+        const horizontal = wall.orientation === 'horizontal';
+        return {
+          ...entry,
+          label: `Slide ${horizontal ? 'horizontally' : 'vertically'}: ${horizontal ? wall.startX : wall.startY}`,
+        };
+      }
+      if (entry.id === 'orientation') {
+        const orientation = wall.orientation === 'horizontal' ? 'Horizontal' : 'Vertical';
+        return { ...entry, label: `${entry.label}: ${orientation}` };
+      }
+      return entry;
     });
   }
 
@@ -135,7 +165,7 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
       onCancel();
       deps.cancel();
     } else if (code === 'Space') {
-      deps.updateStatus(entries[index].tooltip);
+      deps.updateStatus(entries[index].tooltip ?? 'No tooltip available.');
     }
   }
 
@@ -218,6 +248,14 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
       });
       return;
     }
+    if (wall && currentAction === 'slide' && (code === 'ArrowLeft' || code === 'ArrowRight')) {
+      deps.send({
+        type: 'structure_slide_wall',
+        structureId: wall.id,
+        delta: code === 'ArrowLeft' ? -1 : 1,
+      });
+      return;
+    }
     handleList(code, key, entries, (action) => {
       const wall = selectedWall();
       if (!wall) {
@@ -247,6 +285,29 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
         });
         return;
       }
+      if (action === 'orientation') {
+        deps.openOptionSelector({
+          title: 'Orientation',
+          options: [
+            { id: 'horizontal', label: 'Horizontal' },
+            { id: 'vertical', label: 'Vertical' },
+          ],
+          selectedId: wall.orientation,
+          onSelect: (orientation) => {
+            deps.send({
+              type: 'structure_rotate_wall',
+              structureId: wall.id,
+              orientation: orientation as WallStructure['orientation'],
+            });
+            deps.state.mode = 'worldBuilderWallActions';
+          },
+          onCancel: () => {
+            deps.state.mode = 'worldBuilderWallActions';
+            deps.announceMenuEntry('Wall actions', wallActionEntries(selectedWall())[index].label);
+          },
+        });
+        return;
+      }
       deps.updateStatus(entries[index].tooltip);
     }, 'Wall actions', () => {
       index = 0;
@@ -261,6 +322,33 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
     const numeric = property === 'soundTransmission' || property === 'occlusionLowpassHz'
       ? NUMERIC_PROPERTIES[property]
       : null;
+    if (
+      property === 'preset'
+      && presets.length > 0
+      && ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown'].includes(code)
+    ) {
+      const wall = selectedWall();
+      if (!wall) return;
+      const currentIndex = Math.max(0, presets.findIndex((preset) => preset.id === wall.preset));
+      const pageJump = Math.min(10, Math.max(1, presets.length - 1));
+      const delta = code === 'ArrowRight'
+        ? 1
+        : code === 'ArrowLeft'
+          ? -1
+          : code === 'PageDown'
+            ? pageJump
+            : -pageJump;
+      const nextPreset = presets[(currentIndex + delta + presets.length) % presets.length];
+      deps.state.structures.set(wall.id, {
+        ...wall,
+        ...nextPreset,
+        preset: nextPreset.id,
+      });
+      deps.send({ type: 'structure_update_wall', structureId: wall.id, preset: nextPreset.id });
+      deps.updateStatus(nextPreset.title);
+      deps.blip();
+      return;
+    }
     if (
       numeric
       && (property === 'soundTransmission' || property === 'occlusionLowpassHz')
@@ -280,6 +368,11 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
       deps.updateStatus(formatSteppedNumber(nextValue, numeric.step));
       if (Math.abs(nextValue - currentValue) < 1e-9) deps.cancel();
       else deps.blip();
+      return;
+    }
+    if (code === 'Space' && property) {
+      const action = PROPERTY_ACTIONS[index];
+      deps.updateStatus(describePropertyHelp(action.label, propertyMetadata(property, presets), true));
       return;
     }
     handleList(code, key, entries, (property) => {
