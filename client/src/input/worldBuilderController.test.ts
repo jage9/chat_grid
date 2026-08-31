@@ -36,11 +36,12 @@ function setup() {
   state.structures.set(wall.id, wall);
   const send = vi.fn();
   const openOptionSelector = vi.fn();
+  const updateStatus = vi.fn();
   const controller = createWorldBuilderController({
     state,
     hasPermission: () => true,
     send,
-    updateStatus: vi.fn(),
+    updateStatus,
     announceMenuEntry: vi.fn(),
     blip: vi.fn(),
     confirm: vi.fn(),
@@ -55,13 +56,18 @@ function setup() {
   controller.handleRoot('ArrowDown', 'ArrowDown');
   controller.handleRoot('Enter', 'Enter');
   controller.handleWallList('Enter', 'Enter');
-  return { controller, openOptionSelector, send, state };
+  return { controller, openOptionSelector, send, state, updateStatus };
 }
 
 describe('World Builder wall controls', () => {
   it('cycles wall types directly and opens the shared option selector', () => {
-    const { controller, openOptionSelector, send, state } = setup();
+    const { controller, openOptionSelector, send, state, updateStatus } = setup();
     controller.handleWallActions('Enter', 'Enter');
+
+    controller.handlePropertyList('Space', ' ');
+    expect(updateStatus).toHaveBeenLastCalledWith(
+      expect.stringContaining('Type: list. Options: Brick, Curtain.'),
+    );
 
     controller.handlePropertyList('ArrowRight', 'ArrowRight');
     expect(send).toHaveBeenLastCalledWith({
@@ -91,6 +97,12 @@ describe('World Builder wall controls', () => {
     });
 
     controller.handleWallActions('ArrowDown', 'ArrowDown');
+    controller.handleWallActions('ArrowRight', 'ArrowRight');
+    expect(send).toHaveBeenLastCalledWith({
+      type: 'structure_rotate_wall',
+      structureId: 'wall-1',
+      orientation: 'vertical',
+    });
     controller.handleWallActions('Enter', 'Enter');
     const request = openOptionSelector.mock.calls.at(-1)?.[0];
     request.onSelect('vertical');

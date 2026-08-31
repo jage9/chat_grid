@@ -1373,7 +1373,7 @@ class SignalingServer:
                     packet.structureId, delta=packet.delta
                 )
                 result_message = str(
-                    wall.startX if wall.orientation == "horizontal" else wall.startY
+                    wall.startY if wall.orientation == "horizontal" else wall.startX
                 )
             elif isinstance(packet, StructureRotateWallPacket):
                 wall = self.structure_service.rotate_wall(

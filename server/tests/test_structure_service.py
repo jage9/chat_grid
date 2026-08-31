@@ -66,12 +66,16 @@ def test_wall_run_slides_and_rotates_around_its_start(tmp_path: Path) -> None:
     wall = structures.resize_wall(wall.id, endpoint="end", delta=1)
 
     wall = structures.slide_wall(wall.id, delta=1)
-    assert structures.wall_endpoint(wall, "start") == (5, 5, 0)
-    assert structures.wall_endpoint(wall, "finish") == (7, 5, 0)
+    assert structures.wall_endpoint(wall, "start") == (4, 6, 0)
+    assert structures.wall_endpoint(wall, "finish") == (6, 6, 0)
 
     wall = structures.rotate_wall(wall.id, orientation="vertical")
-    assert structures.wall_endpoint(wall, "start") == (5, 5, 0)
-    assert structures.wall_endpoint(wall, "finish") == (5, 7, 0)
+    assert structures.wall_endpoint(wall, "start") == (4, 6, 0)
+    assert structures.wall_endpoint(wall, "finish") == (4, 8, 0)
+
+    wall = structures.slide_wall(wall.id, delta=1)
+    assert structures.wall_endpoint(wall, "start") == (5, 6, 0)
+    assert structures.wall_endpoint(wall, "finish") == (5, 8, 0)
 
 
 def test_failed_wall_rotation_preserves_the_original_run(tmp_path: Path) -> None:

@@ -1,8 +1,8 @@
 import { handleListControlKey } from '../input/listController';
 import { getEditSessionAction } from '../input/editSession';
-import { formatSteppedNumber, snapNumberToStep } from '../input/numeric';
 import { type WorldItem } from '../state/gameState';
 import type { OptionSelectorRequest } from '../input/optionSelector';
+import { adjustPropertyValue, getPropertyOptions } from '../input/propertyControls';
 
 /**
  * Dependencies required to drive item property inspect/edit flows.
@@ -92,72 +92,24 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         deps.sfxUiCancel();
         return;
       }
-      const options = deps.getItemPropertyOptionValues(item.type, selectedKey);
-      if (options && options.length > 0) {
-        const currentRaw = String(item.params[selectedKey] ?? '').trim().toLowerCase();
-        const currentIndex = Math.max(
-          0,
-          options.findIndex((option) => option.toLowerCase() === currentRaw),
-        );
-        const pageJump = Math.min(10, Math.max(1, options.length - 1));
-        const delta =
-          code === 'ArrowRight'
-            ? 1
-            : code === 'ArrowLeft'
-              ? -1
-              : code === 'PageDown'
-                ? pageJump
-                : -pageJump;
-        const nextIndex = (currentIndex + delta + options.length) % options.length;
-        const nextValue = options[nextIndex];
-        deps.suppressItemPropertyEchoMs(600);
-        deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: nextValue } });
-        deps.onPreviewPropertyChange?.(item, selectedKey, nextValue);
-        deps.updateStatus(nextValue);
-        deps.sfxUiBlip();
+      const metadata = {
+        ...deps.getItemPropertyMetadata(item.type, selectedKey),
+        options: deps.getItemPropertyOptionValues(item.type, selectedKey),
+      };
+      const currentValue = metadata.valueType === 'boolean'
+        ? deps.getItemPropertyValue(item, selectedKey)
+        : item.params[selectedKey] ?? deps.getItemPropertyValue(item, selectedKey);
+      const adjustment = adjustPropertyValue(code, currentValue, metadata);
+      if (!adjustment) {
+        deps.sfxUiCancel();
         return;
       }
-      const metadata = deps.getItemPropertyMetadata(item.type, selectedKey);
-      if (metadata?.valueType === 'boolean') {
-        const current = deps.getItemPropertyValue(item, selectedKey).toLowerCase() === 'on';
-        const nextValue = !current;
-        deps.suppressItemPropertyEchoMs(600);
-        deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: nextValue } });
-        deps.onPreviewPropertyChange?.(item, selectedKey, nextValue);
-        deps.updateStatus(nextValue ? 'on' : 'off');
-        deps.sfxUiBlip();
-        return;
-      }
-      if (metadata?.valueType === 'number') {
-        const range = metadata.range;
-        const step = range?.step && range.step > 0 ? range.step : 1;
-        const min = range?.min;
-        const max = range?.max;
-        const currentRaw = Number(item.params[selectedKey]);
-        const currentValue = Number.isFinite(currentRaw)
-          ? currentRaw
-          : Number.isFinite(min)
-            ? min
-            : 0;
-        const multiplier = code === 'PageUp' || code === 'PageDown' ? 10 : 1;
-        const delta = (code === 'ArrowRight' || code === 'PageUp' ? step : -step) * multiplier;
-        const anchor = Number.isFinite(min) ? min : 0;
-        const attempted = snapNumberToStep(currentValue + delta, step, anchor);
-        let nextValue = attempted;
-        if (Number.isFinite(min)) nextValue = Math.max(min, nextValue);
-        if (Number.isFinite(max)) nextValue = Math.min(max, nextValue);
-        deps.suppressItemPropertyEchoMs(600);
-        deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: nextValue } });
-        deps.onPreviewPropertyChange?.(item, selectedKey, nextValue);
-        deps.updateStatus(formatSteppedNumber(nextValue, step));
-        if (Math.abs(nextValue - currentValue) < 1e-9 || Math.abs(nextValue - attempted) > 1e-9) {
-          deps.sfxUiCancel();
-        } else {
-          deps.sfxUiBlip();
-        }
-        return;
-      }
-      deps.sfxUiCancel();
+      deps.suppressItemPropertyEchoMs(600);
+      deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: adjustment.value } });
+      deps.onPreviewPropertyChange?.(item, selectedKey, adjustment.value);
+      deps.updateStatus(adjustment.displayValue);
+      if (adjustment.hitBoundary) deps.sfxUiCancel();
+      else deps.sfxUiBlip();
       return;
     }
     if (control.type === 'select') {
@@ -177,12 +129,15 @@ export function createItemPropertyEditor(deps: EditorDeps): {
         deps.sfxUiBlip();
         return;
       }
-      if (deps.getItemPropertyOptionValues(item.type, selectedKey)) {
-        const options = deps.getItemPropertyOptionValues(item.type, selectedKey) ?? [];
+      const options = getPropertyOptions({
+        ...metadata,
+        options: deps.getItemPropertyOptionValues(item.type, selectedKey),
+      });
+      if (options.length > 0) {
         deps.state.editingPropertyKey = selectedKey;
         deps.openOptionSelector({
           title: `Select ${deps.itemPropertyLabel(selectedKey)}`,
-          options: options.map((value) => ({ id: value, label: value })),
+          options,
           selectedId: deps.getItemPropertyValue(item, selectedKey),
           onSelect: (selectedValue) => {
             deps.signalingSend({ type: 'item_update', itemId, params: { [selectedKey]: selectedValue } });
@@ -244,37 +199,24 @@ export function createItemPropertyEditor(deps: EditorDeps): {
     if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'PageUp' || code === 'PageDown') {
       const metadata = deps.getItemPropertyMetadata(item.type, propertyKey);
       if (metadata?.valueType === 'number') {
-        const range = metadata.range;
-        const step = range?.step && range.step > 0 ? range.step : 1;
-        const min = range?.min;
-        const max = range?.max;
         const rawCurrent = Number(deps.state.nicknameInput.trim());
         const paramCurrent = Number(item.params[propertyKey]);
         const currentValue = Number.isFinite(rawCurrent)
           ? rawCurrent
           : Number.isFinite(paramCurrent)
             ? paramCurrent
-            : Number.isFinite(min)
-              ? min
-              : 0;
-        const multiplier = code === 'PageUp' || code === 'PageDown' ? 10 : 1;
-        const delta = (code === 'ArrowUp' || code === 'PageUp' ? step : -step) * multiplier;
-        const anchor = Number.isFinite(min) ? min : 0;
-        const attempted = snapNumberToStep(currentValue + delta, step, anchor);
-        let nextValue = attempted;
-        if (Number.isFinite(min)) nextValue = Math.max(min, nextValue);
-        if (Number.isFinite(max)) nextValue = Math.min(max, nextValue);
-        deps.state.nicknameInput = formatSteppedNumber(nextValue, step);
-        deps.state.cursorPos = deps.state.nicknameInput.length;
-        deps.setReplaceTextOnNextType(false);
-        deps.onPreviewPropertyChange?.(item, propertyKey, nextValue);
-        deps.updateStatus(deps.state.nicknameInput);
-        if (Math.abs(nextValue - currentValue) < 1e-9 || Math.abs(nextValue - attempted) > 1e-9) {
-          deps.sfxUiCancel();
-        } else {
-          deps.sfxUiBlip();
+            : metadata.range?.min ?? 0;
+        const adjustment = adjustPropertyValue(code, currentValue, metadata, 'vertical');
+        if (adjustment) {
+          deps.state.nicknameInput = adjustment.displayValue;
+          deps.state.cursorPos = deps.state.nicknameInput.length;
+          deps.setReplaceTextOnNextType(false);
+          deps.onPreviewPropertyChange?.(item, propertyKey, adjustment.value);
+          deps.updateStatus(deps.state.nicknameInput);
+          if (adjustment.hitBoundary) deps.sfxUiCancel();
+          else deps.sfxUiBlip();
+          return;
         }
-        return;
       }
     }
     const editAction = getEditSessionAction(code);

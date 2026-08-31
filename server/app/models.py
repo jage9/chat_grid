@@ -197,7 +197,7 @@ class StructureResizeWallPacket(BasePacket):
 
 
 class StructureSlideWallPacket(BasePacket):
-    """Translate a complete wall run by one edge along its own axis."""
+    """Translate a complete wall run by one perpendicular grid edge."""
 
     type: Literal["structure_slide_wall"]
     structureId: str

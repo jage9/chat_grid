@@ -3,10 +3,16 @@ import { nearbyWalls } from '../state/structureGeometry';
 import type { GameState, StructurePreset, WallStructure } from '../state/gameState';
 import type { OutgoingMessage } from '../network/protocol';
 import { getEditSessionAction } from './editSession';
-import { formatSteppedNumber, snapNumberToStep } from './numeric';
+import { formatSteppedNumber } from './numeric';
 import type { OptionSelectorRequest } from './optionSelector';
 import type { ConfirmationRequest } from './confirmationController';
-import { describePropertyHelp, type PropertyHelpMetadata } from './propertyHelp';
+import {
+  adjustPropertyValue,
+  describePropertyHelp,
+  getPropertyOptions,
+  validateNumericPropertyInput,
+  type PropertyControlMetadata,
+} from './propertyControls';
 
 type MenuEntry<T extends string = string> = { id: T; label: string; tooltip?: string };
 
@@ -39,7 +45,7 @@ const WALL_ACTIONS = [
   { id: 'properties', label: 'Edit properties', tooltip: 'Change the wall type or edit its sound properties.' },
   { id: 'setStart', label: 'Set start', tooltip: 'Use Left or Right to decrease or increase the wall start coordinate by one square.' },
   { id: 'setFinish', label: 'Set finish', tooltip: 'Use Left or Right to decrease or increase the wall finish coordinate by one square.' },
-  { id: 'slide', label: 'Slide', tooltip: 'Use Left or Right to move the complete wall by one square along its own axis.' },
+  { id: 'slide', label: 'Slide', tooltip: 'Use Left or Right to move the complete wall perpendicular to its run by one square.' },
   { id: 'orientation', label: 'Orientation', tooltip: 'Choose horizontal or vertical. Rotation keeps the start coordinate fixed and succeeds only if the run fits.' },
   { id: 'delete', label: 'Delete wall', tooltip: 'Delete this entire wall run.' },
 ] as const;
@@ -56,18 +62,42 @@ const NUMERIC_PROPERTIES = {
   soundTransmission: { min: 0, max: 1, step: 0.05, anchor: 0 },
   occlusionLowpassHz: { min: 20, max: 20_000, step: 100, anchor: 0 },
 } as const;
+const ORIENTATION_METADATA: PropertyControlMetadata = {
+  valueType: 'list',
+  tooltip: 'Set the wall run direction. Rotation keeps the start coordinate fixed and succeeds only if the run fits.',
+  options: [
+    { id: 'horizontal', label: 'Horizontal' },
+    { id: 'vertical', label: 'Vertical' },
+  ],
+};
 
-function propertyMetadata(property: PropertyId, presets: StructurePreset[]): PropertyHelpMetadata {
+function propertyMetadata(property: PropertyId, presets: StructurePreset[]): PropertyControlMetadata {
   if (property === 'preset') {
-    return { valueType: 'list', options: presets.map((preset) => preset.title) };
+    return {
+      valueType: 'list',
+      tooltip: 'Choose a wall type and reset all wall properties to that preset’s defaults.',
+      options: presets.map((preset) => ({ id: preset.id, label: preset.title })),
+    };
   }
   if (property === 'soundTransmission') {
-    return { valueType: 'number', range: NUMERIC_PROPERTIES.soundTransmission };
+    return {
+      valueType: 'number',
+      tooltip: 'Set how much sound passes through the wall, from silent to unchanged.',
+      range: NUMERIC_PROPERTIES.soundTransmission,
+    };
   }
   if (property === 'occlusionLowpassHz') {
-    return { valueType: 'number', range: NUMERIC_PROPERTIES.occlusionLowpassHz };
+    return {
+      valueType: 'number',
+      tooltip: 'Set the highest frequency that passes through the wall.',
+      range: NUMERIC_PROPERTIES.occlusionLowpassHz,
+    };
   }
-  return { valueType: 'sound', maxLength: 200 };
+  return {
+    valueType: 'sound',
+    tooltip: 'Set the sound played when someone hits or passes through the wall.',
+    maxLength: 200,
+  };
 }
 
 /** Create the accessible menu controller for live wall editing. */
@@ -107,7 +137,7 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
         const horizontal = wall.orientation === 'horizontal';
         return {
           ...entry,
-          label: `Slide ${horizontal ? 'horizontally' : 'vertically'}: ${horizontal ? wall.startX : wall.startY}`,
+          label: `Slide ${horizontal ? 'vertically' : 'horizontally'}: ${horizontal ? wall.startY : wall.startX}`,
         };
       }
       if (entry.id === 'orientation') {
@@ -256,6 +286,23 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
       });
       return;
     }
+    if (wall && currentAction === 'orientation') {
+      if (code === 'Space') {
+        deps.updateStatus(describePropertyHelp('Orientation', ORIENTATION_METADATA, true));
+        return;
+      }
+      const adjustment = adjustPropertyValue(code, wall.orientation, ORIENTATION_METADATA);
+      if (adjustment) {
+        deps.send({
+          type: 'structure_rotate_wall',
+          structureId: wall.id,
+          orientation: adjustment.value as WallStructure['orientation'],
+        });
+        deps.updateStatus(adjustment.displayValue);
+        deps.blip();
+        return;
+      }
+    }
     handleList(code, key, entries, (action) => {
       const wall = selectedWall();
       if (!wall) {
@@ -288,10 +335,7 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
       if (action === 'orientation') {
         deps.openOptionSelector({
           title: 'Orientation',
-          options: [
-            { id: 'horizontal', label: 'Horizontal' },
-            { id: 'vertical', label: 'Vertical' },
-          ],
+          options: getPropertyOptions(ORIENTATION_METADATA),
           selectedId: wall.orientation,
           onSelect: (orientation) => {
             deps.send({
@@ -319,56 +363,27 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
   function handlePropertyList(code: string, key: string): void {
     const entries = propertyEntries(selectedWall());
     const property = PROPERTY_ACTIONS[index]?.id;
-    const numeric = property === 'soundTransmission' || property === 'occlusionLowpassHz'
-      ? NUMERIC_PROPERTIES[property]
-      : null;
-    if (
-      property === 'preset'
-      && presets.length > 0
-      && ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown'].includes(code)
-    ) {
+    if (property && ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown'].includes(code)) {
       const wall = selectedWall();
       if (!wall) return;
-      const currentIndex = Math.max(0, presets.findIndex((preset) => preset.id === wall.preset));
-      const pageJump = Math.min(10, Math.max(1, presets.length - 1));
-      const delta = code === 'ArrowRight'
-        ? 1
-        : code === 'ArrowLeft'
-          ? -1
-          : code === 'PageDown'
-            ? pageJump
-            : -pageJump;
-      const nextPreset = presets[(currentIndex + delta + presets.length) % presets.length];
-      deps.state.structures.set(wall.id, {
-        ...wall,
-        ...nextPreset,
-        preset: nextPreset.id,
-      });
-      deps.send({ type: 'structure_update_wall', structureId: wall.id, preset: nextPreset.id });
-      deps.updateStatus(nextPreset.title);
-      deps.blip();
-      return;
-    }
-    if (
-      numeric
-      && (property === 'soundTransmission' || property === 'occlusionLowpassHz')
-      && ['ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown'].includes(code)
-    ) {
-      const wall = selectedWall();
-      if (!wall) return;
-      const currentValue = property === 'soundTransmission'
-        ? wall.soundTransmission
-        : wall.occlusionLowpassHz;
-      const multiplier = code === 'PageUp' || code === 'PageDown' ? 10 : 1;
-      const delta = (code === 'ArrowRight' || code === 'PageUp' ? numeric.step : -numeric.step) * multiplier;
-      const attempted = snapNumberToStep(currentValue + delta, numeric.step, numeric.anchor);
-      const nextValue = Math.max(numeric.min, Math.min(numeric.max, attempted));
-      deps.state.structures.set(wall.id, { ...wall, [property]: nextValue });
-      deps.send({ type: 'structure_update_wall', structureId: wall.id, [property]: nextValue });
-      deps.updateStatus(formatSteppedNumber(nextValue, numeric.step));
-      if (Math.abs(nextValue - currentValue) < 1e-9) deps.cancel();
-      else deps.blip();
-      return;
+      const currentValue = property === 'preset' ? wall.preset : wall[property];
+      const adjustment = adjustPropertyValue(code, currentValue, propertyMetadata(property, presets));
+      if (adjustment) {
+        if (property === 'preset') {
+          const nextPreset = presets.find((preset) => preset.id === adjustment.value);
+          if (!nextPreset) return;
+          deps.state.structures.set(wall.id, { ...wall, ...nextPreset, preset: nextPreset.id });
+          deps.send({ type: 'structure_update_wall', structureId: wall.id, preset: nextPreset.id });
+        } else if (property === 'soundTransmission' || property === 'occlusionLowpassHz') {
+          const nextValue = Number(adjustment.value);
+          deps.state.structures.set(wall.id, { ...wall, [property]: nextValue });
+          deps.send({ type: 'structure_update_wall', structureId: wall.id, [property]: nextValue });
+        }
+        deps.updateStatus(adjustment.displayValue);
+        if (adjustment.hitBoundary) deps.cancel();
+        else deps.blip();
+        return;
+      }
     }
     if (code === 'Space' && property) {
       const action = PROPERTY_ACTIONS[index];
@@ -384,9 +399,10 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
           deps.cancel();
           return;
         }
+        const metadata = propertyMetadata(property, presets);
         deps.openOptionSelector({
           title: 'Wall type',
-          options: presets.map((preset) => ({ id: preset.id, label: preset.title })),
+          options: getPropertyOptions(metadata),
           selectedId: wall.preset,
           onSelect: (preset) => {
             deps.send({ type: 'structure_update_wall', structureId: wall.id, preset });
@@ -415,27 +431,26 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
   }
 
   function handlePropertyEdit(code: string, key: string, ctrlKey = false): void {
-    if (
-      editingProperty
-      && editingProperty !== 'contactSound'
-      && ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'].includes(code)
-    ) {
-      const numeric = NUMERIC_PROPERTIES[editingProperty];
+    if (editingProperty && ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'].includes(code)) {
       const wall = selectedWall();
       if (!wall) return;
       const rawCurrent = Number(deps.state.nicknameInput.trim());
       const currentValue = Number.isFinite(rawCurrent) ? rawCurrent : wall[editingProperty];
-      const multiplier = code === 'PageUp' || code === 'PageDown' ? 10 : 1;
-      const delta = (code === 'ArrowUp' || code === 'PageUp' ? numeric.step : -numeric.step) * multiplier;
-      const attempted = snapNumberToStep(currentValue + delta, numeric.step, numeric.anchor);
-      const nextValue = Math.max(numeric.min, Math.min(numeric.max, attempted));
-      deps.state.nicknameInput = formatSteppedNumber(nextValue, numeric.step);
-      deps.state.cursorPos = deps.state.nicknameInput.length;
-      deps.setReplaceTextOnNextType(false);
-      deps.updateStatus(deps.state.nicknameInput);
-      if (Math.abs(nextValue - currentValue) < 1e-9) deps.cancel();
-      else deps.blip();
-      return;
+      const adjustment = adjustPropertyValue(
+        code,
+        currentValue,
+        propertyMetadata(editingProperty, presets),
+        'vertical',
+      );
+      if (adjustment) {
+        deps.state.nicknameInput = adjustment.displayValue;
+        deps.state.cursorPos = deps.state.nicknameInput.length;
+        deps.setReplaceTextOnNextType(false);
+        deps.updateStatus(deps.state.nicknameInput);
+        if (adjustment.hitBoundary) deps.cancel();
+        else deps.blip();
+        return;
+      }
     }
     const action = getEditSessionAction(code);
     if (action === 'cancel') {
@@ -450,20 +465,20 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
       if (!wall || !editingProperty) return;
       const raw = deps.state.nicknameInput.trim();
       let value: number | string = raw;
-      if (editingProperty === 'soundTransmission') {
-        value = Number(raw);
-        if (!Number.isFinite(value) || value < 0 || value > 1) {
-          deps.updateStatus('Sound transmission must be between 0 and 1.');
+      if (editingProperty === 'soundTransmission' || editingProperty === 'occlusionLowpassHz') {
+        const label = PROPERTY_ACTIONS.find((entry) => entry.id === editingProperty)?.label ?? editingProperty;
+        const parsed = validateNumericPropertyInput(
+          label,
+          raw,
+          propertyMetadata(editingProperty, presets),
+          editingProperty === 'occlusionLowpassHz',
+        );
+        if (!parsed.ok) {
+          deps.updateStatus(parsed.message);
           deps.cancel();
           return;
         }
-      } else if (editingProperty === 'occlusionLowpassHz') {
-        value = Number(raw);
-        if (!Number.isInteger(value) || value < 20 || value > 20_000) {
-          deps.updateStatus('Occlusion low-pass must be a whole number from 20 to 20000 hertz.');
-          deps.cancel();
-          return;
-        }
+        value = parsed.value;
       }
       deps.send({ type: 'structure_update_wall', structureId: wall.id, [editingProperty]: value });
       deps.state.mode = 'worldBuilderPropertyList';

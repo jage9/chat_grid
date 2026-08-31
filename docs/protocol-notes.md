@@ -36,7 +36,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_piano_recording`: piano record/playback control (`toggle_record`, `playback`, `stop_playback`).
 - `structure_add_wall`: create a one-edge wall from a server preset on the requested side of the builder's current square.
 - `structure_resize_wall`: decrease or increase one complete wall run's start/finish coordinate by one edge; the result reports only the authoritative endpoint `x, y, z`.
-- `structure_slide_wall`: move a complete horizontal run along x or a complete vertical run along y by one edge, preserving its length.
+- `structure_slide_wall`: move a complete horizontal run along y or a complete vertical run along x by one edge, preserving its length.
 - `structure_rotate_wall`: set a run to horizontal or vertical while preserving its canonical start coordinate and length.
 - `structure_update_wall`: update one wall run's explicit `soundTransmission`, `occlusionLowpassHz`, and/or `contactSound`; supplying `preset` reapplies all server-owned defaults for that type before optional explicit overrides.
 - `structure_delete`: delete one complete wall run.

@@ -6,7 +6,7 @@ import {
   getItemTypeGlobalProperties,
   itemPropertyLabel,
 } from './itemRegistry';
-import { describePropertyHelp } from '../input/propertyHelp';
+import { describePropertyHelp, validateNumericPropertyInput } from '../input/propertyControls';
 
 /** Builds shared item-property presentation/validation helpers used by item menus and message echoes. */
 export function createItemPropertyPresentation(): {
@@ -78,29 +78,12 @@ export function createItemPropertyPresentation(): {
     rawValue: string,
     requireInteger: boolean,
   ): { ok: true; value: number } | { ok: false; message: string } => {
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed)) {
-      return { ok: false, message: `${itemPropertyLabel(key)} must be a number.` };
-    }
-    if (requireInteger && !Number.isInteger(parsed)) {
-      return { ok: false, message: `${itemPropertyLabel(key)} must be an integer.` };
-    }
-    const range = getItemPropertyMetadata(item.type, key)?.range;
-    if (range && (parsed < range.min || parsed > range.max)) {
-      return { ok: false, message: `${itemPropertyLabel(key)} must be between ${range.min} and ${range.max}.` };
-    }
-    if (!range) {
-      return { ok: true, value: parsed };
-    }
-    if (range.step && range.step > 0) {
-      const anchor = Number.isFinite(range.min) ? range.min : 0;
-      const steps = Math.round((parsed - anchor) / range.step);
-      const snapped = anchor + steps * range.step;
-      const precision = String(range.step).includes('.') ? String(range.step).split('.')[1]?.length ?? 0 : 0;
-      const rounded = Number(snapped.toFixed(precision));
-      return { ok: true, value: rounded };
-    }
-    return { ok: true, value: parsed };
+    return validateNumericPropertyInput(
+      itemPropertyLabel(key),
+      rawValue,
+      getItemPropertyMetadata(item.type, key),
+      requireInteger,
+    );
   };
 
   return {

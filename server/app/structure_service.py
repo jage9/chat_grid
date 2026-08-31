@@ -143,13 +143,13 @@ class StructureService:
         )
 
     def slide_wall(self, structure_id: str, *, delta: int) -> WallStructure:
-        """Translate a complete wall run by one edge along its own axis."""
+        """Translate a complete wall run by one perpendicular grid edge."""
 
         wall = self.structures.get(structure_id)
         if wall is None:
             raise StructureError("Wall not found.")
         values = wall.model_dump()
-        values["startX" if wall.orientation == "horizontal" else "startY"] += delta
+        values["startY" if wall.orientation == "horizontal" else "startX"] += delta
         moved = WallStructure.model_validate(values)
         self._validate_wall(moved, exclude_id=wall.id)
         self._remove_from_index(wall)

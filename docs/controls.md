@@ -55,8 +55,8 @@ This document is the authoritative keymap for the client.
 - `Add wall`: Select a server-configured preset, then select the north, south, east, or west edge of the current square.
 - `Edit walls`: List current-floor walls nearest first, then edit properties, adjust either endpoint, slide, rotate, or delete the complete wall.
 - `Set start` / `Set finish`: Each entry shows its current `x, y, z`. `ArrowLeft` decreases that endpoint's run-axis coordinate by one; `ArrowRight` increases it. The result announces only the authoritative new coordinate.
-- `Slide horizontally` / `Slide vertically`: `ArrowLeft` or `ArrowRight` moves the complete run one square along its own axis without changing its length.
-- `Orientation`: Choose horizontal or vertical through the shared option selector. Rotation keeps the start coordinate fixed and is rejected if the rotated run is outside the world or overlaps another wall.
+- `Slide vertically` / `Slide horizontally`: `ArrowLeft` or `ArrowRight` moves a horizontal run along y or a vertical run along x without changing its length.
+- `Orientation`: `ArrowLeft`/`ArrowRight` cycles horizontal and vertical directly; `Enter` opens the shared option selector. Rotation keeps the start coordinate fixed and is rejected if the rotated run is outside the world or overlaps another wall.
 - `Edit properties`: Change wall type, sound transmission (`0..1`), occlusion low-pass (`20..20000` hertz), or the contact-sound URL.
 - `Type`: `ArrowLeft`/`ArrowRight` cycles presets directly; `Enter` opens the same shared option selector as list-based item properties. Choosing a preset resets title, movement behavior, height, transmission, low-pass, and contact sound to that preset's defaults.
 - On transmission or low-pass, `ArrowLeft`/`ArrowRight` changes one numeric step and `PageDown`/`PageUp` changes ten steps. Inside the numeric editor, use `ArrowDown`/`ArrowUp` and the corresponding page keys.
