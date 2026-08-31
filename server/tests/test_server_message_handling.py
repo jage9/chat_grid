@@ -16,6 +16,7 @@ from app.auth_service import AuthError
 from app.models import (
     BasePacket,
     BroadcastChatMessagePacket,
+    BroadcastNicknamePacket,
     BroadcastPositionPacket,
     BroadcastTeleportCompletePacket,
     AdminActionResultPacket,
@@ -636,6 +637,21 @@ async def test_auth_login_defers_activation_until_welcome_ready(
 
     assert client.world_ready is True
     assert server.clients.get(ws) is client
+    assert _packet_types(broadcast_payloads)[-3:] == [
+        "update_position",
+        "update_nickname",
+        "chat_message",
+    ]
+    presence = _last_packet_of_type(broadcast_payloads, BroadcastPositionPacket)
+    assert (presence.id, presence.x, presence.y, presence.z) == (
+        client.id,
+        client.x,
+        client.y,
+        client.z,
+    )
+    nickname = _last_packet_of_type(broadcast_payloads, BroadcastNicknamePacket)
+    assert nickname.id == client.id
+    assert nickname.nickname == client.nickname
     assert any(
         "has logged in" in getattr(packet, "message", "")
         for packet in broadcast_payloads

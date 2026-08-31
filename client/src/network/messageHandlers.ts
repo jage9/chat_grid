@@ -35,7 +35,6 @@ type MessageHandlerDeps = {
     canvas: HTMLCanvasElement;
     instructions: HTMLElement;
   };
-  signalingSend: (message: unknown) => void;
   peerManager: {
     ensurePeer: (id: string, user: { id: string; nickname: string; x: number; y: number; z: number; acousticZoneId: string }) => unknown;
     setPeerPosition: (id: string, x: number, y: number, z: number, acousticZoneId: string) => void;
@@ -45,17 +44,17 @@ type MessageHandlerDeps = {
   };
   refreshAudioSubscriptions: (force?: boolean) => Promise<void>;
   refreshAcousticModel: () => void;
+  getPeerAcousticTransmission: (peerAcousticZoneId: string) => number;
   cleanupItemAudio: (itemId: string) => void;
   applyAudioLayerState: () => Promise<void>;
   gameLoop: () => void;
   sanitizeName: (value: string) => string;
   randomFootstepUrl: () => string;
-  playRemoteSpatialStepOrTeleport: (url: string, peerX: number, peerY: number, peerZ: number) => void;
+  playRemoteFootstep: (url: string, peerX: number, peerY: number, peerZ: number, acousticGain: number) => void;
   handleItemActionResultStatus: (message: Extract<IncomingMessage, { type: 'item_action_result' }>) => boolean;
   handleItemBehaviorIncomingMessage: (message: IncomingMessage) => boolean;
   handleItemBehaviorPeerLeft: (senderId: string) => void;
   TELEPORT_SOUND_URL: string;
-  TELEPORT_START_SOUND_URL: string;
   getAudioLayers: () => { world: boolean; item: boolean };
   pushChatMessage: (message: string) => void;
   classifySystemMessageSound: (message: string) => 'logon' | 'logout' | 'notify' | null;
@@ -170,9 +169,6 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.dom.instructions.classList.remove('hidden');
         deps.dom.canvas.focus();
 
-        deps.signalingSend({ type: 'update_position', x: deps.state.player.x, y: deps.state.player.y, z: deps.state.player.z });
-        deps.signalingSend({ type: 'update_nickname', nickname: deps.state.player.nickname });
-
         for (const user of message.users) {
           deps.state.peers.set(user.id, { ...user });
           deps.peerManager.ensurePeer(user.id, user);
@@ -241,12 +237,20 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.refreshAcousticModel();
         if (peer) {
           const movementDelta = Math.hypot(message.x - prevX, message.y - prevY);
+          const acousticGain = deps.getPeerAcousticTransmission(peer.acousticZoneId);
           if (
             movementDelta <= 1.5
             && peer.z === deps.state.player.z
             && deps.getAudioLayers().world
+            && acousticGain > 0
           ) {
-            deps.playRemoteSpatialStepOrTeleport(deps.randomFootstepUrl(), peer.x, peer.y, peer.z);
+            deps.playRemoteFootstep(
+              deps.randomFootstepUrl(),
+              peer.x,
+              peer.y,
+              peer.z,
+              acousticGain,
+            );
           }
         }
         break;

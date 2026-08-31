@@ -1770,10 +1770,14 @@ const onAppMessage = createOnMessageHandler({
   applyServerItemUiDefinitions: (defs) => applyServerItemUiDefinitions(defs as Parameters<typeof applyServerItemUiDefinitions>[0]),
   state,
   dom,
-  signalingSend: (message) => signaling.send(message as OutgoingMessage),
   peerManager,
   refreshAudioSubscriptions,
   refreshAcousticModel,
+  getPeerAcousticTransmission: (peerAcousticZoneId) => acousticZoneRuntime.transmission(
+    state.player.acousticZoneId,
+    peerAcousticZoneId,
+    state.items,
+  ),
   cleanupItemAudio: (itemId) => {
     radioRuntime.cleanup(itemId);
     itemEmitRuntime.cleanup(itemId);
@@ -1783,20 +1787,18 @@ const onAppMessage = createOnMessageHandler({
   gameLoop,
   sanitizeName,
   randomFootstepUrl,
-  playRemoteSpatialStepOrTeleport: (url, peerX, peerY, peerZ) => {
-    const gain = url === TELEPORT_START_SOUND_URL ? TELEPORT_START_GAIN : FOOTSTEP_GAIN;
+  playRemoteFootstep: (url, peerX, peerY, peerZ, acousticGain) => {
     void audio.playSpatialSample(
       url,
       { x: peerX, y: peerY, z: peerZ },
       { x: state.player.x, y: state.player.y, z: state.player.z },
-      gain,
+      FOOTSTEP_GAIN * acousticGain,
     );
   },
   handleItemActionResultStatus: (message) => itemBehaviorRegistry.onActionResultStatus(message),
   handleItemBehaviorIncomingMessage: (message) => itemBehaviorRegistry.onIncomingMessage(message),
   handleItemBehaviorPeerLeft: (senderId) => itemBehaviorRegistry.onPeerLeft(senderId),
   TELEPORT_SOUND_URL,
-  TELEPORT_START_SOUND_URL,
   getAudioLayers: () => audioLayers,
   pushChatMessage,
   classifySystemMessageSound,

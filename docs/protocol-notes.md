@@ -53,11 +53,11 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `admin_action_result`: structured result for admin actions.
   - admin mutations include `user_delete` for account deletion.
 - `welcome`: initial snapshot with users/items plus server UI/world metadata.
-  - Server delays roster activation/login broadcast until `welcome_ready` is received.
+  - Server delays roster activation until `welcome_ready`, then publishes the new user's position and nickname before the login announcement.
 - `livekit_token`: short-lived authenticated LiveKit room token and public WebSocket URL.
   - Issued only after authentication when complete LiveKit configuration is enabled.
   - The API secret is never sent to the browser.
-- `update_position`, `update_nickname`, `user_left`: presence updates. `welcome.player`, `welcome.users[]`, and `update_position` carry the server-owned `acousticZoneId` (`floor:<z>` or `elevator:<itemId>`).
+- `update_position`, `update_nickname`, `user_left`: presence updates. `welcome.player`, `welcome.users[]`, and `update_position` carry the server-owned `acousticZoneId` (`floor:<z>` or `elevator:<itemId>`). Activation publishes position followed by nickname so existing clients can hydrate a complete peer entry immediately.
 - `teleport_complete`: peer teleport landing event with spatial coordinates.
 - `chat_message`: system and user chat stream.
 - `pong`: ping response.

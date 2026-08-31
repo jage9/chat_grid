@@ -1077,6 +1077,16 @@ class SignalingServer:
             len(self.clients),
         )
         await self._broadcast(
+            client_position_packet(client),
+            exclude=client.websocket,
+        )
+        await self._broadcast(
+            BroadcastNicknamePacket(
+                type="update_nickname", id=client.id, nickname=client.nickname
+            ),
+            exclude=client.websocket,
+        )
+        await self._broadcast(
             BroadcastChatMessagePacket(
                 type="chat_message",
                 message=f"{client.nickname} has logged in.",
