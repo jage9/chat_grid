@@ -1355,6 +1355,7 @@ async def test_wall_contact_broadcasts_world_sound(
     sound = _last_packet_of_type(broadcasts, WorldSoundPacket)
     assert sound.sound == "/sounds/wall.ogg"
     assert (sound.x, sound.y, sound.z) == (sound_x, 5, 0)
+    assert sound.acousticZoneId == "floor:0"
 
 
 @pytest.mark.asyncio
@@ -1441,6 +1442,7 @@ async def test_teleport_complete_broadcasts_spatial_event(
     assert teleport_packets[0].id == "u1"
     assert teleport_packets[0].x == 12
     assert teleport_packets[0].y == 13
+    assert teleport_packets[0].acousticZoneId == "floor:0"
 
 
 @pytest.mark.asyncio

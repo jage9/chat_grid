@@ -10,7 +10,10 @@ from typing import Literal
 
 from websockets.asyncio.server import ServerConnection
 
-from ....acoustic_zones import client_position_packet
+from ....acoustic_zones import (
+    client_position_packet,
+    elevator_acoustic_zone_id,
+)
 from ....client import ClientConnection
 from ....models import (
     ItemElevatorStatusPacket,
@@ -354,7 +357,7 @@ class ElevatorRuntime:
     async def _broadcast_sound(
         self, item: WorldItem, current_z: int, sound: str
     ) -> None:
-        """Play one elevator sound for the landing and riders between floors."""
+        """Emit one cabin-zone sound audible to riders and connected landings."""
 
         packet = ItemUseSoundPacket(
             type="item_use_sound",
@@ -363,19 +366,10 @@ class ElevatorRuntime:
             x=item.x,
             y=item.y,
             z=current_z,
+            acousticZoneId=elevator_acoustic_zone_id(item.id),
             range=self.callbacks.get_emit_range(item),
         )
         await self.callbacks.broadcast(packet)
-        await asyncio.gather(
-            *(
-                self.callbacks.send(
-                    rider.websocket,
-                    packet.model_copy(update={"z": rider.z}),
-                )
-                for rider in tuple(self.callbacks.iter_clients())
-                if rider.elevator_id == item.id and rider.z != current_z
-            )
-        )
 
     async def _broadcast_travel_position(self, item: WorldItem, travel_z: int) -> None:
         """Move riders to one intermediate elevator height."""

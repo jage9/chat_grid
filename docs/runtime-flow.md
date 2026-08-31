@@ -51,6 +51,7 @@ Each frame:
 - Update spatial radio audio.
 - Update spatial item emit audio.
 - Trace intervening wall edges for positional audio, multiply their transmission gains, and apply the lowest crossed low-pass cutoff.
+- Recompute active sampled world sounds through the shared world-audio router using source/listener acoustic zones, wall transmission, range, distance, and pan.
 - A ray grazing the actual endpoint of a wall run applies half-strength occlusion; exact corners inside a continuing run or formed by two walls remain fully occluded.
 - Draw canvas scene.
 
@@ -67,20 +68,20 @@ Core incoming message effects:
 - `admin_roles_list`: role metadata + user counts + permission keys for role management UI.
 - `admin_users_list`: user metadata list for role/ban admin flows.
 - `admin_action_result`: success/error for role/user admin mutations.
-- `update_position`: update peer position; may play movement/teleport world sound.
+- `update_position`: update peer position; movement may route a footstep through the shared world-audio path.
 - `teleport_complete`: play peer teleport landing sound at final tile.
 - `update_nickname`: update peer display name.
 - `chat_message`: append/readable status; optional system sound class.
 - `item_upsert`: replace item snapshot and resync item runtimes.
 - `item_remove`: remove item and cleanup runtimes.
 - `item_action_result`: success/error status for actions.
-- `item_use_sound`: play one-shot spatial sample (world layer gated).
+- `item_use_sound`: route a positional one-shot through the shared world-audio path.
 - `item_piano_note`: start/stop synthesized piano notes from remote users (item layer gated).
 - `item_piano_status`: structured piano mode/record/playback transitions (client runtime state).
 - `item_elevator_status`: track local elevator entry, travel, arrival, and exit state.
 - `structure_upsert` / `structure_remove`: apply live wall-run changes used by rendering and collision prediction.
 - `structure_action_result`: announce World Builder mutation success/failure.
-- `world_sound`: play a server-validated positional structure contact sound for another user's blocked impact or successful crossing.
+- `world_sound`: route a server-validated positional structure contact sound for another user's blocked impact or successful crossing.
 - `pong`:
   - positive `clientSentAt`: user ping response (`P` command)
   - negative `clientSentAt`: internal heartbeat response
@@ -133,5 +134,6 @@ On disconnect:
 - `PeerManager`: LiveKit room lifecycle and remote track attach.
 - `RadioStationRuntime`: shared stream sources + per-item output/effects/spatialization.
 - `ItemEmitRuntime`: per-item looping emit source + spatialization.
-- `AudioEngine`: shared audio context, samples, effects, voice graph.
+- `AudioEngine`: shared audio context, sample playback, effects, and voice graph.
+- `WorldAudioRouter`: shared policy and playback entry point for sampled positional world events.
 - `AcousticZoneRuntime`: shared zone connectivity and opening/closing transmission gain.

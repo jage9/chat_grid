@@ -22,7 +22,7 @@ class ClockRuntimeHost(Protocol):
     @property
     def items(self) -> dict[str, WorldItem]: ...
 
-    def get_sound_source_position(self, item: WorldItem) -> tuple[int, int, int]: ...
+    def get_sound_source(self, item: WorldItem) -> tuple[int, int, int, str]: ...
 
     def get_emit_range(self, item: WorldItem) -> int: ...
 
@@ -128,7 +128,7 @@ class ClockRuntime:
     ) -> None:
         """Broadcast one server-authoritative clock speech sequence from item position."""
 
-        sound_x, sound_y, sound_z = self.host.get_sound_source_position(item)
+        sound_x, sound_y, sound_z, sound_zone_id = self.host.get_sound_source(item)
         sound_range = self.host.get_emit_range(item)
         sounds = self._build_clock_announcement_sounds(
             item.params, top_of_hour=top_of_hour, alarm=alarm
@@ -143,6 +143,7 @@ class ClockRuntime:
                 x=sound_x,
                 y=sound_y,
                 z=sound_z,
+                acousticZoneId=sound_zone_id,
                 range=sound_range,
             )
         )

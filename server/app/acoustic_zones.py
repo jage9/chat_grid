@@ -12,11 +12,17 @@ def floor_acoustic_zone_id(z: int) -> str:
     return f"floor:{z}"
 
 
+def elevator_acoustic_zone_id(item_id: str) -> str:
+    """Return the stable acoustic-zone identifier for one elevator cabin."""
+
+    return f"elevator:{item_id}"
+
+
 def client_acoustic_zone_id(client: ClientConnection) -> str:
     """Return the client's current cabin or floor acoustic zone."""
 
     if client.elevator_id:
-        return f"elevator:{client.elevator_id}"
+        return elevator_acoustic_zone_id(client.elevator_id)
     return floor_acoustic_zone_id(client.z)
 
 

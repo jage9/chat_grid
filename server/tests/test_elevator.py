@@ -457,14 +457,6 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
         if isinstance(packet, ItemElevatorStatusPacket) and packet.event == "arrived"
     )
     assert arrival.message == "Elevator arrives on Second floor. The door opens."
-    rider_open_sound = next(
-        packet
-        for packet in sent
-        if isinstance(packet, ItemUseSoundPacket)
-        and packet.sound == "/sounds/elevator_open.ogg"
-    )
-    assert rider_open_sound.sound == "/sounds/elevator_open.ogg"
-    assert rider_open_sound.z not in {0, 40}
     elevator_sounds = [
         packet for packet in broadcast if isinstance(packet, ItemUseSoundPacket)
     ]
@@ -480,6 +472,7 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
     assert all(state == "moving" for _, state in sleeps[close_index + 1 :])
     opening_sound = elevator_sounds[1]
     assert (opening_sound.x, opening_sound.y, opening_sound.z) == (10, 10, 40)
+    assert opening_sound.acousticZoneId == f"elevator:{elevator.id}"
 
 
 @pytest.mark.asyncio
@@ -505,6 +498,7 @@ async def test_elevator_door_sound_announces_next_upward_trip(
     arrival_sound = cast(ItemUseSoundPacket, broadcast[0])
     assert arrival_sound.sound == "/sounds/elevator_up.ogg"
     assert arrival_sound.z == 0
+    assert arrival_sound.acousticZoneId == f"elevator:{elevator.id}"
 
 
 @pytest.mark.asyncio

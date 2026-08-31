@@ -34,15 +34,18 @@ type SoundSpec = {
 };
 
 type OutputMode = 'stereo' | 'mono';
-type SpatialTransmissionResolver = (
-  source: { x: number; y: number; z: number },
-  listener: { x: number; y: number; z: number },
+export type SpatialAudioPosition = { x: number; y: number; z: number; acousticZoneId: string };
+
+export type SpatialTransmissionResolver = (
+  source: SpatialAudioPosition,
+  listener: SpatialAudioPosition,
 ) => AcousticMix;
 const ONE_SHOT_ATTACK_SECONDS = 0.02;
 type ActiveSpatialSampleRuntime = {
   sourceX: number;
   sourceY: number;
   sourceZ: number;
+  sourceAcousticZoneId: string;
   range: number;
   baseGain: number;
   gainNode: GainNode;
@@ -349,7 +352,7 @@ export class AudioEngine {
   }
 
   /** Updates active one-shot spatial sample gain/pan against current listener position. */
-  updateSpatialSamples(playerPosition: { x: number; y: number; z: number }): void {
+  updateSpatialSamples(playerPosition: SpatialAudioPosition): void {
     if (!this.audioCtx) return;
     for (const sample of Array.from(this.activeSpatialSamples)) {
       this.applySpatialSampleRuntime(sample, playerPosition);
@@ -386,8 +389,8 @@ export class AudioEngine {
 
   async playSpatialSample(
     url: string,
-    sourcePosition: { x: number; y: number; z: number },
-    playerPosition: { x: number; y: number; z: number },
+    sourcePosition: SpatialAudioPosition,
+    playerPosition: SpatialAudioPosition,
     gain = 1,
     range = HEARING_RADIUS,
   ): Promise<void> {
@@ -416,6 +419,7 @@ export class AudioEngine {
         sourceX: sourcePosition.x,
         sourceY: sourcePosition.y,
         sourceZ: sourcePosition.z,
+        sourceAcousticZoneId: sourcePosition.acousticZoneId,
         range: Math.max(1, range),
         baseGain: gain,
         gainNode,
@@ -445,8 +449,8 @@ export class AudioEngine {
   /** Plays one spatial sample and resolves when playback finishes. */
   async playSpatialSampleAndWait(
     url: string,
-    sourcePosition: { x: number; y: number; z: number },
-    playerPosition: { x: number; y: number; z: number },
+    sourcePosition: SpatialAudioPosition,
+    playerPosition: SpatialAudioPosition,
     gain = 1,
     range = HEARING_RADIUS,
   ): Promise<void> {
@@ -475,6 +479,7 @@ export class AudioEngine {
         sourceX: sourcePosition.x,
         sourceY: sourcePosition.y,
         sourceZ: sourcePosition.z,
+        sourceAcousticZoneId: sourcePosition.acousticZoneId,
         range: Math.max(1, range),
         baseGain: gain,
         gainNode,
@@ -658,16 +663,19 @@ export class AudioEngine {
 
   private applySpatialSampleRuntime(
     sample: ActiveSpatialSampleRuntime,
-    playerPosition: { x: number; y: number; z: number },
+    playerPosition: SpatialAudioPosition,
     initial = false,
   ): void {
     if (!this.audioCtx) return;
-    const acoustic = sample.sourceZ === playerPosition.z
-      ? normalizeAcousticMix(this.spatialTransmissionResolver(
-          { x: sample.sourceX, y: sample.sourceY, z: sample.sourceZ },
-          playerPosition,
-        ))
-      : { gain: 0, lowpassHz: 20_000 };
+    const acoustic = normalizeAcousticMix(this.spatialTransmissionResolver(
+      {
+        x: sample.sourceX,
+        y: sample.sourceY,
+        z: sample.sourceZ,
+        acousticZoneId: sample.sourceAcousticZoneId,
+      },
+      playerPosition,
+    ));
     const acousticGain = acoustic.gain;
     applyAcousticLowpass(this.audioCtx, sample.occlusionFilter, acoustic.lowpassHz);
     const baseMix = acousticGain > 0 ? resolveSpatialMix({

@@ -376,10 +376,12 @@ async def test_clock_use_reports_time_without_use_sound_packet(
     assert not any(
         getattr(packet, "type", "") == "item_use_sound" for packet in broadcast_payloads
     )
-    assert any(
-        getattr(packet, "type", "") == "item_clock_announce"
+    clock_packet = next(
+        packet
         for packet in broadcast_payloads
+        if getattr(packet, "type", "") == "item_clock_announce"
     )
+    assert getattr(clock_packet, "acousticZoneId") == "floor:0"
 
 
 @pytest.mark.asyncio
@@ -642,6 +644,7 @@ async def test_carried_item_use_sound_uses_carrier_position(
     server.item_service.add_item(item)
     client.x = 9
     client.y = 10
+    client.elevator_id = "car-1"
 
     send_payloads: list[object] = []
     broadcast_payloads: list[object] = []
@@ -667,6 +670,7 @@ async def test_carried_item_use_sound_uses_carrier_position(
     assert sound_packets
     assert sound_packets[-1].x == 9
     assert sound_packets[-1].y == 10
+    assert sound_packets[-1].acousticZoneId == "elevator:car-1"
 
 
 @pytest.mark.asyncio

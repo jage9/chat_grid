@@ -1,5 +1,6 @@
 import { type IncomingMessage } from './protocol';
 import { type StructurePreset, type WallStructure, type WorldItem } from '../state/gameState';
+import { WORLD_FOOTSTEP_GAIN, type WorldSoundSource } from '../audio/worldAudio';
 
 /**
  * Dependency contract for creating a message handler without hard-coupling to `main.ts`.
@@ -44,13 +45,13 @@ type MessageHandlerDeps = {
   };
   refreshAudioSubscriptions: (force?: boolean) => Promise<void>;
   refreshAcousticModel: () => void;
-  getPeerAcousticTransmission: (peerAcousticZoneId: string) => number;
   cleanupItemAudio: (itemId: string) => void;
   applyAudioLayerState: () => Promise<void>;
   gameLoop: () => void;
   sanitizeName: (value: string) => string;
   randomFootstepUrl: () => string;
-  playRemoteFootstep: (url: string, peerX: number, peerY: number, peerZ: number, acousticGain: number) => void;
+  playWorldSound: (url: string, source: WorldSoundSource) => void;
+  playWorldSoundSequence: (urls: string[], source: WorldSoundSource) => void;
   handleItemActionResultStatus: (message: Extract<IncomingMessage, { type: 'item_action_result' }>) => boolean;
   handleItemBehaviorIncomingMessage: (message: IncomingMessage) => boolean;
   handleItemBehaviorPeerLeft: (senderId: string) => void;
@@ -73,8 +74,6 @@ type MessageHandlerDeps = {
   shouldAnnounceItemPropertyEcho: () => boolean;
   playLocateToneAt: (x: number, y: number) => void;
   resolveIncomingSoundUrl: (url: string) => string;
-  playIncomingItemUseSound: (url: string, x: number, y: number, z: number, range?: number) => void;
-  playClockAnnouncement: (sounds: string[], x: number, y: number, z: number, range?: number) => void;
   handleAuthRequired: (message: Extract<IncomingMessage, { type: 'auth_required' }>) => void;
   handleAuthResult: (message: Extract<IncomingMessage, { type: 'auth_result' }>) => Promise<void>;
   handleAuthPermissions: (message: Extract<IncomingMessage, { type: 'auth_permissions' }>) => void;
@@ -126,15 +125,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.refreshStructureGeometry();
         break;
       case 'world_sound':
-        if (message.z === deps.state.player.z && deps.getAudioLayers().world) {
-          deps.playIncomingItemUseSound(
-            deps.resolveIncomingSoundUrl(message.sound),
-            message.x,
-            message.y,
-            message.z,
-            message.range,
-          );
-        }
+        deps.playWorldSound(deps.resolveIncomingSoundUrl(message.sound), message);
         break;
 
       case 'welcome':
@@ -237,29 +228,21 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.refreshAcousticModel();
         if (peer) {
           const movementDelta = Math.hypot(message.x - prevX, message.y - prevY);
-          const acousticGain = deps.getPeerAcousticTransmission(peer.acousticZoneId);
-          if (
-            movementDelta <= 1.5
-            && peer.z === deps.state.player.z
-            && deps.getAudioLayers().world
-            && acousticGain > 0
-          ) {
-            deps.playRemoteFootstep(
-              deps.randomFootstepUrl(),
-              peer.x,
-              peer.y,
-              peer.z,
-              acousticGain,
-            );
+          if (movementDelta <= 1.5) {
+            deps.playWorldSound(deps.randomFootstepUrl(), {
+              x: peer.x,
+              y: peer.y,
+              z: peer.z,
+              acousticZoneId: peer.acousticZoneId,
+              gain: WORLD_FOOTSTEP_GAIN,
+            });
           }
         }
         break;
       }
 
       case 'teleport_complete': {
-        if (message.z === deps.state.player.z && deps.getAudioLayers().world) {
-          deps.playIncomingItemUseSound(deps.TELEPORT_SOUND_URL, message.x, message.y, message.z);
-        }
+        deps.playWorldSound(deps.TELEPORT_SOUND_URL, message);
         break;
       }
 
@@ -394,9 +377,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
       case 'item_use_sound': {
         const soundUrl = deps.resolveIncomingSoundUrl(message.sound);
         if (!soundUrl) break;
-        if (message.z === deps.state.player.z && deps.getAudioLayers().world) {
-          deps.playIncomingItemUseSound(soundUrl, message.x, message.y, message.z, message.range);
-        }
+        deps.playWorldSound(soundUrl, message);
         break;
       }
 
@@ -407,8 +388,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
       }
 
       case 'item_clock_announce': {
-        if (message.z !== deps.state.player.z || !deps.getAudioLayers().world) break;
-        deps.playClockAnnouncement(message.sounds, message.x, message.y, message.z, message.range);
+        deps.playWorldSoundSequence(message.sounds.map(deps.resolveIncomingSoundUrl), message);
         break;
       }
 

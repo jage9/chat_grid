@@ -344,6 +344,7 @@ class BroadcastTeleportCompletePacket(BasePacket):
     x: int
     y: int
     z: int
+    acousticZoneId: str
 
 
 class BroadcastNicknamePacket(BasePacket):
@@ -507,6 +508,7 @@ class ItemUseSoundPacket(BasePacket):
     x: int
     y: int
     z: int
+    acousticZoneId: str
     range: int | None = None
 
 
@@ -518,6 +520,7 @@ class WorldSoundPacket(BasePacket):
     x: int
     y: int
     z: int
+    acousticZoneId: str
     range: int | None = None
 
 
@@ -528,6 +531,7 @@ class ItemClockAnnouncePacket(BasePacket):
     x: int
     y: int
     z: int
+    acousticZoneId: str
     range: int | None = None
 
 

@@ -239,6 +239,7 @@ export const teleportCompleteSchema = z.object({
   x: z.number().int(),
   y: z.number().int(),
   z: z.number().int(),
+  acousticZoneId: z.string().min(1),
 });
 
 export const updateNicknameSchema = z.object({
@@ -311,6 +312,7 @@ export const itemUseSoundSchema = z.object({
   x: z.number().int(),
   y: z.number().int(),
   z: z.number().int(),
+  acousticZoneId: z.string().min(1),
   range: z.number().int().positive().optional(),
 });
 
@@ -321,6 +323,7 @@ export const itemClockAnnounceSchema = z.object({
   x: z.number().int(),
   y: z.number().int(),
   z: z.number().int(),
+  acousticZoneId: z.string().min(1),
   range: z.number().int().positive().optional(),
 });
 
@@ -442,6 +445,7 @@ export const worldSoundSchema = z.object({
   x: z.number().int(),
   y: z.number().int(),
   z: z.number().int(),
+  acousticZoneId: z.string().min(1),
   range: z.number().int().positive().optional(),
 });
 

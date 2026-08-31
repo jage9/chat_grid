@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createInitialState } from '../state/gameState';
 import { createOnMessageHandler } from './messageHandlers';
 
-function setupRemoteMovement(acousticTransmission: number) {
+function setupRemoteMovement() {
   const state = createInitialState();
   state.player.id = 'self';
   state.player.acousticZoneId = 'elevator:car-1';
@@ -14,8 +14,7 @@ function setupRemoteMovement(acousticTransmission: number) {
     z: 0,
     acousticZoneId: 'floor:0',
   });
-  const playRemoteFootstep = vi.fn();
-  const getPeerAcousticTransmission = vi.fn(() => acousticTransmission);
+  const playWorldSound = vi.fn();
   const peerManager = {
     ensurePeer: vi.fn(),
     setPeerPosition: vi.fn(),
@@ -24,10 +23,8 @@ function setupRemoteMovement(acousticTransmission: number) {
     state,
     peerManager,
     refreshAcousticModel: vi.fn(),
-    getPeerAcousticTransmission,
-    getAudioLayers: () => ({ world: true, item: true }),
     randomFootstepUrl: () => '/sounds/step-1.ogg',
-    playRemoteFootstep,
+    playWorldSound,
   };
   const deps = new Proxy(provided, {
     get(target, property, receiver) {
@@ -36,15 +33,14 @@ function setupRemoteMovement(acousticTransmission: number) {
   }) as unknown as Parameters<typeof createOnMessageHandler>[0];
 
   return {
-    getPeerAcousticTransmission,
     handler: createOnMessageHandler(deps),
-    playRemoteFootstep,
+    playWorldSound,
   };
 }
 
 describe('remote movement audio', () => {
-  it('suppresses footsteps across isolated acoustic zones', async () => {
-    const { getPeerAcousticTransmission, handler, playRemoteFootstep } = setupRemoteMovement(0);
+  it('routes footsteps with the authoritative peer acoustic zone', async () => {
+    const { handler, playWorldSound } = setupRemoteMovement();
 
     await handler({
       type: 'update_position',
@@ -55,28 +51,12 @@ describe('remote movement audio', () => {
       acousticZoneId: 'floor:0',
     });
 
-    expect(getPeerAcousticTransmission).toHaveBeenCalledWith('floor:0');
-    expect(playRemoteFootstep).not.toHaveBeenCalled();
-  });
-
-  it('applies door transmission to audible remote footsteps', async () => {
-    const { handler, playRemoteFootstep } = setupRemoteMovement(0.4);
-
-    await handler({
-      type: 'update_position',
-      id: 'peer-1',
+    expect(playWorldSound).toHaveBeenCalledWith('/sounds/step-1.ogg', {
       x: 5,
       y: 4,
       z: 0,
       acousticZoneId: 'floor:0',
+      gain: 0.7,
     });
-
-    expect(playRemoteFootstep).toHaveBeenCalledWith(
-      '/sounds/step-1.ogg',
-      5,
-      4,
-      0,
-      0.4,
-    );
   });
 });

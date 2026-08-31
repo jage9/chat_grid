@@ -28,7 +28,11 @@ from websockets.http11 import Request as HttpRequest, Response as HttpResponse
 from websockets.typing import Origin
 
 from .auth_service import AuthError, AuthService
-from .acoustic_zones import client_acoustic_zone_id, client_position_packet
+from .acoustic_zones import (
+    client_acoustic_zone_id,
+    client_position_packet,
+    floor_acoustic_zone_id,
+)
 from .client import ClientConnection
 from .config import load_config
 from .item_catalog import (
@@ -2071,6 +2075,7 @@ class SignalingServer:
                     x=client.x,
                     y=client.y,
                     z=client.z,
+                    acousticZoneId=client_acoustic_zone_id(client),
                 ),
                 exclude=client.websocket,
             )
@@ -2242,7 +2247,14 @@ class SignalingServer:
         if not sound:
             return
         await self._broadcast(
-            WorldSoundPacket(type="world_sound", sound=sound, x=x, y=y, z=z),
+            WorldSoundPacket(
+                type="world_sound",
+                sound=sound,
+                x=x,
+                y=y,
+                z=z,
+                acousticZoneId=floor_acoustic_zone_id(z),
+            ),
             exclude=exclude,
         )
 

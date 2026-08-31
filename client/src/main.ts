@@ -10,7 +10,7 @@ import { getProxyUrlForMedia, shouldProxyExternalMediaUrl } from './audio/mediaU
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
 import { ElevatorAudioRuntime } from './items/types/elevator/runtime';
 import { AcousticZoneRuntime, worldItemAcousticZoneId } from './audio/acousticZones';
-import { ClockAnnouncer } from './audio/clockAnnouncer';
+import { WorldAudioRouter, WORLD_FOOTSTEP_GAIN } from './audio/worldAudio';
 import { normalizeDegrees } from './audio/spatial';
 import {
   applyPastedText,
@@ -48,7 +48,6 @@ import { SignalingClient } from './network/signalingClient';
 import { CanvasRenderer } from './render/canvasRenderer';
 import {
   GRID_SIZE,
-  HEARING_RADIUS,
   MOVE_COOLDOWN_MS,
   createInitialState,
   getDirection,
@@ -306,7 +305,6 @@ const AUTH_SESSION_COOKIE_CLEAR_URL = withBase('auth/session/clear');
 const AUTH_SESSION_COOKIE_CLIENT_HEADER = 'X-Chgrid-Auth-Client';
 const ACTION_SOUND_URL = withBase('sounds/action.ogg');
 const FOOTSTEP_SOUND_URLS = Array.from({ length: 11 }, (_, index) => withBase(`sounds/step-${index + 1}.ogg`));
-const FOOTSTEP_GAIN = 0.7;
 const TELEPORT_START_SOUND_URL = withBase('sounds/teleport_start.ogg');
 const TELEPORT_START_GAIN = 0.1;
 const TELEPORT_SOUND_URL = withBase('sounds/teleport.ogg');
@@ -334,9 +332,12 @@ let activeWelcomeMessage = DEFAULT_WELCOME_MESSAGE;
 const messageBuffer: string[] = [];
 let messageCursor = -1;
 const acousticZoneRuntime = new AcousticZoneRuntime();
-audio.setSpatialTransmissionResolver((source, listener) => (
-  wallAcousticMixBetween(state.structures.values(), listener, source, wallEdgeIndex)
-));
+let audioLayers: AudioLayerState = {
+  voice: true,
+  item: true,
+  media: true,
+  world: true,
+};
 
 function wallAcousticMixTo(sourceX: number, sourceY: number, sourceZ: number) {
   return wallAcousticMixBetween(
@@ -400,7 +401,27 @@ const elevatorAudioRuntime = new ElevatorAudioRuntime(
     return { gain: acousticZoneRuntime.doorTransmission(item) * wall.gain, lowpassHz: wall.lowpassHz };
   },
 );
-const clockAnnouncer = new ClockAnnouncer(audio, () => ({ x: state.player.x, y: state.player.y, z: state.player.z }));
+const worldAudio = new WorldAudioRouter(
+  audio,
+  () => ({
+    x: state.player.x,
+    y: state.player.y,
+    z: state.player.z,
+    acousticZoneId: state.player.acousticZoneId,
+  }),
+  () => audioLayers.world,
+  (source, listener) => {
+    const wall = wallAcousticMixBetween(state.structures.values(), listener, source, wallEdgeIndex);
+    return {
+      gain: acousticZoneRuntime.transmission(
+        listener.acousticZoneId,
+        source.acousticZoneId,
+        state.items,
+      ) * wall.gain,
+      lowpassHz: wall.lowpassHz,
+    };
+  },
+);
 let replaceTextOnNextType = false;
 let pendingEscapeDisconnect = false;
 let micGainLoopbackRestoreState: boolean | null = null;
@@ -418,12 +439,6 @@ let reconnectInFlight = false;
 let activeServerInstanceId: string | null = null;
 let reloadScheduledForVersionMismatch = false;
 let peerListenGainByNickname = settings.loadPeerListenGains();
-let audioLayers: AudioLayerState = {
-  voice: true,
-  item: true,
-  media: true,
-  world: true,
-};
 let lastSubscriptionRefreshAt = 0;
 let lastSubscriptionRefreshTileX = Math.round(state.player.x);
 let lastSubscriptionRefreshTileY = Math.round(state.player.y);
@@ -1369,7 +1384,7 @@ function updateTeleport(): void {
   activeTeleport = null;
   stopTeleportLoopAudio();
   void refreshAudioSubscriptions(true);
-  void audio.playSample(TELEPORT_SOUND_URL, FOOTSTEP_GAIN);
+  void audio.playSample(TELEPORT_SOUND_URL, WORLD_FOOTSTEP_GAIN);
   updateStatus(completionStatus);
 }
 
@@ -1382,7 +1397,12 @@ function gameLoop(): void {
   if (!activeTeleport) {
     void refreshAudioSubscriptions();
   }
-  const listenerPosition = { x: state.player.x, y: state.player.y, z: state.player.z };
+  const listenerPosition = {
+    x: state.player.x,
+    y: state.player.y,
+    z: state.player.z,
+    acousticZoneId: state.player.acousticZoneId,
+  };
   acousticZoneRuntime.sync(state.items.values());
   const acousticNow = performance.now();
   for (const peer of peerManager.getPeers()) {
@@ -1482,7 +1502,7 @@ function handleMovement(): void {
   lastWallCollisionDirection = null;
   state.player.lastMoveTime = now;
   void refreshAudioSubscriptions(true);
-  void audio.playSample(randomFootstepUrl(), FOOTSTEP_GAIN, movementTickMs);
+  void audio.playSample(randomFootstepUrl(), WORLD_FOOTSTEP_GAIN, movementTickMs);
   signaling.send({ type: 'update_position', x: nextX, y: nextY, z: state.player.z });
 
   const namesOnTile = getPeerNamesAtPosition(nextX, nextY);
@@ -1773,11 +1793,6 @@ const onAppMessage = createOnMessageHandler({
   peerManager,
   refreshAudioSubscriptions,
   refreshAcousticModel,
-  getPeerAcousticTransmission: (peerAcousticZoneId) => acousticZoneRuntime.transmission(
-    state.player.acousticZoneId,
-    peerAcousticZoneId,
-    state.items,
-  ),
   cleanupItemAudio: (itemId) => {
     radioRuntime.cleanup(itemId);
     itemEmitRuntime.cleanup(itemId);
@@ -1787,13 +1802,9 @@ const onAppMessage = createOnMessageHandler({
   gameLoop,
   sanitizeName,
   randomFootstepUrl,
-  playRemoteFootstep: (url, peerX, peerY, peerZ, acousticGain) => {
-    void audio.playSpatialSample(
-      url,
-      { x: peerX, y: peerY, z: peerZ },
-      { x: state.player.x, y: state.player.y, z: state.player.z },
-      FOOTSTEP_GAIN * acousticGain,
-    );
+  playWorldSound: (url, source) => worldAudio.playSample(url, source),
+  playWorldSoundSequence: (urls, source) => {
+    void worldAudio.playSequence(urls, source);
   },
   handleItemActionResultStatus: (message) => itemBehaviorRegistry.onActionResultStatus(message),
   handleItemBehaviorIncomingMessage: (message) => itemBehaviorRegistry.onIncomingMessage(message),
@@ -1819,12 +1830,6 @@ const onAppMessage = createOnMessageHandler({
   shouldAnnounceItemPropertyEcho: () => Date.now() >= suppressItemPropertyEchoUntilMs,
   playLocateToneAt: (x, y) => audio.sfxLocate({ x: x - state.player.x, y: y - state.player.y }),
   resolveIncomingSoundUrl,
-  playIncomingItemUseSound: (url, x, y, z, range) => {
-    void audio.playSpatialSample(url, { x, y, z }, { x: state.player.x, y: state.player.y, z: state.player.z }, 1, range ?? HEARING_RADIUS);
-  },
-  playClockAnnouncement: (sounds, x, y, z, range) => {
-    void clockAnnouncer.playSequence(sounds.map(resolveIncomingSoundUrl), x, y, z, range);
-  },
   handleAuthRequired,
   handleAuthResult,
   handleAuthPermissions,

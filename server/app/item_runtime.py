@@ -10,6 +10,7 @@ from typing import Literal, Protocol
 from websockets.asyncio.server import ServerConnection
 
 from .auth_service import AuthService
+from .acoustic_zones import client_acoustic_zone_id, floor_acoustic_zone_id
 from .client import ClientConnection
 from .item_catalog import (
     get_item_definition,
@@ -787,7 +788,7 @@ class ItemRuntime:
             )
         use_sound = self._resolve_item_use_sound(use_item)
         if use_sound:
-            sound_x, sound_y, sound_z = self.get_sound_source_position(use_item)
+            sound_x, sound_y, sound_z, sound_zone_id = self.get_sound_source(use_item)
             sound_range = self.get_emit_range(use_item)
             await self.broadcast(
                 ItemUseSoundPacket(
@@ -797,6 +798,7 @@ class ItemRuntime:
                     x=sound_x,
                     y=sound_y,
                     z=sound_z,
+                    acousticZoneId=sound_zone_id,
                     range=sound_range,
                 )
             )
@@ -1140,14 +1142,19 @@ class ItemRuntime:
                 return True
         return False
 
-    def get_sound_source_position(self, item: WorldItem) -> tuple[int, int, int]:
-        """Resolve source position for item-emitted one-shot sounds."""
+    def get_sound_source(self, item: WorldItem) -> tuple[int, int, int, str]:
+        """Resolve position and acoustic zone for an item-emitted one-shot."""
 
         if item.carrierId:
             carrier = self.get_client_by_id(item.carrierId)
             if carrier is not None:
-                return carrier.x, carrier.y, carrier.z
-        return item.x, item.y, item.z
+                return (
+                    carrier.x,
+                    carrier.y,
+                    carrier.z,
+                    client_acoustic_zone_id(carrier),
+                )
+        return item.x, item.y, item.z, floor_acoustic_zone_id(item.z)
 
     def item_is_on_client_square(
         self, item: WorldItem, client: ClientConnection
