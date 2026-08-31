@@ -44,14 +44,14 @@ title = "Wall"
 movement_blocked = true
 sound_transmission = 0.0
 height = 40
-collision_sound = "/sounds/wall.ogg"
+contact_sound = "/sounds/wall.ogg"
 
 [world.structure_presets.curtain]
 title = "Curtain"
-movement_blocked = true
+movement_blocked = false
 sound_transmission = 0.5
 height = 40
-collision_sound = "/sounds/wall.ogg"
+contact_sound = "/sounds/wall.ogg"
 
 [auth]
 # SQLite file for account/session data. Relative paths resolve from this config file directory.

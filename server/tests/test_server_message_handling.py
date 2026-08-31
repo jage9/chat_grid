@@ -24,6 +24,7 @@ from app.models import (
     ItemTransferTargetsResultPacket,
     LiveKitTokenPacket,
     PongPacket,
+    WorldSoundPacket,
 )
 from app.server import (
     AUTH_LOGIN_FAILURE_MESSAGE,
@@ -1282,6 +1283,62 @@ async def test_item_add_rejects_unknown_type(monkeypatch: pytest.MonkeyPatch) ->
     item_result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
     assert item_result.ok is False
     assert "unknown item type" in item_result.message.lower()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("preset_id", "movement_blocked", "expected_x", "sound_x"),
+    (("curtain", False, 6, 6), ("solid", True, 5, 5)),
+)
+async def test_wall_contact_broadcasts_world_sound(
+    monkeypatch: pytest.MonkeyPatch,
+    preset_id: str,
+    movement_blocked: bool,
+    expected_x: int,
+    sound_x: int,
+) -> None:
+    server = SignalingServer(
+        "127.0.0.1",
+        8765,
+        None,
+        None,
+        structure_presets={
+            preset_id: {
+                "title": "Curtain" if preset_id == "curtain" else "Wall",
+                "movementBlocked": movement_blocked,
+                "soundTransmission": 0.5 if preset_id == "curtain" else 0.0,
+                "height": 40,
+                "contactSound": "/sounds/wall.ogg",
+            }
+        },
+    )
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=5)
+    )
+    server.clients[ws] = client
+    server.structure_service.add_wall(client, preset_id=preset_id, direction="east")
+    broadcasts: list[object] = []
+
+    async def fake_send(_websocket: ServerConnection, _packet: object) -> None:
+        return None
+
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
+        broadcasts.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+
+    await server._handle_message(
+        client, json.dumps({"type": "update_position", "x": 6, "y": 5, "z": 0})
+    )
+
+    assert client.x == expected_x
+    sound = _last_packet_of_type(broadcasts, WorldSoundPacket)
+    assert sound.sound == "/sounds/wall.ogg"
+    assert (sound.x, sound.y, sound.z) == (sound_x, 5, 0)
 
 
 @pytest.mark.asyncio

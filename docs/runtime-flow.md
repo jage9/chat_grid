@@ -79,6 +79,7 @@ Core incoming message effects:
 - `item_elevator_status`: track local elevator entry, travel, arrival, and exit state.
 - `structure_upsert` / `structure_remove`: apply live wall-run changes used by rendering and collision prediction.
 - `structure_action_result`: announce World Builder mutation success/failure.
+- `world_sound`: play a server-validated positional structure contact sound for another user's blocked impact or successful crossing.
 - `pong`:
   - positive `clientSentAt`: user ping response (`P` command)
   - negative `clientSentAt`: internal heartbeat response

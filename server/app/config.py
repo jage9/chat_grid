@@ -56,7 +56,7 @@ class StructurePresetConfig(BaseModel):
     movement_blocked: bool = True
     sound_transmission: float = Field(default=0.0, ge=0.0, le=1.0)
     height: int = Field(default=40, ge=0)
-    collision_sound: str = "/sounds/wall.ogg"
+    contact_sound: str = "/sounds/wall.ogg"
 
 
 class WorldConfigSection(BaseModel):
@@ -66,7 +66,9 @@ class WorldConfigSection(BaseModel):
     structure_presets: dict[str, StructurePresetConfig] = Field(
         default_factory=lambda: {
             "solid": StructurePresetConfig(),
-            "curtain": StructurePresetConfig(title="Curtain", sound_transmission=0.5),
+            "curtain": StructurePresetConfig(
+                title="Curtain", movement_blocked=False, sound_transmission=0.5
+            ),
         }
     )
 

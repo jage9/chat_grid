@@ -56,6 +56,7 @@ This document is the authoritative keymap for the client.
 - `Manage walls`: List current-floor walls nearest first, then extend or shorten either endpoint or delete the complete wall.
 - Walls are edited live. Other connected clients receive and render changes immediately.
 - Wall deletion uses a `No`/`Yes` confirmation menu.
+- Solid walls block movement. Curtains may be crossed; wall impacts and curtain crossings play the structure's contact sound locally and spatially for nearby users.
 
 ### Audio
 - `P`: Ping server

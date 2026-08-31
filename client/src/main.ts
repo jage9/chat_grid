@@ -63,6 +63,7 @@ import {
   adjacentWallDescriptions,
   blockingWallForMove,
   buildWallEdgeIndex,
+  wallsCrossedForMove,
   wallTransmissionBetween,
 } from './state/structureGeometry';
 import {
@@ -1434,10 +1435,30 @@ function handleMovement(): void {
   if (blockingWall) {
     state.player.lastMoveTime = now;
     if (lastWallCollisionDirection !== attemptedDirection) {
-      void audio.playSample(resolveIncomingSoundUrl(blockingWall.collisionSound || '/sounds/wall.ogg'), 1);
+      const contactSound = blockingWall.contactSound.trim();
+      if (contactSound) {
+        void audio.playSample(resolveIncomingSoundUrl(contactSound), 1);
+      }
+      signaling.send({ type: 'update_position', x: nextX, y: nextY, z: state.player.z });
       lastWallCollisionDirection = attemptedDirection;
     }
     return;
+  }
+
+  const crossedWalls = wallsCrossedForMove(
+    state.structures.values(),
+    state.player.x,
+    state.player.y,
+    state.player.z,
+    nextX,
+    nextY,
+    wallEdgeIndex,
+  );
+  for (const crossedWall of crossedWalls) {
+    const contactSound = crossedWall.contactSound.trim();
+    if (contactSound) {
+      void audio.playSample(resolveIncomingSoundUrl(contactSound), 1);
+    }
   }
 
   state.player.x = nextX;

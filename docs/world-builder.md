@@ -4,7 +4,7 @@ World Builder edits server-authoritative world geometry separately from runtime 
 
 ## Wall Runs
 
-A wall lives on grid edges and does not consume either neighboring cell. One editable wall has a floor elevation, start grid line, horizontal or vertical orientation, positive length, title, movement rule, sound-transmission value, height, preset id, and collision sound.
+A wall lives on grid edges and does not consume either neighboring cell. One editable wall has a floor elevation, start grid line, horizontal or vertical orientation, positive length, title, movement rule, sound-transmission value, height, preset id, and contact sound.
 
 The server expands each run into canonical unit edges for collision checks. Overlapping edges and runs outside the rectangular world bounds are rejected. Resizing changes one endpoint of the complete run; editing only a middle portion requires splitting/replacing the wall in a later workflow.
 
@@ -14,8 +14,8 @@ Cardinal movement is rejected when its crossed edge has a movement-blocking wall
 
 Wall presets are configured under `world.structure_presets` in `server/config.toml`. The shipped defaults are:
 
-- `solid`: title `Wall`, height `40`, sound transmission `0`, movement blocked, collision sound `/sounds/wall.ogg`.
-- `curtain`: title `Curtain`, height `40`, sound transmission `0.5`, movement blocked, collision sound `/sounds/wall.ogg`.
+- `solid`: title `Wall`, height `40`, sound transmission `0`, movement blocked, contact sound `/sounds/wall.ogg`.
+- `curtain`: title `Curtain`, height `40`, sound transmission `0.5`, movement allowed, contact sound `/sounds/wall.ogg`.
 
 Preset values are copied into each wall when it is created. Later preset edits therefore do not silently rewrite existing structures. Height is stored for future geometry but does not change ordinary floor movement while jumping and flying are deferred.
 
@@ -28,3 +28,5 @@ Structures persist in `structures.json` beside the configured item state file. T
 The `world.structure.edit` permission gates every server mutation and World Builder visibility. It is granted by default to the built-in `editor` and `admin` roles. `W` opens World Builder, and the same menu flow is available through touch controls and the command palette.
 
 All users can press `C` to hear walls bordering their current square, including each wall's title and direction.
+
+Hitting a blocking wall or crossing a passable wall plays its `contactSound` immediately for the mover. The server validates the attempted move and broadcasts the same sound positionally to other nearby users through the world-audio layer.

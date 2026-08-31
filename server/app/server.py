@@ -86,6 +86,8 @@ from .models import (
     UserLeftPacket,
     WelcomeReadyPacket,
     WelcomePacket,
+    WallStructure,
+    WorldSoundPacket,
     WorldItem,
 )
 from .network_security import normalize_origin
@@ -1899,16 +1901,6 @@ class SignalingServer:
                     client_position_packet(client),
                 )
                 return
-            blocking_wall = self.structure_service.blocking_wall_for_move(
-                x=client.x,
-                y=client.y,
-                z=client.z,
-                next_x=packet.x,
-                next_y=packet.y,
-            )
-            if blocking_wall is not None:
-                await self._send(client.websocket, client_position_packet(client))
-                return
             now_ms = self.item_service.now_ms()
             requested_delta = max(abs(packet.x - client.x), abs(packet.y - client.y))
             if not self._consume_movement_budget(client, now_ms, requested_delta):
@@ -1933,6 +1925,30 @@ class SignalingServer:
                     client_position_packet(client),
                 )
                 return
+            crossed_walls = self.structure_service.walls_crossed_for_move(
+                x=client.x,
+                y=client.y,
+                z=client.z,
+                next_x=packet.x,
+                next_y=packet.y,
+            )
+            blocking_wall = self.structure_service.blocking_wall_for_move(
+                x=client.x,
+                y=client.y,
+                z=client.z,
+                next_x=packet.x,
+                next_y=packet.y,
+            )
+            if blocking_wall is not None:
+                await self._broadcast_wall_sound(
+                    blocking_wall,
+                    x=client.x,
+                    y=client.y,
+                    z=client.z,
+                    exclude=client.websocket,
+                )
+                await self._send(client.websocket, client_position_packet(client))
+                return
             client.x = packet.x
             client.y = packet.y
             client.last_position_update_ms = now_ms
@@ -1945,6 +1961,14 @@ class SignalingServer:
                 client_position_packet(client),
                 exclude=client.websocket,
             )
+            for crossed_wall in crossed_walls:
+                await self._broadcast_wall_sound(
+                    crossed_wall,
+                    x=client.x,
+                    y=client.y,
+                    z=client.z,
+                    exclude=client.websocket,
+                )
             await self.item_runtime.sync_carried_item(client)
             return
 
@@ -2143,6 +2167,25 @@ class SignalingServer:
             return
         await asyncio.gather(
             *(self._send(websocket, packet) for websocket in recipients)
+        )
+
+    async def _broadcast_wall_sound(
+        self,
+        wall: WallStructure,
+        *,
+        x: int,
+        y: int,
+        z: int,
+        exclude: ServerConnection,
+    ) -> None:
+        """Broadcast one validated wall impact/crossing sound to other users."""
+
+        sound = str(wall.contactSound).strip()
+        if not sound:
+            return
+        await self._broadcast(
+            WorldSoundPacket(type="world_sound", sound=sound, x=x, y=y, z=z),
+            exclude=exclude,
         )
 
     async def _send(self, websocket: ServerConnection, packet: object) -> None:
@@ -2370,7 +2413,7 @@ def run() -> None:
                 "movementBlocked": preset.movement_blocked,
                 "soundTransmission": preset.sound_transmission,
                 "height": preset.height,
-                "collisionSound": preset.collision_sound,
+                "contactSound": preset.contact_sound,
             }
             for preset_id, preset in config.world.structure_presets.items()
         },

@@ -37,7 +37,7 @@ export type WallStructure = {
   soundTransmission: number;
   height: number;
   preset: string;
-  collisionSound: string;
+  contactSound: string;
 };
 
 export type StructurePreset = Omit<WallStructure, 'id' | 'floorZ' | 'startX' | 'startY' | 'orientation' | 'length' | 'preset'> & {

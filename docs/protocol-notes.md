@@ -71,6 +71,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `structure_upsert`: full wall-run replacement after a live create or resize.
 - `structure_remove`: removal of one wall run.
 - `structure_action_result`: success/error and user-facing status for add, resize, or delete.
+- `world_sound`: server-validated positional structure contact sound (`sound`, `x`, `y`, `z`, optional `range`) sent to users other than the mover.
 
 ## Item Packet Behavior
 

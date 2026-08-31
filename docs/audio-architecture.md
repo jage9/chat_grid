@@ -61,6 +61,7 @@ Current defaults:
 - Wall gain applies to LiveKit voice, radios, item emitters, elevator landing audio, footsteps, teleports, clocks, piano notes, and positional item-use sounds. Active continuous and one-shot mixes update as the listener or wall layout changes.
 - Wall occlusion never drives LiveKit subscription changes. Floor/acoustic-zone connectivity remains the stable bandwidth gate; walls are a fast local gain adjustment.
 - A ray passing exactly through a grid corner follows diagonal movement semantics: one occupied component edge leaves an open route, while two occupied edges apply both transmissions.
+- Wall impacts and passable-structure crossings emit their configured `contactSound`. The mover receives immediate local feedback; other users receive a server-validated positional world sound that follows normal distance, floor, layer, and wall-occlusion rules.
 
 ## Stale Stream Mitigation
 

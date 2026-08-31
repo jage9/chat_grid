@@ -24,8 +24,15 @@ def service(tmp_path: Path) -> StructureService:
                 "movementBlocked": True,
                 "soundTransmission": 0.0,
                 "height": 40,
-                "collisionSound": "/sounds/wall.ogg",
-            }
+                "contactSound": "/sounds/wall.ogg",
+            },
+            "curtain": {
+                "title": "Curtain",
+                "movementBlocked": False,
+                "soundTransmission": 0.5,
+                "height": 40,
+                "contactSound": "/sounds/wall.ogg",
+            },
         },
     )
 
@@ -60,6 +67,18 @@ def test_diagonal_requires_both_origin_edges_to_be_blocked(tmp_path: Path) -> No
         north,
         east,
     )
+
+
+def test_passable_curtain_is_reported_as_crossed_without_blocking(
+    tmp_path: Path,
+) -> None:
+    structures = service(tmp_path)
+    curtain = structures.add_wall(builder(), preset_id="curtain", direction="east")
+
+    assert structures.walls_crossed_for_move(x=4, y=4, z=0, next_x=5, next_y=4) == [
+        curtain
+    ]
+    assert structures.blocking_wall_for_move(x=4, y=4, z=0, next_x=5, next_y=4) is None
 
 
 def test_overlapping_and_out_of_bounds_runs_are_rejected(tmp_path: Path) -> None:

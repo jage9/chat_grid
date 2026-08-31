@@ -38,17 +38,6 @@ export function wallContainsEdge(
   return wall.startX === lineX && lineY >= wall.startY && lineY < wall.startY + wall.length;
 }
 
-function blockingWallAt(
-  index: WallEdgeIndex,
-  floorZ: number,
-  orientation: WallStructure['orientation'],
-  lineX: number,
-  lineY: number,
-): WallStructure | null {
-  const wall = index.get(edgeKey(floorZ, orientation, lineX, lineY)) ?? null;
-  return wall?.movementBlocked ? wall : null;
-}
-
 function wallAt(
   index: WallEdgeIndex,
   floorZ: number,
@@ -121,6 +110,31 @@ export function wallTransmissionBetween(
 }
 
 /** Resolve movement collision using the shared cardinal/diagonal corner rule. */
+export function wallsCrossedForMove(
+  structures: Iterable<WallStructure>,
+  x: number,
+  y: number,
+  floorZ: number,
+  nextX: number,
+  nextY: number,
+  existingIndex?: WallEdgeIndex,
+): WallStructure[] {
+  const index = existingIndex ?? buildWallEdgeIndex(structures);
+  const dx = nextX - x;
+  const dy = nextY - y;
+  const crossed: WallStructure[] = [];
+  if (dx !== 0) {
+    const wall = wallAt(index, floorZ, 'vertical', x + (dx > 0 ? 1 : 0), y);
+    if (wall) crossed.push(wall);
+  }
+  if (dy !== 0) {
+    const wall = wallAt(index, floorZ, 'horizontal', x, y + (dy > 0 ? 1 : 0));
+    if (wall) crossed.push(wall);
+  }
+  return crossed;
+}
+
+/** Resolve movement collision using the shared cardinal/diagonal corner rule. */
 export function blockingWallForMove(
   structures: Iterable<WallStructure>,
   x: number,
@@ -130,19 +144,10 @@ export function blockingWallForMove(
   nextY: number,
   existingIndex?: WallEdgeIndex,
 ): WallStructure | null {
-  const index = existingIndex ?? buildWallEdgeIndex(structures);
-  const dx = nextX - x;
-  const dy = nextY - y;
-  const crossed: WallStructure[] = [];
-  if (dx !== 0) {
-    const wall = blockingWallAt(index, floorZ, 'vertical', x + (dx > 0 ? 1 : 0), y);
-    if (wall) crossed.push(wall);
-  }
-  if (dy !== 0) {
-    const wall = blockingWallAt(index, floorZ, 'horizontal', x, y + (dy > 0 ? 1 : 0));
-    if (wall) crossed.push(wall);
-  }
-  if (dx !== 0 && dy !== 0) return crossed.length === 2 ? crossed[0] : null;
+  const crossed = wallsCrossedForMove(structures, x, y, floorZ, nextX, nextY, existingIndex)
+    .filter((wall) => wall.movementBlocked);
+  const diagonal = nextX !== x && nextY !== y;
+  if (diagonal) return crossed.length === 2 ? crossed[0] : null;
   return crossed[0] ?? null;
 }
 

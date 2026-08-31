@@ -126,6 +126,17 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.state.structures.delete(message.structureId);
         deps.refreshStructureGeometry();
         break;
+      case 'world_sound':
+        if (message.z === deps.state.player.z && deps.getAudioLayers().world) {
+          deps.playIncomingItemUseSound(
+            deps.resolveIncomingSoundUrl(message.sound),
+            message.x,
+            message.y,
+            message.z,
+            message.range,
+          );
+        }
+        break;
 
       case 'welcome':
         if (message.worldConfig?.gridSize && Number.isInteger(message.worldConfig.gridSize) && message.worldConfig.gridSize > 0) {

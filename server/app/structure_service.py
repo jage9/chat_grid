@@ -89,7 +89,7 @@ class StructureService:
             soundTransmission=self._preset_number(preset, "soundTransmission", 0.0),
             height=int(self._preset_number(preset, "height", 40)),
             preset=preset_id,
-            collisionSound=str(preset.get("collisionSound", "/sounds/wall.ogg")),
+            contactSound=str(preset.get("contactSound", "/sounds/wall.ogg")),
         )
         self._validate_wall(wall)
         self._insert(wall)
@@ -140,24 +140,39 @@ class StructureService:
     ) -> WallStructure | None:
         """Return a blocking wall under the agreed cardinal/diagonal corner rule."""
 
+        crossed = [
+            wall
+            for wall in self.walls_crossed_for_move(
+                x=x, y=y, z=z, next_x=next_x, next_y=next_y
+            )
+            if wall.movementBlocked
+        ]
+        diagonal = next_x != x and next_y != y
+        if diagonal:
+            return crossed[0] if len(crossed) == 2 else None
+        return crossed[0] if crossed else None
+
+    def walls_crossed_for_move(
+        self, *, x: int, y: int, z: int, next_x: int, next_y: int
+    ) -> list[WallStructure]:
+        """Return all wall edges crossed by one valid adjacent-cell move."""
+
         dx = next_x - x
         dy = next_y - y
         if abs(dx) > 1 or abs(dy) > 1 or (dx == 0 and dy == 0):
-            return None
+            return []
         crossed: list[WallStructure] = []
         if dx:
             key = (z, "vertical", x + (1 if dx > 0 else 0), y)
             wall = self._wall_at(key)
-            if wall and wall.movementBlocked:
+            if wall:
                 crossed.append(wall)
         if dy:
             key = (z, "horizontal", x, y + (1 if dy > 0 else 0))
             wall = self._wall_at(key)
-            if wall and wall.movementBlocked:
+            if wall:
                 crossed.append(wall)
-        if dx and dy:
-            return crossed[0] if len(crossed) == 2 else None
-        return crossed[0] if crossed else None
+        return crossed
 
     def save_state(self) -> None:
         """Persist structures independently from world item state."""

@@ -420,7 +420,7 @@ class WallStructure(BaseModel):
     soundTransmission: float = Field(default=0.0, ge=0.0, le=1.0)
     height: int = Field(default=40, ge=0)
     preset: str = Field(default="solid", min_length=1, max_length=40)
-    collisionSound: str = "/sounds/wall.ogg"
+    contactSound: str = "/sounds/wall.ogg"
 
 
 class StructureUpsertPacket(BasePacket):
@@ -472,6 +472,17 @@ class ItemTransferTargetsResultPacket(BasePacket):
 class ItemUseSoundPacket(BasePacket):
     type: Literal["item_use_sound"]
     itemId: str
+    sound: str
+    x: int
+    y: int
+    z: int
+    range: int | None = None
+
+
+class WorldSoundPacket(BasePacket):
+    """One server-validated positional sound emitted by world geometry."""
+
+    type: Literal["world_sound"]
     sound: str
     x: int
     y: int

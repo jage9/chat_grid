@@ -5,6 +5,7 @@ import {
   blockingWallForMove,
   wallContainsEdge,
   wallTransmissionBetween,
+  wallsCrossedForMove,
 } from './structureGeometry';
 
 function wall(overrides: Partial<WallStructure> = {}): WallStructure {
@@ -20,7 +21,7 @@ function wall(overrides: Partial<WallStructure> = {}): WallStructure {
     soundTransmission: 0,
     height: 40,
     preset: 'solid',
-    collisionSound: '/sounds/wall.ogg',
+    contactSound: '/sounds/wall.ogg',
     ...overrides,
   };
 }
@@ -44,6 +45,12 @@ describe('wall structure geometry', () => {
     const east = wall({ id: 'east', startX: 5, startY: 4, orientation: 'vertical', length: 1 });
     expect(blockingWallForMove([north], 4, 4, 0, 5, 5)).toBeNull();
     expect(blockingWallForMove([north, east], 4, 4, 0, 5, 5)).not.toBeNull();
+  });
+
+  it('reports a passable wall crossing without blocking movement', () => {
+    const curtain = wall({ movementBlocked: false, startX: 5, startY: 4, orientation: 'vertical', length: 1 });
+    expect(wallsCrossedForMove([curtain], 4, 4, 0, 5, 4)).toEqual([curtain]);
+    expect(blockingWallForMove([curtain], 4, 4, 0, 5, 4)).toBeNull();
   });
 
   it('describes walls bordering a cell for accessible inspection', () => {

@@ -41,7 +41,7 @@ export const wallStructureSchema = z.object({
   soundTransmission: z.number().min(0).max(1),
   height: z.number().int().nonnegative(),
   preset: z.string(),
-  collisionSound: z.string(),
+  contactSound: z.string(),
 });
 
 const structurePresetSchema = z.object({
@@ -50,7 +50,7 @@ const structurePresetSchema = z.object({
   movementBlocked: z.boolean(),
   soundTransmission: z.number().min(0).max(1),
   height: z.number().int().nonnegative(),
-  collisionSound: z.string(),
+  contactSound: z.string(),
 });
 
 export const welcomeMessageSchema = z.object({
@@ -434,6 +434,15 @@ export const structureActionResultSchema = z.object({
   structureId: z.string().optional(),
 });
 
+export const worldSoundSchema = z.object({
+  type: z.literal('world_sound'),
+  sound: z.string(),
+  x: z.number().int(),
+  y: z.number().int(),
+  z: z.number().int(),
+  range: z.number().int().positive().optional(),
+});
+
 export const incomingMessageSchema = z.discriminatedUnion('type', [
   authRequiredSchema,
   authResultSchema,
@@ -462,6 +471,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   structureUpsertSchema,
   structureRemoveSchema,
   structureActionResultSchema,
+  worldSoundSchema,
 ]);
 
 export type IncomingMessage = z.infer<typeof incomingMessageSchema>;
