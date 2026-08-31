@@ -171,11 +171,31 @@ export function blockingWallForMove(
   nextY: number,
   existingIndex?: WallEdgeIndex,
 ): WallStructure | null {
-  const crossed = wallsCrossedForMove(structures, x, y, floorZ, nextX, nextY, existingIndex)
-    .filter((wall) => wall.movementBlocked);
-  const diagonal = nextX !== x && nextY !== y;
-  if (diagonal) return crossed.length === 2 ? crossed[0] : null;
-  return crossed[0] ?? null;
+  const dx = nextX - x;
+  const dy = nextY - y;
+  if (Math.abs(dx) > 1 || Math.abs(dy) > 1 || (dx === 0 && dy === 0)) return null;
+
+  const index = existingIndex ?? buildWallEdgeIndex(structures);
+  if (dx !== 0 && dy !== 0) {
+    const lineX = x + (dx > 0 ? 1 : 0);
+    const lineY = y + (dy > 0 ? 1 : 0);
+    const blockingAt = (
+      orientation: WallStructure['orientation'],
+      edgeX: number,
+      edgeY: number,
+    ): WallStructure | null => {
+      const wall = wallAt(index, floorZ, orientation, edgeX, edgeY);
+      return wall?.movementBlocked ? wall : null;
+    };
+    const xFirstRouteWall = blockingAt('vertical', lineX, y)
+      ?? blockingAt('horizontal', nextX, lineY);
+    const yFirstRouteWall = blockingAt('horizontal', x, lineY)
+      ?? blockingAt('vertical', lineX, nextY);
+    return xFirstRouteWall && yFirstRouteWall ? xFirstRouteWall : null;
+  }
+
+  return wallsCrossedForMove(structures, x, y, floorZ, nextX, nextY, index)
+    .find((wall) => wall.movementBlocked) ?? null;
 }
 
 /** Return walls on the current floor ordered by distance from a cell. */

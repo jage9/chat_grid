@@ -47,6 +47,13 @@ describe('wall structure geometry', () => {
     const east = wall({ id: 'east', startX: 5, startY: 4, orientation: 'vertical', length: 1 });
     expect(blockingWallForMove([north], 4, 4, 0, 5, 5)).toBeNull();
     expect(blockingWallForMove([north, east], 4, 4, 0, 5, 5)).not.toBeNull();
+    expect(blockingWallForMove([north, east], 5, 5, 0, 4, 4)).not.toBeNull();
+  });
+
+  it('allows a diagonal when either complete route around the corner is open', () => {
+    const east = wall({ id: 'east', startX: 5, startY: 4, orientation: 'vertical', length: 1 });
+    const northeast = wall({ id: 'northeast', startX: 5, startY: 5, length: 1 });
+    expect(blockingWallForMove([east, northeast], 4, 4, 0, 5, 5)).toBeNull();
   });
 
   it('reports a passable wall crossing without blocking movement', () => {

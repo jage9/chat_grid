@@ -8,7 +8,7 @@ A wall lives on grid edges and does not consume either neighboring cell. One edi
 
 The server expands each run into canonical unit edges for collision checks. Overlapping edges and runs outside the rectangular world bounds are rejected. Resizing changes one endpoint of the complete run; editing only a middle portion requires splitting/replacing the wall in a later workflow.
 
-Cardinal movement is rejected when its crossed edge has a movement-blocking wall. For a diagonal, the server checks the horizontal and vertical component edges from the origin and rejects the move only when both are blocked. The client predicts the same rule, while server acceptance remains authoritative.
+Cardinal movement is rejected when its crossed edge has a movement-blocking wall. For a diagonal, the server considers both possible two-step routes around the shared corner and rejects the move when each route contains a blocking wall. This makes collision direction-independent while still allowing movement past a single wall endpoint. The client predicts the same rule, while server acceptance remains authoritative.
 
 ## Presets
 

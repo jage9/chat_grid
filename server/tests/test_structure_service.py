@@ -92,7 +92,7 @@ def test_failed_wall_rotation_preserves_the_original_run(tmp_path: Path) -> None
     assert structures.wall_endpoint(wall, "finish") == (6, 9, 0)
 
 
-def test_diagonal_requires_both_origin_edges_to_be_blocked(tmp_path: Path) -> None:
+def test_diagonal_closed_corner_blocks_in_both_directions(tmp_path: Path) -> None:
     structures = service(tmp_path)
     north = structures.add_wall(builder(), preset_id="solid", direction="north")
 
@@ -103,6 +103,20 @@ def test_diagonal_requires_both_origin_edges_to_be_blocked(tmp_path: Path) -> No
         north,
         east,
     )
+    assert structures.blocking_wall_for_move(x=5, y=5, z=0, next_x=4, next_y=4) in (
+        north,
+        east,
+    )
+
+
+def test_diagonal_allows_an_open_route_around_a_corner(tmp_path: Path) -> None:
+    structures = service(tmp_path)
+    structures.add_wall(builder(), preset_id="solid", direction="east")
+    northeast_builder = builder()
+    northeast_builder.x = 5
+    structures.add_wall(northeast_builder, preset_id="solid", direction="north")
+
+    assert structures.blocking_wall_for_move(x=4, y=4, z=0, next_x=5, next_y=5) is None
 
 
 def test_passable_curtain_is_reported_as_crossed_without_blocking(

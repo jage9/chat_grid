@@ -243,6 +243,30 @@ class StructureService:
     ) -> WallStructure | None:
         """Return a blocking wall under the agreed cardinal/diagonal corner rule."""
 
+        dx = next_x - x
+        dy = next_y - y
+        if abs(dx) > 1 or abs(dy) > 1 or (dx == 0 and dy == 0):
+            return None
+        if dx and dy:
+            line_x = x + (1 if dx > 0 else 0)
+            line_y = y + (1 if dy > 0 else 0)
+
+            def blocking_at(edge: tuple[int, str, int, int]) -> WallStructure | None:
+                wall = self._wall_at(edge)
+                return wall if wall is not None and wall.movementBlocked else None
+
+            x_first_route_wall = blocking_at((z, "vertical", line_x, y)) or blocking_at(
+                (z, "horizontal", next_x, line_y)
+            )
+            y_first_route_wall = blocking_at(
+                (z, "horizontal", x, line_y)
+            ) or blocking_at((z, "vertical", line_x, next_y))
+            return (
+                x_first_route_wall
+                if x_first_route_wall and y_first_route_wall
+                else None
+            )
+
         crossed = [
             wall
             for wall in self.walls_crossed_for_move(
@@ -250,9 +274,6 @@ class StructureService:
             )
             if wall.movementBlocked
         ]
-        diagonal = next_x != x and next_y != y
-        if diagonal:
-            return crossed[0] if len(crossed) == 2 else None
         return crossed[0] if crossed else None
 
     def walls_crossed_for_move(
