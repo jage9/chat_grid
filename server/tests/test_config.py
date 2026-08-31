@@ -87,6 +87,26 @@ welcome_message = "Welcome to TT Grid."
     assert cfg.server.welcome_message == "Welcome to TT Grid."
 
 
+@pytest.mark.parametrize("preset_id", ["", "x" * 41])
+def test_load_config_rejects_invalid_structure_preset_ids(
+    tmp_path: Path,
+    preset_id: str,
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        f'''\
+[network]
+allow_insecure_ws = true
+
+[world.structure_presets."{preset_id}"]
+title = "Invalid preset"
+'''.strip()
+    )
+
+    with pytest.raises(ValueError):
+        load_config(config_path)
+
+
 def test_load_config_reads_livekit_settings(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(

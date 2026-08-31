@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 import tomllib
+from typing import Annotated
 
 from pydantic import BaseModel, Field
+
+
+StructurePresetId = Annotated[str, Field(min_length=1, max_length=40)]
 
 
 class ServerConfigSection(BaseModel):
@@ -64,7 +68,7 @@ class WorldConfigSection(BaseModel):
     """Authoritative world geometry options."""
 
     grid_size: int = Field(default=41, ge=1)
-    structure_presets: dict[str, StructurePresetConfig] = Field(
+    structure_presets: dict[StructurePresetId, StructurePresetConfig] = Field(
         default_factory=lambda: {
             "brick": StructurePresetConfig(title="Brick"),
             "curtain": StructurePresetConfig(

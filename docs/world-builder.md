@@ -14,8 +14,10 @@ Cardinal movement is rejected when its crossed edge has a movement-blocking wall
 
 Wall presets are configured under `world.structure_presets` in `server/config.toml`. The shipped defaults are:
 
-- `solid`: title `Wall`, height `40`, sound transmission `0`, movement blocked, contact sound `/sounds/wall.ogg`.
-- `curtain`: title `Curtain`, height `40`, sound transmission `0.5`, movement allowed, contact sound `/sounds/wall.ogg`.
+- `brick`: title `Brick`, height `40`, sound transmission `0`, movement blocked, contact sound `/sounds/wall.ogg`.
+- `curtain`: title `Curtain`, height `40`, sound transmission `0.5`, movement allowed, contact sound `/sounds/curtain.ogg`.
+- `glass`: title `Glass`, height `40`, sound transmission `0.35`, movement blocked, contact sound `/sounds/glass.ogg`.
+- `fence`: title `Fence`, height `40`, sound transmission `0.7`, movement blocked, contact sound `/sounds/fence.ogg`.
 
 Preset values are copied into each wall when it is created. Later preset edits therefore do not silently rewrite existing structures. Height is stored for future geometry but does not change ordinary floor movement while jumping and flying are deferred.
 

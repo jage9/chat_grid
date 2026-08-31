@@ -76,6 +76,17 @@ describe('World Builder wall controls', () => {
       preset: 'curtain',
     });
     expect(state.structures.get('wall-1')?.preset).toBe('curtain');
+    expect(state.structures.get('wall-1')?.id).toBe('wall-1');
+
+    controller.handlePropertyList('ArrowDown', 'ArrowDown');
+    controller.handlePropertyList('ArrowRight', 'ArrowRight');
+    expect(send).toHaveBeenLastCalledWith({
+      type: 'structure_update_wall',
+      structureId: 'wall-1',
+      soundTransmission: 0.55,
+    });
+
+    controller.handlePropertyList('ArrowUp', 'ArrowUp');
 
     controller.handlePropertyList('Enter', 'Enter');
     expect(openOptionSelector).toHaveBeenCalledWith(expect.objectContaining({

@@ -372,7 +372,7 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
         if (property === 'preset') {
           const nextPreset = presets.find((preset) => preset.id === adjustment.value);
           if (!nextPreset) return;
-          deps.state.structures.set(wall.id, { ...wall, ...nextPreset, preset: nextPreset.id });
+          deps.state.structures.set(wall.id, { ...wall, ...nextPreset, id: wall.id, preset: nextPreset.id });
           deps.send({ type: 'structure_update_wall', structureId: wall.id, preset: nextPreset.id });
         } else if (property === 'soundTransmission' || property === 'occlusionLowpassHz') {
           const nextValue = Number(adjustment.value);
