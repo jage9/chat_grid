@@ -15,7 +15,7 @@
    - includes role + permissions for authenticated session.
 8. Client persists authenticated session into instance-scoped server-managed `HttpOnly` cookie helpers under the active app base path via `GET <base_path>auth/session/set` (`Authorization: Bearer <sessionToken>`, `X-Chgrid-Auth-Client: 1`), and clears it via `GET <base_path>auth/session/clear` on logout/session errors.
    - the optional PHP media proxy validates that same cookie through `GET <base_path>auth/session/check` before relaying media
-9. Server sends `welcome` with users/items snapshot, followed by a short-lived `livekit_token` when LiveKit is configured.
+9. Server sends `welcome` with users, items, structures, and structure-preset snapshots, followed by a short-lived `livekit_token` when LiveKit is configured.
    - `livekit.room_name` is a deployment setting in `server/config.toml`.
    - `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET` are required server environment values.
    - Server startup fails with a clear configuration error when any of these values is absent.
@@ -24,6 +24,7 @@
    - applies `welcome.worldConfig.floors` for floor names and elevations
    - applies `welcome.worldConfig.movementTickMs` as movement pacing guidance
    - applies `welcome.worldConfig.movementMaxStepsPerTick` for movement-rate parity
+   - applies `welcome.worldConfig.structurePresets` and the canonical wall snapshot for World Builder, rendering, and collision prediction
   - uses `welcome.player` as authoritative starting position (restored from server-side account state when available)
    - records `welcome.serverInfo` (`instanceId`, `releaseVersion`, `serverVersion`, `expectedClientRevision`, `gridName`, `welcomeMessage`) for restart detection and client branding
    - if `welcome.serverInfo.expectedClientRevision` differs from the running client revision, auto-reloads the page
@@ -42,7 +43,7 @@
 Each frame:
 
 - Handle local movement input.
-- Send movement intents; server remains authoritative on accepted movement updates.
+- Predict bounds and wall collisions, then send movement intents; server remains authoritative on accepted movement updates.
 - While connected to the grid, the client's 10-second heartbeat refreshes its
   server-owned last-seen timestamp. Database writes are debounced to 30 seconds,
   with immediate updates on grid activation and disconnect.
@@ -75,6 +76,8 @@ Core incoming message effects:
 - `item_piano_note`: start/stop synthesized piano notes from remote users (item layer gated).
 - `item_piano_status`: structured piano mode/record/playback transitions (client runtime state).
 - `item_elevator_status`: track local elevator entry, travel, arrival, and exit state.
+- `structure_upsert` / `structure_remove`: apply live wall-run changes used by rendering and collision prediction.
+- `structure_action_result`: announce World Builder mutation success/failure.
 - `pong`:
   - positive `clientSentAt`: user ping response (`P` command)
   - negative `clientSentAt`: internal heartbeat response
@@ -91,7 +94,7 @@ Core incoming message effects:
 
 ## Authorization Runtime
 
-- Server enforces item/chat/nickname/voice/admin permissions for each packet.
+- Server enforces item/chat/nickname/voice/admin/World Builder permissions for each packet.
 - Role and permission changes apply live to connected users without reconnect.
 - `voice.send` revocation is pushed immediately via `auth_permissions`; client mutes outbound voice track.
 

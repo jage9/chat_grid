@@ -34,6 +34,7 @@ export type MainModeCommand =
   | 'openHelp'
   | 'openChat'
   | 'openAdminMenu'
+  | 'openWorldBuilder'
   | 'chatPrev'
   | 'chatNext'
   | 'chatFirst'
@@ -67,6 +68,7 @@ export function resolveMainModeCommand(code: string, shiftKey: boolean): MainMod
   if (code === 'KeyL') return shiftKey ? 'listUsers' : 'locateNearestUser';
   if (code === 'Slash') return shiftKey ? 'openHelp' : 'openChat';
   if (code === 'KeyZ') return shiftKey ? 'openAdminMenu' : 'openItemManagement';
+  if (code === 'KeyW') return shiftKey ? null : 'openWorldBuilder';
   if (code === 'Comma') return shiftKey ? 'chatFirst' : 'chatPrev';
   if (code === 'Period') return shiftKey ? 'chatLast' : 'chatNext';
   if (code === 'Escape') return shiftKey ? null : 'escape';

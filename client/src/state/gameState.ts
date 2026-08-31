@@ -25,6 +25,25 @@ export type WorldItem = {
   occupiedOffsets: Array<{ x: number; y: number }>;
 };
 
+export type WallStructure = {
+  id: string;
+  floorZ: number;
+  startX: number;
+  startY: number;
+  orientation: 'horizontal' | 'vertical';
+  length: number;
+  title: string;
+  movementBlocked: boolean;
+  soundTransmission: number;
+  height: number;
+  preset: string;
+  collisionSound: string;
+};
+
+export type StructurePreset = Omit<WallStructure, 'id' | 'floorZ' | 'startX' | 'startY' | 'orientation' | 'length' | 'preset'> & {
+  id: string;
+};
+
 export type SelectionContext = 'pickup' | 'drop' | 'delete' | 'edit' | 'use' | 'secondaryUse' | 'inspect' | 'manage' | null;
 
 export type GameMode =
@@ -53,6 +72,12 @@ export type GameMode =
   | 'adminUserRoleSelect'
   | 'adminUserDeleteConfirm'
   | 'adminRoleNameEdit'
+  | 'worldBuilder'
+  | 'worldBuilderPreset'
+  | 'worldBuilderDirection'
+  | 'worldBuilderWallList'
+  | 'worldBuilderWallActions'
+  | 'worldBuilderDeleteConfirm'
   | 'pianoUse';
 
 export type Player = {
@@ -101,6 +126,7 @@ export type GameState = {
   player: Player;
   peers: Map<string, PeerState>;
   items: Map<string, WorldItem>;
+  structures: Map<string, WallStructure>;
   carriedItemId: string | null;
   elevatorItemId: string | null;
 };
@@ -140,6 +166,7 @@ export function createInitialState(): GameState {
     },
     peers: new Map(),
     items: new Map(),
+    structures: new Map(),
     carriedItemId: null,
     elevatorItemId: null,
   };

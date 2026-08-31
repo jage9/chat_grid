@@ -38,6 +38,21 @@ state_save_max_delay_ms = 1000
 # Grid width/height in cells. Valid coordinates are 0..grid_size-1.
 grid_size = 41
 
+# World Builder wall presets. Add more named tables as needed.
+[world.structure_presets.solid]
+title = "Wall"
+movement_blocked = true
+sound_transmission = 0.0
+height = 40
+collision_sound = "/sounds/wall.ogg"
+
+[world.structure_presets.curtain]
+title = "Curtain"
+movement_blocked = true
+sound_transmission = 0.5
+height = 40
+collision_sound = "/sounds/wall.ogg"
+
 [auth]
 # SQLite file for account/session data. Relative paths resolve from this config file directory.
 db_file = "runtime/chatgrid.db"

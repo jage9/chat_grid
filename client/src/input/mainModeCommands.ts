@@ -5,6 +5,7 @@ export type MainModeCommandAvailabilityContext = {
   voiceSendAllowed: boolean;
   mainHelpAvailable: boolean;
   hasAdminActions: boolean;
+  hasWorldBuilder: boolean;
   itemTypeCount: number;
   visibleItemCount: number;
   userCount: number;
@@ -269,6 +270,14 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     tooltip: 'Start typing a chat message.',
     section: 'Chat',
     isAvailable: () => true,
+  },
+  {
+    id: 'openWorldBuilder',
+    label: 'Open World Builder',
+    shortcut: 'W',
+    tooltip: 'Create and manage world structures when permitted.',
+    section: 'World Builder',
+    isAvailable: (context) => context.hasWorldBuilder,
   },
   {
     id: 'openAdminMenu',

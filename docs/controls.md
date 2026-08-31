@@ -19,7 +19,7 @@ This document is the authoritative keymap for the client.
 - `Arrow Keys`: Move
 - `Shift+K`, `Applications`, or `Shift+F10`: Open the command palette in supported modes
 - `?`: Open help viewer
-- `C`: Speak coordinates
+- `C`: Speak coordinates and any walls bordering the current square
 - `Escape`: Press once for disconnect prompt, press again to disconnect
 
 ### Users, Nickname, Chat
@@ -48,6 +48,14 @@ This document is the authoritative keymap for the client.
 - `Enter`: Use item
 - `Shift+Enter`: Secondary item action
 - For an elevator, `Enter` calls or starts opening it, enters or exits only after the door is fully open, and has no boarding effect while the door is opening or closing.
+
+### World Builder
+
+- `W`: Open World Builder when the account has `world.structure.edit`.
+- `Add wall`: Select a server-configured preset, then select the north, south, east, or west edge of the current square.
+- `Manage walls`: List current-floor walls nearest first, then extend or shorten either endpoint or delete the complete wall.
+- Walls are edited live. Other connected clients receive and render changes immediately.
+- Wall deletion uses a `No`/`Yes` confirmation menu.
 
 ### Audio
 - `P`: Ping server

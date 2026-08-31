@@ -49,10 +49,26 @@ class StorageConfigSection(BaseModel):
     state_save_max_delay_ms: int = Field(default=1000, gt=0)
 
 
+class StructurePresetConfig(BaseModel):
+    """Editable defaults used when a builder creates a wall structure."""
+
+    title: str = Field(default="Wall", min_length=1, max_length=80)
+    movement_blocked: bool = True
+    sound_transmission: float = Field(default=0.0, ge=0.0, le=1.0)
+    height: int = Field(default=40, ge=0)
+    collision_sound: str = "/sounds/wall.ogg"
+
+
 class WorldConfigSection(BaseModel):
     """Authoritative world geometry options."""
 
     grid_size: int = Field(default=41, ge=1)
+    structure_presets: dict[str, StructurePresetConfig] = Field(
+        default_factory=lambda: {
+            "solid": StructurePresetConfig(),
+            "curtain": StructurePresetConfig(title="Curtain", sound_transmission=0.5),
+        }
+    )
 
 
 class AuthConfigSection(BaseModel):

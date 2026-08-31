@@ -179,6 +179,30 @@ class ItemUpdatePacket(BasePacket):
     params: dict | None = None
 
 
+class StructureAddWallPacket(BasePacket):
+    """Request a one-edge wall from a configured preset beside the builder."""
+
+    type: Literal["structure_add_wall"]
+    preset: str = Field(min_length=1, max_length=40)
+    direction: Literal["north", "south", "east", "west"]
+
+
+class StructureResizeWallPacket(BasePacket):
+    """Move one endpoint of an existing wall run by one grid edge."""
+
+    type: Literal["structure_resize_wall"]
+    structureId: str
+    endpoint: Literal["start", "end"]
+    delta: Literal[-1, 1]
+
+
+class StructureDeletePacket(BasePacket):
+    """Delete one complete world structure."""
+
+    type: Literal["structure_delete"]
+    structureId: str
+
+
 ClientPacket = (
     UpdatePositionPacket
     | TeleportCompletePacket
@@ -210,6 +234,9 @@ ClientPacket = (
     | ItemPianoNotePacket
     | ItemPianoRecordingPacket
     | ItemUpdatePacket
+    | StructureAddWallPacket
+    | StructureResizeWallPacket
+    | StructureDeletePacket
 )
 
 
@@ -229,6 +256,7 @@ class WelcomePacket(BasePacket):
     player: RemoteUser
     users: list[RemoteUser]
     items: list[dict] | None = None
+    structures: list[dict] | None = None
     worldConfig: dict | None = None
     uiDefinitions: dict | None = None
     serverInfo: dict | None = None
@@ -376,6 +404,47 @@ class ItemUpsertPacket(BasePacket):
 class ItemRemovePacket(BasePacket):
     type: Literal["item_remove"]
     itemId: str
+
+
+class WallStructure(BaseModel):
+    """One editable wall run stored separately from world items."""
+
+    id: str
+    floorZ: int
+    startX: int
+    startY: int
+    orientation: Literal["horizontal", "vertical"]
+    length: int = Field(ge=1)
+    title: str = Field(default="Wall", min_length=1, max_length=80)
+    movementBlocked: bool = True
+    soundTransmission: float = Field(default=0.0, ge=0.0, le=1.0)
+    height: int = Field(default=40, ge=0)
+    preset: str = Field(default="solid", min_length=1, max_length=40)
+    collisionSound: str = "/sounds/wall.ogg"
+
+
+class StructureUpsertPacket(BasePacket):
+    """Broadcast a complete canonical structure after a live mutation."""
+
+    type: Literal["structure_upsert"]
+    structure: WallStructure
+
+
+class StructureRemovePacket(BasePacket):
+    """Broadcast removal of one canonical structure."""
+
+    type: Literal["structure_remove"]
+    structureId: str
+
+
+class StructureActionResultPacket(BasePacket):
+    """Report a World Builder mutation result to its caller."""
+
+    type: Literal["structure_action_result"]
+    ok: bool
+    action: Literal["add", "resize", "delete"]
+    message: str
+    structureId: str | None = None
 
 
 class ItemActionResultPacket(BasePacket):

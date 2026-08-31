@@ -34,6 +34,24 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
+    ctx.strokeStyle = '#f3f4f6';
+    ctx.lineWidth = Math.max(2, this.squarePixelSize * 0.12);
+    for (const wall of state.structures.values()) {
+      if (wall.floorZ !== state.player.z) continue;
+      ctx.beginPath();
+      if (wall.orientation === 'horizontal') {
+        const canvasY = this.canvas.height - wall.startY * this.squarePixelSize;
+        ctx.moveTo(wall.startX * this.squarePixelSize, canvasY);
+        ctx.lineTo((wall.startX + wall.length) * this.squarePixelSize, canvasY);
+      } else {
+        const canvasX = wall.startX * this.squarePixelSize;
+        ctx.moveTo(canvasX, this.canvas.height - wall.startY * this.squarePixelSize);
+        ctx.lineTo(canvasX, this.canvas.height - (wall.startY + wall.length) * this.squarePixelSize);
+      }
+      ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+
     for (const peer of state.peers.values()) {
       if (peer.z !== state.player.z) continue;
       this.drawObject(peer, '#f87171', peer.nickname);

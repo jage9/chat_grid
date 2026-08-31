@@ -23,7 +23,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `admin_user_set_role`: set target user role.
 - `admin_user_ban` / `admin_user_unban`: disable/enable user account.
 - `admin_user_delete`: permanently delete target account.
-- `update_position`: client movement intent with `x`, `y`, and `z`; server enforces bounds, rate policy, and an unchanged floor.
+- `update_position`: client movement intent with `x`, `y`, and `z`; server enforces bounds, wall crossings, rate policy, and an unchanged floor.
 - `teleport_complete`: client signals an `x`, `y`, `z` teleport landing; server rejects direct floor changes and rebroadcasts the spatial cue.
 - `update_nickname`: nickname change request (server enforces uniqueness).
 - `chat_message`: player chat.
@@ -34,6 +34,9 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_secondary_use`: trigger type-specific secondary action when implemented.
 - `item_piano_note`: realtime piano note on/off for active piano use mode.
 - `item_piano_recording`: piano record/playback control (`toggle_record`, `playback`, `stop_playback`).
+- `structure_add_wall`: create a one-edge wall from a server preset on the requested side of the builder's current square.
+- `structure_resize_wall`: extend or shorten one complete wall run at its start or end by one edge.
+- `structure_delete`: delete one complete wall run.
 
 ## Server -> Client
 
@@ -65,6 +68,9 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_piano_note`: broadcast piano note on/off with resolved instrument/envelope/spatial params.
 - `item_piano_status`: structured piano mode/record/playback state events for client runtime control.
 - `item_elevator_status`: targeted rider state (`entered`, `moving`, `arrived`, or `exited`) with `itemId`, `z`, and an optional user-facing `message`.
+- `structure_upsert`: full wall-run replacement after a live create or resize.
+- `structure_remove`: removal of one wall run.
+- `structure_action_result`: success/error and user-facing status for add, resize, or delete.
 
 ## Item Packet Behavior
 
@@ -113,6 +119,8 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `welcome.worldConfig.movementTickMs`: server movement-rate window used for client movement pacing.
 - `welcome.worldConfig.movementMaxStepsPerTick`: max allowed grid steps per movement window.
 - `welcome.worldConfig.floors`: server-owned floor ids, display names, and exact `z` elevations.
+- `welcome.worldConfig.structurePresets`: server-configured wall defaults exposed to World Builder.
+- `welcome.structures`: canonical wall-run snapshot stored separately from items.
 - `welcome.player`: server-assigned spawn/current self position at connect time.
 - `welcome.serverInfo`: server process identity/version metadata:
   - `instanceId`: unique id generated at server startup
@@ -139,7 +147,9 @@ This is a behavior guide for packet semantics beyond raw schemas.
 ## Validation Boundaries
 
 - Server is authoritative for all action validation and normalization.
-- Server is authoritative for movement acceptance (bounds + rate/delta checks) and rejects client attempts to change `z`.
+- Server is authoritative for movement acceptance (bounds + wall crossing + rate/delta checks) and rejects client attempts to change `z`.
+- Cardinal movement is blocked by a wall on its crossed edge. Diagonal movement is blocked only when both component edges from the origin are blocked.
+- Structure mutations require `world.structure.edit`, which defaults to the built-in `editor` and `admin` roles.
 - Server persists account state (last nickname + last position) and restores spawn from that state on auth login/resume.
 - Server also supports websocket handshake cookie resume:
   - accepts browser sockets only when websocket `Origin` matches `CHGRID_HOST_ORIGIN`

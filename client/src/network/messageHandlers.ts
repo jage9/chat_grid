@@ -1,5 +1,5 @@
 import { type IncomingMessage } from './protocol';
-import { type WorldItem } from '../state/gameState';
+import { type StructurePreset, type WallStructure, type WorldItem } from '../state/gameState';
 
 /**
  * Dependency contract for creating a message handler without hard-coupling to `main.ts`.
@@ -8,6 +8,7 @@ type MessageHandlerDeps = {
   getWorldGridSize: () => number;
   setWorldGridSize: (size: number) => void;
   setWorldFloors: (floors: Array<{ id: string; name: string; z: number }>) => void;
+  setStructurePresets: (presets: StructurePreset[]) => void;
   setMovementTickMs: (value: number) => void;
   setConnecting: (value: boolean) => void;
   rendererSetGridSize: (size: number) => void;
@@ -18,6 +19,7 @@ type MessageHandlerDeps = {
     running: boolean;
     peers: Map<string, { id: string; userId?: string | null; nickname: string; x: number; y: number; z: number; acousticZoneId: string }>;
     items: Map<string, WorldItem>;
+    structures: Map<string, WallStructure>;
     mode: string;
     selectedItemId: string | null;
     itemPropertyKeys: string[];
@@ -80,6 +82,7 @@ type MessageHandlerDeps = {
   handleAdminUsersList: (message: Extract<IncomingMessage, { type: 'admin_users_list' }>) => void;
   handleAdminActionResult: (message: Extract<IncomingMessage, { type: 'admin_action_result' }>) => void;
   handleItemTransferTargets: (message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>) => void;
+  handleStructureActionResult: (message: Extract<IncomingMessage, { type: 'structure_action_result' }>) => void;
   connectToLiveKit: (url: string, token: string) => void;
 };
 
@@ -111,6 +114,15 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
       case 'item_transfer_targets':
         deps.handleItemTransferTargets(message);
         break;
+      case 'structure_action_result':
+        deps.handleStructureActionResult(message);
+        break;
+      case 'structure_upsert':
+        deps.state.structures.set(message.structure.id, message.structure);
+        break;
+      case 'structure_remove':
+        deps.state.structures.delete(message.structureId);
+        break;
 
       case 'welcome':
         if (message.worldConfig?.gridSize && Number.isInteger(message.worldConfig.gridSize) && message.worldConfig.gridSize > 0) {
@@ -122,6 +134,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         if (message.worldConfig?.floors) {
           deps.setWorldFloors(message.worldConfig.floors);
         }
+        deps.setStructurePresets(message.worldConfig?.structurePresets ?? []);
         deps.rendererSetGridSize(deps.getWorldGridSize());
         const schemaReady = deps.applyServerItemUiDefinitions(message.uiDefinitions);
         if (!schemaReady) {
@@ -156,6 +169,10 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
             ...item,
             carrierId: item.carrierId ?? null,
           });
+        }
+        deps.state.structures.clear();
+        for (const structure of message.structures || []) {
+          deps.state.structures.set(structure.id, structure);
         }
         deps.refreshAcousticModel();
         await deps.refreshAudioSubscriptions(true);

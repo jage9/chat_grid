@@ -74,6 +74,12 @@ from .models import (
     PingPacket,
     PongPacket,
     RemoteUser,
+    StructureActionResultPacket,
+    StructureAddWallPacket,
+    StructureDeletePacket,
+    StructureRemovePacket,
+    StructureResizeWallPacket,
+    StructureUpsertPacket,
     TeleportCompletePacket,
     UpdateNicknamePacket,
     UpdatePositionPacket,
@@ -83,6 +89,7 @@ from .models import (
     WorldItem,
 )
 from .network_security import normalize_origin
+from .structure_service import StructureError, StructureService
 from .ui_metadata import (
     ADMIN_MENU_ACTION_DEFINITIONS,
     ITEM_MANAGEMENT_ACTION_DEFINITIONS,
@@ -155,6 +162,7 @@ class SignalingServer:
         max_message_size: int = 2_000_000,
         state_file: Path | None = None,
         grid_size: int = 41,
+        structure_presets: dict[str, dict[str, object]] | None = None,
         state_save_debounce_ms: int = 200,
         state_save_max_delay_ms: int = 1000,
         host_origin: str | None = None,
@@ -192,9 +200,17 @@ class SignalingServer:
             username_min_length=username_min_length,
             username_max_length=username_max_length,
         )
-        self.item_service = ItemService(state_file=state_file)
-        self.item_runtime = ItemRuntime(self)
         self.grid_size = max(1, grid_size)
+        self.item_service = ItemService(state_file=state_file)
+        structure_state_file = (
+            state_file.with_name("structures.json") if state_file else None
+        )
+        self.structure_service = StructureService(
+            state_file=structure_state_file,
+            grid_size=self.grid_size,
+            presets=structure_presets or {},
+        )
+        self.item_runtime = ItemRuntime(self)
         self.movement_tick_ms = MOVEMENT_TICK_MS
         self.movement_max_steps_per_tick = MOVEMENT_MAX_STEPS_PER_TICK
         self.instance_id = str(uuid.uuid4())
@@ -617,16 +633,17 @@ class SignalingServer:
             await self._send_auth_permissions(active)
 
     def _flush_state_save(self) -> None:
-        """Immediately flush pending state persistence and clear debounce state."""
+        """Immediately flush pending item/structure state and clear debounce state."""
 
         if self._pending_state_save_handle is not None:
             self._pending_state_save_handle.cancel()
             self._pending_state_save_handle = None
         self._pending_state_save_started_at = None
         self.item_service.save_state()
+        self.structure_service.save_state()
 
     def _request_state_save(self) -> None:
-        """Debounce/coalesce item-state persistence to reduce write churn."""
+        """Debounce/coalesce world-state persistence to reduce write churn."""
 
         loop = asyncio.get_running_loop()
         now = loop.time()
@@ -970,11 +987,16 @@ class SignalingServer:
                 self.item_runtime.outbound_item(item).model_dump(exclude_none=True)
                 for item in self.items.values()
             ],
+            structures=[
+                structure.model_dump()
+                for structure in self.structure_service.structures.values()
+            ],
             worldConfig={
                 "gridSize": self.grid_size,
                 "movementTickMs": self.movement_tick_ms,
                 "movementMaxStepsPerTick": self.movement_max_steps_per_tick,
                 "floors": [dict(floor) for floor in FLOOR_DEFINITIONS],
+                "structurePresets": self.structure_service.preset_snapshot(),
             },
             uiDefinitions=self._build_ui_definitions(client),
             serverInfo={
@@ -1282,6 +1304,92 @@ class SignalingServer:
                 type="admin_action_result", ok=ok, action=action, message=message
             ),
         )
+
+    async def _handle_structure_packet(
+        self, client: ClientConnection, packet: ClientPacket
+    ) -> bool:
+        """Handle permission-gated live World Builder mutations."""
+
+        if not isinstance(
+            packet,
+            (StructureAddWallPacket, StructureResizeWallPacket, StructureDeletePacket),
+        ):
+            return False
+        action: Literal["add", "resize", "delete"] = (
+            "add"
+            if isinstance(packet, StructureAddWallPacket)
+            else "resize"
+            if isinstance(packet, StructureResizeWallPacket)
+            else "delete"
+        )
+        if not self._client_has_permission(client, "world.structure.edit"):
+            await self._send(
+                client.websocket,
+                StructureActionResultPacket(
+                    type="structure_action_result",
+                    ok=False,
+                    action=action,
+                    message="Not authorized to edit world structures.",
+                ),
+            )
+            return True
+        try:
+            if isinstance(packet, StructureAddWallPacket):
+                wall = self.structure_service.add_wall(
+                    client, preset_id=packet.preset, direction=packet.direction
+                )
+                result_message = f"Added {wall.title}."
+            elif isinstance(packet, StructureResizeWallPacket):
+                wall = self.structure_service.resize_wall(
+                    packet.structureId,
+                    endpoint=packet.endpoint,
+                    delta=packet.delta,
+                )
+                result_message = f"Resized {wall.title} to {wall.length} squares."
+            else:
+                wall = self.structure_service.remove(packet.structureId)
+                self._request_state_save()
+                await self._broadcast(
+                    StructureRemovePacket(type="structure_remove", structureId=wall.id)
+                )
+                await self._send(
+                    client.websocket,
+                    StructureActionResultPacket(
+                        type="structure_action_result",
+                        ok=True,
+                        action=action,
+                        message=f"Deleted {wall.title}.",
+                        structureId=wall.id,
+                    ),
+                )
+                return True
+        except StructureError as exc:
+            await self._send(
+                client.websocket,
+                StructureActionResultPacket(
+                    type="structure_action_result",
+                    ok=False,
+                    action=action,
+                    message=str(exc),
+                ),
+            )
+            return True
+
+        self._request_state_save()
+        await self._broadcast(
+            StructureUpsertPacket(type="structure_upsert", structure=wall)
+        )
+        await self._send(
+            client.websocket,
+            StructureActionResultPacket(
+                type="structure_action_result",
+                ok=True,
+                action=action,
+                message=result_message,
+                structureId=wall.id,
+            ),
+        )
+        return True
 
     @staticmethod
     def _format_duration(total_seconds: int) -> str:
@@ -1768,6 +1876,9 @@ class SignalingServer:
         if await self._handle_admin_packet(client, packet):
             return
 
+        if await self._handle_structure_packet(client, packet):
+            return
+
         if isinstance(packet, UpdatePositionPacket):
             if client.elevator_id is not None:
                 await self._send(
@@ -1787,6 +1898,16 @@ class SignalingServer:
                     client.websocket,
                     client_position_packet(client),
                 )
+                return
+            blocking_wall = self.structure_service.blocking_wall_for_move(
+                x=client.x,
+                y=client.y,
+                z=client.z,
+                next_x=packet.x,
+                next_y=packet.y,
+            )
+            if blocking_wall is not None:
+                await self._send(client.websocket, client_position_packet(client))
                 return
             now_ms = self.item_service.now_ms()
             requested_delta = max(abs(packet.x - client.x), abs(packet.y - client.y))
@@ -2243,6 +2364,16 @@ def run() -> None:
         max_message_size=config.network.max_message_bytes,
         state_file=state_file,
         grid_size=config.world.grid_size,
+        structure_presets={
+            preset_id: {
+                "title": preset.title,
+                "movementBlocked": preset.movement_blocked,
+                "soundTransmission": preset.sound_transmission,
+                "height": preset.height,
+                "collisionSound": preset.collision_sound,
+            }
+            for preset_id, preset in config.world.structure_presets.items()
+        },
         state_save_debounce_ms=config.storage.state_save_debounce_ms,
         state_save_max_delay_ms=config.storage.state_save_max_delay_ms,
         host_origin=host_origin,

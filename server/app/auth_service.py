@@ -47,6 +47,7 @@ PERMISSIONS: tuple[str, ...] = (
     "role.manage",
     "server.manage_settings",
     "server.allow_reboot",
+    "world.structure.edit",
 )
 
 PERMISSION_DESCRIPTIONS: dict[str, str] = {
@@ -69,6 +70,7 @@ PERMISSION_DESCRIPTIONS: dict[str, str] = {
     "role.manage": "Allow creating, editing, and deleting roles.",
     "server.manage_settings": "Allow changing server settings.",
     "server.allow_reboot": "Allow scheduling a server reboot from chat command.",
+    "world.structure.edit": "Allow live editing of World Builder structures.",
 }
 
 DEFAULT_ROLE_PERMISSIONS: dict[str, set[str]] = {
@@ -87,6 +89,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[str]] = {
         "chat.send",
         "voice.send",
         "profile.update_nickname",
+        "world.structure.edit",
     },
     "user": {
         "item.create",
@@ -1054,6 +1057,9 @@ class AuthService:
         """Insert canonical permissions and default roles when missing."""
 
         now_ms = self.now_ms()
+        existing_permission_keys = {
+            str(row["key"]) for row in self._db_fetchall("SELECT key FROM permissions")
+        }
         for key in PERMISSIONS:
             description = PERMISSION_DESCRIPTIONS.get(key, key)
             self._db_execute(
@@ -1091,6 +1097,18 @@ class AuthService:
                     continue
                 allowed = DEFAULT_ROLE_PERMISSIONS.get(role_name, set())
             for key in sorted(allowed):
+                self._db_execute(
+                    "INSERT OR IGNORE INTO role_permissions (role_id, permission_key) VALUES (?, ?)",
+                    (role_id, key),
+                )
+
+        # Grant newly introduced default permissions once to existing built-in
+        # roles without overwriting later administrator customizations.
+        for role_name, defaults in DEFAULT_ROLE_PERMISSIONS.items():
+            role_id = role_id_by_name.get(role_name)
+            if role_id is None:
+                continue
+            for key in defaults - existing_permission_keys:
                 self._db_execute(
                     "INSERT OR IGNORE INTO role_permissions (role_id, permission_key) VALUES (?, ?)",
                     (role_id, key),

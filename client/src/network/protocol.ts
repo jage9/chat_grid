@@ -29,6 +29,30 @@ export const itemSchema = z.object({
   ),
 });
 
+export const wallStructureSchema = z.object({
+  id: z.string(),
+  floorZ: z.number().int(),
+  startX: z.number().int(),
+  startY: z.number().int(),
+  orientation: z.enum(['horizontal', 'vertical']),
+  length: z.number().int().positive(),
+  title: z.string(),
+  movementBlocked: z.boolean(),
+  soundTransmission: z.number().min(0).max(1),
+  height: z.number().int().nonnegative(),
+  preset: z.string(),
+  collisionSound: z.string(),
+});
+
+const structurePresetSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  movementBlocked: z.boolean(),
+  soundTransmission: z.number().min(0).max(1),
+  height: z.number().int().nonnegative(),
+  collisionSound: z.string(),
+});
+
 export const welcomeMessageSchema = z.object({
   type: z.literal('welcome'),
   id: z.string(),
@@ -53,6 +77,7 @@ export const welcomeMessageSchema = z.object({
     }),
   ),
   items: z.array(itemSchema).optional(),
+  structures: z.array(wallStructureSchema).optional(),
   worldConfig: z
     .object({
       gridSize: z.number().int().positive(),
@@ -65,6 +90,7 @@ export const welcomeMessageSchema = z.object({
           z: z.number().int(),
         }),
       ),
+      structurePresets: z.array(structurePresetSchema).optional(),
     })
     .optional(),
   serverInfo: z
@@ -390,6 +416,24 @@ export const adminActionResultSchema = z.object({
   message: z.string(),
 });
 
+export const structureUpsertSchema = z.object({
+  type: z.literal('structure_upsert'),
+  structure: wallStructureSchema,
+});
+
+export const structureRemoveSchema = z.object({
+  type: z.literal('structure_remove'),
+  structureId: z.string(),
+});
+
+export const structureActionResultSchema = z.object({
+  type: z.literal('structure_action_result'),
+  ok: z.boolean(),
+  action: z.enum(['add', 'resize', 'delete']),
+  message: z.string(),
+  structureId: z.string().optional(),
+});
+
 export const incomingMessageSchema = z.discriminatedUnion('type', [
   authRequiredSchema,
   authResultSchema,
@@ -415,6 +459,9 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   adminRolesListSchema,
   adminUsersListSchema,
   adminActionResultSchema,
+  structureUpsertSchema,
+  structureRemoveSchema,
+  structureActionResultSchema,
 ]);
 
 export type IncomingMessage = z.infer<typeof incomingMessageSchema>;
@@ -447,6 +494,9 @@ export type OutgoingMessage =
   | { type: 'item_transfer'; itemId: string; targetUserId: string }
   | { type: 'item_use'; itemId: string }
   | { type: 'item_secondary_use'; itemId: string }
+  | { type: 'structure_add_wall'; preset: string; direction: 'north' | 'south' | 'east' | 'west' }
+  | { type: 'structure_resize_wall'; structureId: string; endpoint: 'start' | 'end'; delta: -1 | 1 }
+  | { type: 'structure_delete'; structureId: string }
   | { type: 'item_piano_note'; itemId: string; keyId: string; midi: number; on: boolean }
   | { type: 'item_piano_recording'; itemId: string; action: 'toggle_record' | 'playback' | 'stop_playback' | 'stop_record' }
   | {

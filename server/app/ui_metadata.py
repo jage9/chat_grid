@@ -83,6 +83,11 @@ ITEM_MANAGEMENT_ACTION_DEFINITIONS: tuple[ItemManagementActionDefinition, ...] =
 )
 
 MAIN_MODE_SERVER_COMMAND_DEFINITIONS: tuple[MainModeServerCommandDefinition, ...] = (
+    {
+        "id": "openWorldBuilder",
+        "label": "Open World Builder",
+        "tooltip": "Create and manage world structures when permitted.",
+    },
     {"id": "addItem", "label": "Add item", "tooltip": "Open the add-item menu."},
     {
         "id": "useItem",

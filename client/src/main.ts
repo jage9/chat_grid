@@ -30,6 +30,7 @@ import { resolveMainModeCommand, type MainModeCommand } from './input/mainComman
 import { dispatchModeInput } from './input/modeDispatcher';
 import { handleListControlKey } from './input/listController';
 import { createAdminController, type AdminMenuAction } from './input/adminController';
+import { createWorldBuilderController } from './input/worldBuilderController';
 import { setupKeyboardInputHandlers } from './input/keyboardController';
 import {
   setupMobileControls,
@@ -54,9 +55,11 @@ import {
   getNearestPeer,
   isItemOnFloor,
   itemOccupiesPosition,
+  type StructurePreset,
   type GameMode,
   type WorldItem,
 } from './state/gameState';
+import { adjacentWallDescriptions, blockingWallForMove } from './state/structureGeometry';
 import {
   applyServerItemUiDefinitions,
   getItemManagementActionMetadata,
@@ -541,6 +544,16 @@ const adminController = createAdminController({
   setReplaceTextOnNextType: (value) => {
     replaceTextOnNextType = value;
   },
+});
+const worldBuilderController = createWorldBuilderController({
+  state,
+  hasPermission: (key) => authController.hasPermission(key),
+  send: (message) => signaling.send(message),
+  updateStatus,
+  announceMenuEntry,
+  blip: () => audio.sfxUiBlip(),
+  confirm: () => audio.sfxUiConfirm(),
+  cancel: () => audio.sfxUiCancel(),
 });
 const itemInteractionController = createItemInteractionController({
   state,
@@ -1374,6 +1387,22 @@ function handleMovement(): void {
     }
     return;
   }
+  const blockingWall = blockingWallForMove(
+    state.structures.values(),
+    state.player.x,
+    state.player.y,
+    state.player.z,
+    nextX,
+    nextY,
+  );
+  if (blockingWall) {
+    state.player.lastMoveTime = now;
+    if (lastWallCollisionDirection !== attemptedDirection) {
+      void audio.playSample(resolveIncomingSoundUrl(blockingWall.collisionSound || '/sounds/wall.ogg'), 1);
+      lastWallCollisionDirection = attemptedDirection;
+    }
+    return;
+  }
 
   state.player.x = nextX;
   state.player.y = nextY;
@@ -1653,6 +1682,7 @@ const onAppMessage = createOnMessageHandler({
   setWorldFloors: (floors) => {
     worldFloors = new Map(floors.map((floor) => [floor.z, floor.name]));
   },
+  setStructurePresets: (presets: StructurePreset[]) => worldBuilderController.setPresets(presets),
   setMovementTickMs: (value) => {
     movementTickMs = Math.max(1, value);
   },
@@ -1724,6 +1754,7 @@ const onAppMessage = createOnMessageHandler({
   handleAdminUsersList,
   handleAdminActionResult,
   handleItemTransferTargets,
+  handleStructureActionResult: (message) => worldBuilderController.handleActionResult(message),
   connectToLiveKit: (url, token) => {
     void connectLiveKit(url, token);
   },
@@ -1891,7 +1922,14 @@ function adjustEffectValueCommand(step: number): void {
 }
 
 function speakCoordinatesCommand(): void {
-  updateStatus(locationPhrase(state.player.x, state.player.y, state.player.z));
+  const adjacentWalls = adjacentWallDescriptions(
+    state.structures.values(),
+    state.player.x,
+    state.player.y,
+    state.player.z,
+  );
+  const structurePhrase = adjacentWalls.length > 0 ? ` Structures: ${adjacentWalls.join(', ')}.` : '';
+  updateStatus(`${locationPhrase(state.player.x, state.player.y, state.player.z)}${structurePhrase}`);
   audio.sfxUiBlip();
 }
 
@@ -1921,6 +1959,10 @@ function calibrateMicrophoneCommand(): void {
 
 function openAdminMenuCommand(): void {
   adminController.openAdminMenu();
+}
+
+function openWorldBuilderCommand(): void {
+  worldBuilderController.open();
 }
 
 function useItemCommand(): void {
@@ -2201,6 +2243,7 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   openHelp: openHelpCommand,
   openChat: openChatCommand,
   openAdminMenu: openAdminMenuCommand,
+  openWorldBuilder: openWorldBuilderCommand,
   chatPrev: () => navigateChatBuffer('prev'),
   chatNext: () => navigateChatBuffer('next'),
   chatFirst: () => navigateChatBuffer('first'),
@@ -2214,6 +2257,7 @@ function getAvailableCommandPaletteEntriesForMode(mode: GameMode): Array<Command
       voiceSendAllowed: authController.getVoiceSendAllowed(),
       mainHelpAvailable: mainHelpViewerLines.length > 0,
       hasAdminActions: getAvailableAdminActions().length > 0,
+      hasWorldBuilder: authController.hasPermission('world.structure.edit'),
       itemTypeCount: getItemTypeSequence().length,
       visibleItemCount: Array.from(state.items.values()).filter((item) => !item.carrierId).length,
       userCount: state.peers.size,
@@ -2771,6 +2815,12 @@ function handleModeInput(input: ModeInput): void {
       adminUserDeleteConfirm: ({ code: currentCode, key: currentKey }) => handleAdminUserDeleteConfirmModeInput(currentCode, currentKey),
       adminRoleNameEdit: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>
         handleAdminRoleNameEditModeInput(currentCode, currentKey, currentCtrlKey),
+      worldBuilder: ({ code: currentCode, key: currentKey }) => worldBuilderController.handleRoot(currentCode, currentKey),
+      worldBuilderPreset: ({ code: currentCode, key: currentKey }) => worldBuilderController.handlePreset(currentCode, currentKey),
+      worldBuilderDirection: ({ code: currentCode, key: currentKey }) => worldBuilderController.handleDirection(currentCode, currentKey),
+      worldBuilderWallList: ({ code: currentCode, key: currentKey }) => worldBuilderController.handleWallList(currentCode, currentKey),
+      worldBuilderWallActions: ({ code: currentCode, key: currentKey }) => worldBuilderController.handleWallActions(currentCode, currentKey),
+      worldBuilderDeleteConfirm: ({ code: currentCode, key: currentKey }) => worldBuilderController.handleDeleteConfirm(currentCode, currentKey),
       itemProperties: ({ code: currentCode, key: currentKey }) =>
         itemPropertyEditor.handleItemPropertiesModeInput(currentCode, currentKey),
       itemPropertyEdit: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>
