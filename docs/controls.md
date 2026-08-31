@@ -53,7 +53,8 @@ This document is the authoritative keymap for the client.
 
 - `W`: Open World Builder when the account has `world.structure.edit`.
 - `Add wall`: Select a server-configured preset, then select the north, south, east, or west edge of the current square.
-- `Edit walls`: List current-floor walls nearest first, then edit acoustic properties, extend or shorten either endpoint, or delete the complete wall.
+- `Edit walls`: List current-floor walls nearest first, then edit properties, adjust either endpoint, or delete the complete wall.
+- `Set start` / `Set finish`: Each entry shows its current `x, y, z`. `ArrowLeft` decreases that endpoint's run-axis coordinate by one; `ArrowRight` increases it. The result announces whether the wall extended or retracted and gives the authoritative new coordinate.
 - `Edit properties`: Change wall type, sound transmission (`0..1`), occlusion low-pass (`20..20000` hertz), or the contact-sound URL.
 - `Type`: Choose a server preset again. This resets title, movement behavior, height, transmission, low-pass, and contact sound to that preset's defaults.
 - On transmission or low-pass, `ArrowLeft`/`ArrowRight` changes one numeric step and `PageDown`/`PageUp` changes ten steps. Inside the numeric editor, use `ArrowDown`/`ArrowUp` and the corresponding page keys.

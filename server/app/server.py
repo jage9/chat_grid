@@ -1355,7 +1355,17 @@ class SignalingServer:
                     endpoint=packet.endpoint,
                     delta=packet.delta,
                 )
-                result_message = f"Resized {wall.title} to {wall.length} squares."
+                extended = (packet.endpoint == "start" and packet.delta < 0) or (
+                    packet.endpoint == "end" and packet.delta > 0
+                )
+                endpoint: Literal["start", "finish"] = (
+                    "start" if packet.endpoint == "start" else "finish"
+                )
+                coordinate = self.structure_service.wall_endpoint(wall, endpoint)
+                result_message = (
+                    f"{'Extended' if extended else 'Retracted'} {wall.title} "
+                    f"{endpoint} to {coordinate[0]}, {coordinate[1]}, {coordinate[2]}."
+                )
             elif isinstance(packet, StructureUpdateWallPacket):
                 wall = self.structure_service.update_wall(
                     packet.structureId,

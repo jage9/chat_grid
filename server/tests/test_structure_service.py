@@ -51,6 +51,8 @@ def test_wall_run_resizes_and_persists(tmp_path: Path) -> None:
 
     wall = structures.resize_wall(wall.id, endpoint="end", delta=1)
     assert wall.length == 2
+    assert structures.wall_endpoint(wall, "start") == (4, 5, 0)
+    assert structures.wall_endpoint(wall, "finish") == (6, 5, 0)
     assert structures.blocking_wall_for_move(x=5, y=4, z=0, next_x=5, next_y=5) == wall
 
     structures.save_state()

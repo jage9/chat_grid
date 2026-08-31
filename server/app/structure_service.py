@@ -128,6 +128,20 @@ class StructureService:
         self._insert(resized)
         return resized
 
+    @staticmethod
+    def wall_endpoint(
+        wall: WallStructure, endpoint: Literal["start", "finish"]
+    ) -> tuple[int, int, int]:
+        """Return one wall-run endpoint as an x, y, z coordinate."""
+
+        if endpoint == "start":
+            return wall.startX, wall.startY, wall.floorZ
+        return (
+            wall.startX + (wall.length if wall.orientation == "horizontal" else 0),
+            wall.startY + (wall.length if wall.orientation == "vertical" else 0),
+            wall.floorZ,
+        )
+
     def update_wall(
         self,
         structure_id: str,

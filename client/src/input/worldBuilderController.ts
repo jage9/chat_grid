@@ -32,10 +32,8 @@ const DIRECTIONS = [
 ] as const;
 const WALL_ACTIONS = [
   { id: 'properties', label: 'Edit properties', tooltip: 'Change the wall type or edit its sound properties.' },
-  { id: 'extendStart', label: 'Extend start', tooltip: 'Add one square at the wall run’s starting end.' },
-  { id: 'shortenStart', label: 'Shorten start', tooltip: 'Remove one square from the wall run’s starting end.' },
-  { id: 'extendEnd', label: 'Extend end', tooltip: 'Add one square at the wall run’s ending end.' },
-  { id: 'shortenEnd', label: 'Shorten end', tooltip: 'Remove one square from the wall run’s ending end.' },
+  { id: 'setStart', label: 'Set start', tooltip: 'Use Left or Right to decrease or increase the wall start coordinate by one square.' },
+  { id: 'setFinish', label: 'Set finish', tooltip: 'Use Left or Right to decrease or increase the wall finish coordinate by one square.' },
   { id: 'delete', label: 'Delete wall', tooltip: 'Delete this entire wall run.' },
 ] as const;
 const PROPERTY_ACTIONS = [
@@ -71,6 +69,23 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
 
   function wallLabel(wall: WallStructure): string {
     return `${wall.title}, ${wall.length} squares, ${wall.orientation}, start ${wall.startX}, ${wall.startY}`;
+  }
+
+  function wallEndpoint(wall: WallStructure, endpoint: 'start' | 'finish'): [number, number, number] {
+    if (endpoint === 'start') return [wall.startX, wall.startY, wall.floorZ];
+    return [
+      wall.startX + (wall.orientation === 'horizontal' ? wall.length : 0),
+      wall.startY + (wall.orientation === 'vertical' ? wall.length : 0),
+      wall.floorZ,
+    ];
+  }
+
+  function wallActionEntries(wall: WallStructure | null): MenuEntry<typeof WALL_ACTIONS[number]['id']>[] {
+    return WALL_ACTIONS.map((entry) => {
+      if (!wall || (entry.id !== 'setStart' && entry.id !== 'setFinish')) return entry;
+      const endpoint = entry.id === 'setStart' ? 'start' : 'finish';
+      return { ...entry, label: `${entry.label}: ${wallEndpoint(wall, endpoint).join(', ')}` };
+    });
   }
 
   function propertyEntries(wall: WallStructure | null): MenuEntry<PropertyId>[] {
@@ -187,7 +202,23 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
   }
 
   function handleWallActions(code: string, key: string): void {
-    handleList(code, key, WALL_ACTIONS, (action) => {
+    const wall = selectedWall();
+    const entries = wallActionEntries(wall);
+    const currentAction = entries[index]?.id;
+    if (
+      wall
+      && (currentAction === 'setStart' || currentAction === 'setFinish')
+      && (code === 'ArrowLeft' || code === 'ArrowRight')
+    ) {
+      deps.send({
+        type: 'structure_resize_wall',
+        structureId: wall.id,
+        endpoint: currentAction === 'setStart' ? 'start' : 'end',
+        delta: code === 'ArrowLeft' ? -1 : 1,
+      });
+      return;
+    }
+    handleList(code, key, entries, (action) => {
       const wall = selectedWall();
       if (!wall) {
         deps.updateStatus('Wall no longer exists.');
@@ -207,13 +238,7 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
         deps.announceMenuEntry(`Delete ${wall.title}?`, DELETE_CHOICES[0].label);
         return;
       }
-      const resize = {
-        extendStart: { endpoint: 'start' as const, delta: -1 as const },
-        shortenStart: { endpoint: 'start' as const, delta: 1 as const },
-        extendEnd: { endpoint: 'end' as const, delta: 1 as const },
-        shortenEnd: { endpoint: 'end' as const, delta: -1 as const },
-      }[action];
-      deps.send({ type: 'structure_resize_wall', structureId: wall.id, ...resize });
+      deps.updateStatus(entries[index].tooltip);
     }, 'Wall actions', () => {
       index = 0;
       deps.state.mode = 'worldBuilderWallList';
