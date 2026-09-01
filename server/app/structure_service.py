@@ -129,16 +129,17 @@ class StructureService:
         return resized
 
     @staticmethod
-    def wall_endpoint(
-        wall: WallStructure, endpoint: Literal["start", "finish"]
+    def wall_edge_anchor(
+        wall: WallStructure, endpoint: Literal["start", "end"]
     ) -> tuple[int, int, int]:
-        """Return one wall-run endpoint as an x, y, z coordinate."""
+        """Return the first or last occupied unit-edge anchor coordinate."""
 
         if endpoint == "start":
             return wall.startX, wall.startY, wall.floorZ
+        end_offset = wall.length - 1
         return (
-            wall.startX + (wall.length if wall.orientation == "horizontal" else 0),
-            wall.startY + (wall.length if wall.orientation == "vertical" else 0),
+            wall.startX + (end_offset if wall.orientation == "horizontal" else 0),
+            wall.startY + (end_offset if wall.orientation == "vertical" else 0),
             wall.floorZ,
         )
 

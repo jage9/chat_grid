@@ -52,13 +52,13 @@ This document is the authoritative keymap for the client.
 ### World Builder
 
 - `W`: Open World Builder when the account has `world.structure.edit`.
-- `Add wall`: Select a server-configured preset, then select the north, south, east, or west edge of the current square.
-- `Edit walls`: List current-floor walls nearest first, then edit properties, adjust either endpoint, slide, rotate, or delete the complete wall.
-- `Set start` / `Set finish`: Each entry shows its current `x, y, z`. `ArrowLeft` decreases that endpoint's run-axis coordinate by one; `ArrowRight` increases it. The result announces only the authoritative new coordinate.
+- `Add wall`: Select a server-configured type, then select the north, south, east, or west edge of the current square. Successful creation opens the new wall directly in the shared wall editor.
+- `Edit walls`: List current-floor walls nearest first, then change type, orientation, occupied edge anchors, slide, detailed properties, or delete the complete wall.
+- `Set start edge` / `Set end edge`: Each entry shows its current `x, y, z` unit-edge anchor. Start and end are inclusive, so a one-square wall reports the same coordinate for both. `ArrowLeft` decreases that anchor's run-axis coordinate by one; `ArrowRight` increases it. The result announces only the authoritative new coordinate.
 - `Slide vertically` / `Slide horizontally`: `ArrowLeft` or `ArrowRight` moves a horizontal run along y or a vertical run along x without changing its length.
 - `Orientation`: `ArrowLeft`/`ArrowRight` cycles horizontal and vertical directly; `Enter` opens the shared option selector. Rotation keeps the start coordinate fixed and is rejected if the rotated run is outside the world or overlaps another wall.
-- `Edit properties`: Change wall type, sound transmission (`0..1`), occlusion low-pass (`20..20000` hertz), or the contact-sound URL.
-- `Type`: `ArrowLeft`/`ArrowRight` cycles presets directly; `Enter` opens the same shared option selector as list-based item properties. Choosing a preset resets title, movement behavior, height, transmission, low-pass, and contact sound to that preset's defaults.
+- `Type`: This is the first wall action. `ArrowLeft`/`ArrowRight` cycles presets directly; `Enter` opens the shared option selector. Choosing a preset resets title, movement behavior, height, transmission, low-pass, and contact sound to that preset's defaults.
+- `Edit properties`: Change sound transmission (`0..1`), occlusion low-pass (`20..20000` hertz), or the contact-sound URL.
 - On transmission or low-pass, `ArrowLeft`/`ArrowRight` changes one numeric step and `PageDown`/`PageUp` changes ten steps. Inside the numeric editor, use `ArrowDown`/`ArrowUp` and the corresponding page keys.
 - `Space`: Read specific help for the selected World Builder action, preset, direction, or wall. Property help uses shared metadata to report its type, options or numeric range, and editability.
 - Walls are edited live. Other connected clients receive and render changes immediately.

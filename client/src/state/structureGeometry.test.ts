@@ -4,6 +4,7 @@ import {
   adjacentWallDescriptions,
   blockingWallForMove,
   wallContainsEdge,
+  wallEdgeAnchor,
   wallTransmissionBetween,
   wallAcousticMixBetween,
   wallsCrossedForMove,
@@ -34,6 +35,12 @@ describe('wall structure geometry', () => {
     expect(wallContainsEdge(run, 'horizontal', 2, 3)).toBe(true);
     expect(wallContainsEdge(run, 'horizontal', 4, 3)).toBe(true);
     expect(wallContainsEdge(run, 'horizontal', 5, 3)).toBe(false);
+  });
+
+  it('reports inclusive first and last occupied edge anchors', () => {
+    expect(wallEdgeAnchor(wall({ length: 1 }), 'end')).toEqual([2, 3, 0]);
+    expect(wallEdgeAnchor(wall({ length: 3 }), 'end')).toEqual([4, 3, 0]);
+    expect(wallEdgeAnchor(wall({ orientation: 'vertical', length: 2 }), 'end')).toEqual([2, 4, 0]);
   });
 
   it('blocks cardinal crossings', () => {

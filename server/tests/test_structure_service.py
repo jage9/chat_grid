@@ -51,8 +51,8 @@ def test_wall_run_resizes_and_persists(tmp_path: Path) -> None:
 
     wall = structures.resize_wall(wall.id, endpoint="end", delta=1)
     assert wall.length == 2
-    assert structures.wall_endpoint(wall, "start") == (4, 5, 0)
-    assert structures.wall_endpoint(wall, "finish") == (6, 5, 0)
+    assert structures.wall_edge_anchor(wall, "start") == (4, 5, 0)
+    assert structures.wall_edge_anchor(wall, "end") == (5, 5, 0)
     assert structures.blocking_wall_for_move(x=5, y=4, z=0, next_x=5, next_y=5) == wall
 
     structures.save_state()
@@ -60,22 +60,34 @@ def test_wall_run_resizes_and_persists(tmp_path: Path) -> None:
     assert reloaded.structures[wall.id] == wall
 
 
+def test_one_edge_wall_has_matching_anchors_and_cannot_shrink(tmp_path: Path) -> None:
+    structures = service(tmp_path)
+    wall = structures.add_wall(builder(), preset_id="solid", direction="east")
+
+    assert structures.wall_edge_anchor(wall, "start") == (5, 4, 0)
+    assert structures.wall_edge_anchor(wall, "end") == (5, 4, 0)
+    with pytest.raises(StructureError, match="at least one square"):
+        structures.resize_wall(wall.id, endpoint="end", delta=-1)
+
+
 def test_wall_run_slides_and_rotates_around_its_start(tmp_path: Path) -> None:
     structures = service(tmp_path)
     wall = structures.add_wall(builder(), preset_id="solid", direction="north")
+    assert structures.wall_edge_anchor(wall, "start") == (4, 5, 0)
+    assert structures.wall_edge_anchor(wall, "end") == (4, 5, 0)
     wall = structures.resize_wall(wall.id, endpoint="end", delta=1)
 
     wall = structures.slide_wall(wall.id, delta=1)
-    assert structures.wall_endpoint(wall, "start") == (4, 6, 0)
-    assert structures.wall_endpoint(wall, "finish") == (6, 6, 0)
+    assert structures.wall_edge_anchor(wall, "start") == (4, 6, 0)
+    assert structures.wall_edge_anchor(wall, "end") == (5, 6, 0)
 
     wall = structures.rotate_wall(wall.id, orientation="vertical")
-    assert structures.wall_endpoint(wall, "start") == (4, 6, 0)
-    assert structures.wall_endpoint(wall, "finish") == (4, 8, 0)
+    assert structures.wall_edge_anchor(wall, "start") == (4, 6, 0)
+    assert structures.wall_edge_anchor(wall, "end") == (4, 7, 0)
 
     wall = structures.slide_wall(wall.id, delta=1)
-    assert structures.wall_endpoint(wall, "start") == (5, 6, 0)
-    assert structures.wall_endpoint(wall, "finish") == (5, 8, 0)
+    assert structures.wall_edge_anchor(wall, "start") == (5, 6, 0)
+    assert structures.wall_edge_anchor(wall, "end") == (5, 7, 0)
 
 
 def test_failed_wall_rotation_preserves_the_original_run(tmp_path: Path) -> None:
@@ -89,7 +101,7 @@ def test_failed_wall_rotation_preserves_the_original_run(tmp_path: Path) -> None
         structures.rotate_wall(wall.id, orientation="vertical")
 
     assert structures.structures[wall.id] == wall
-    assert structures.wall_endpoint(wall, "finish") == (6, 9, 0)
+    assert structures.wall_edge_anchor(wall, "end") == (5, 9, 0)
 
 
 def test_diagonal_closed_corner_blocks_in_both_directions(tmp_path: Path) -> None:

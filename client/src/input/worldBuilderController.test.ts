@@ -37,12 +37,13 @@ function setup() {
   const send = vi.fn();
   const openOptionSelector = vi.fn();
   const updateStatus = vi.fn();
+  const announceMenuEntry = vi.fn();
   const controller = createWorldBuilderController({
     state,
     hasPermission: () => true,
     send,
     updateStatus,
-    announceMenuEntry: vi.fn(),
+    announceMenuEntry,
     blip: vi.fn(),
     confirm: vi.fn(),
     cancel: vi.fn(),
@@ -56,20 +57,19 @@ function setup() {
   controller.handleRoot('ArrowDown', 'ArrowDown');
   controller.handleRoot('Enter', 'Enter');
   controller.handleWallList('Enter', 'Enter');
-  return { controller, openOptionSelector, send, state, updateStatus };
+  return { announceMenuEntry, controller, openOptionSelector, send, state, updateStatus };
 }
 
 describe('World Builder wall controls', () => {
   it('cycles wall types directly and opens the shared option selector', () => {
     const { controller, openOptionSelector, send, state, updateStatus } = setup();
-    controller.handleWallActions('Enter', 'Enter');
 
-    controller.handlePropertyList('Space', ' ');
+    controller.handleWallActions('Space', ' ');
     expect(updateStatus).toHaveBeenLastCalledWith(
       expect.stringContaining('Type: list. Options: Brick, Curtain.'),
     );
 
-    controller.handlePropertyList('ArrowRight', 'ArrowRight');
+    controller.handleWallActions('ArrowRight', 'ArrowRight');
     expect(send).toHaveBeenLastCalledWith({
       type: 'structure_update_wall',
       structureId: 'wall-1',
@@ -78,17 +78,7 @@ describe('World Builder wall controls', () => {
     expect(state.structures.get('wall-1')?.preset).toBe('curtain');
     expect(state.structures.get('wall-1')?.id).toBe('wall-1');
 
-    controller.handlePropertyList('ArrowDown', 'ArrowDown');
-    controller.handlePropertyList('ArrowRight', 'ArrowRight');
-    expect(send).toHaveBeenLastCalledWith({
-      type: 'structure_update_wall',
-      structureId: 'wall-1',
-      soundTransmission: 0.55,
-    });
-
-    controller.handlePropertyList('ArrowUp', 'ArrowUp');
-
-    controller.handlePropertyList('Enter', 'Enter');
+    controller.handleWallActions('Enter', 'Enter');
     expect(openOptionSelector).toHaveBeenCalledWith(expect.objectContaining({
       title: 'Wall type',
       selectedId: 'curtain',
@@ -100,6 +90,7 @@ describe('World Builder wall controls', () => {
     controller.handleWallActions('ArrowDown', 'ArrowDown');
     controller.handleWallActions('ArrowDown', 'ArrowDown');
     controller.handleWallActions('ArrowDown', 'ArrowDown');
+    controller.handleWallActions('ArrowDown', 'ArrowDown');
     controller.handleWallActions('ArrowRight', 'ArrowRight');
     expect(send).toHaveBeenLastCalledWith({
       type: 'structure_slide_wall',
@@ -107,7 +98,9 @@ describe('World Builder wall controls', () => {
       delta: 1,
     });
 
-    controller.handleWallActions('ArrowDown', 'ArrowDown');
+    controller.handleWallActions('ArrowUp', 'ArrowUp');
+    controller.handleWallActions('ArrowUp', 'ArrowUp');
+    controller.handleWallActions('ArrowUp', 'ArrowUp');
     controller.handleWallActions('ArrowRight', 'ArrowRight');
     expect(send).toHaveBeenLastCalledWith({
       type: 'structure_rotate_wall',
@@ -122,5 +115,46 @@ describe('World Builder wall controls', () => {
       structureId: 'wall-1',
       orientation: 'vertical',
     });
+  });
+
+  it('shows the last occupied edge as the inclusive end coordinate', () => {
+    const { controller, updateStatus } = setup();
+
+    controller.handleWallActions('ArrowDown', 'ArrowDown');
+    controller.handleWallActions('ArrowDown', 'ArrowDown');
+    controller.handleWallActions('ArrowDown', 'ArrowDown');
+
+    expect(updateStatus).toHaveBeenLastCalledWith('Set end edge: 5, 5, 0');
+  });
+
+  it('keeps detailed acoustic properties after the geometry actions', () => {
+    const { controller, send } = setup();
+    for (let step = 0; step < 5; step += 1) {
+      controller.handleWallActions('ArrowDown', 'ArrowDown');
+    }
+    controller.handleWallActions('Enter', 'Enter');
+
+    controller.handlePropertyList('ArrowRight', 'ArrowRight');
+
+    expect(send).toHaveBeenLastCalledWith({
+      type: 'structure_update_wall',
+      structureId: 'wall-1',
+      soundTransmission: 0.05,
+    });
+  });
+
+  it('opens the shared wall editor after a wall is created', () => {
+    const { announceMenuEntry, controller, state } = setup();
+    state.mode = 'normal';
+
+    controller.handleActionResult({
+      ok: true,
+      action: 'add',
+      message: 'Added Brick.',
+      structureId: 'wall-1',
+    });
+
+    expect(state.mode).toBe('worldBuilderWallActions');
+    expect(announceMenuEntry).toHaveBeenLastCalledWith('Brick', 'Type: Brick');
   });
 });

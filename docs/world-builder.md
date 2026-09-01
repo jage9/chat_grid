@@ -4,9 +4,9 @@ World Builder edits server-authoritative world geometry separately from runtime 
 
 ## Wall Runs
 
-A wall lives on grid edges and does not consume either neighboring cell. One editable wall has a floor elevation, start grid line, horizontal or vertical orientation, positive length, title, movement rule, sound-transmission value, height, preset id, and contact sound.
+A wall lives on grid edges and does not consume either neighboring cell. Its canonical persisted geometry is a first unit-edge anchor (`startX`, `startY`, `floorZ`), horizontal or vertical orientation, and a positive unit-edge count (`length`). It also has a title, movement rule, sound-transmission value, height, preset id, and contact sound.
 
-The server expands each run into canonical unit edges for collision checks. Overlapping edges and runs outside the rectangular world bounds are rejected. Resizing changes one endpoint of the complete run; editing only a middle portion requires splitting/replacing the wall in a later workflow.
+The server expands each run into canonical unit edges for collision checks. The editor reports the first and last occupied edge anchors inclusively: the last anchor is `start + length - 1` along the run axis, so a one-edge wall has matching start and end coordinates. This editor contract is deliberately distinct from the geometric boundary immediately after the final edge. Overlapping edges and runs outside the rectangular world bounds are rejected. Resizing changes one end of the complete run; editing only a middle portion requires splitting/replacing the wall in a later workflow.
 
 Cardinal movement is rejected when its crossed edge has a movement-blocking wall. For a diagonal, the server considers both possible two-step routes around the shared corner and rejects the move when each route contains a blocking wall. This makes collision direction-independent while still allowing movement past a single wall endpoint. The client predicts the same rule, while server acceptance remains authoritative.
 
@@ -28,6 +28,8 @@ For same-floor positional audio, the client traces the center-to-center listener
 Structures persist in `structures.json` beside the configured item state file. They are included in the initial welcome snapshot and broadcast as full upserts/removals when edited live.
 
 The `world.structure.edit` permission gates every server mutation and World Builder visibility. It is granted by default to the built-in `editor` and `admin` roles. `W` opens World Builder, and the same menu flow is available through touch controls and the command palette.
+
+Adding a wall selects its preset and the north, south, east, or west edge of the builder's current square, then opens that new wall in the same editor used for existing walls. Side is only a creation concept; orientation, inclusive start/end anchors, and perpendicular slide controls fully describe later placement. Type is a top-level wall action, while the properties submenu contains the detailed acoustic fields.
 
 All users can press `C` to hear walls bordering their current square, including each wall's title and direction.
 

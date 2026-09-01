@@ -5,6 +5,20 @@ export type WallAcousticMix = { gain: number; lowpassHz: number };
 export const OPEN_AIR_LOWPASS_HZ = 20_000;
 const ENDPOINT_GRAZE_STRENGTH = 0.5;
 
+/** Return the first or last occupied unit-edge anchor used by wall editing. */
+export function wallEdgeAnchor(
+  wall: WallStructure,
+  endpoint: 'start' | 'end',
+): [number, number, number] {
+  if (endpoint === 'start') return [wall.startX, wall.startY, wall.floorZ];
+  const endOffset = wall.length - 1;
+  return [
+    wall.startX + (wall.orientation === 'horizontal' ? endOffset : 0),
+    wall.startY + (wall.orientation === 'vertical' ? endOffset : 0),
+    wall.floorZ,
+  ];
+}
+
 function edgeKey(
   floorZ: number,
   orientation: WallStructure['orientation'],

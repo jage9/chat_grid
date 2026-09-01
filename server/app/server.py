@@ -1377,10 +1377,10 @@ class SignalingServer:
                     endpoint=packet.endpoint,
                     delta=packet.delta,
                 )
-                endpoint: Literal["start", "finish"] = (
-                    "start" if packet.endpoint == "start" else "finish"
+                endpoint: Literal["start", "end"] = (
+                    "start" if packet.endpoint == "start" else "end"
                 )
-                coordinate = self.structure_service.wall_endpoint(wall, endpoint)
+                coordinate = self.structure_service.wall_edge_anchor(wall, endpoint)
                 result_message = f"{coordinate[0]}, {coordinate[1]}, {coordinate[2]}"
             elif isinstance(packet, StructureSlideWallPacket):
                 wall = self.structure_service.slide_wall(
