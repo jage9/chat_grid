@@ -86,25 +86,43 @@ export class AcousticZoneRuntime {
     nowMs = performance.now(),
   ): number {
     if (listenerZoneId === sourceZoneId) return 1;
-    const listenerFloor = parseFloorZone(listenerZoneId);
-    const sourceFloor = parseFloorZone(sourceZoneId);
-    const elevatorId = parseElevatorZone(listenerZoneId) ?? parseElevatorZone(sourceZoneId);
-    const floorZ = listenerFloor ?? sourceFloor;
-    if (!elevatorId || floorZ === null) return 0;
-    const elevator = items.get(elevatorId);
-    if (!elevator || elevator.type !== 'elevator' || Number(elevator.params.currentZ) !== floorZ) return 0;
+    const elevator = this.connectedElevator(listenerZoneId, sourceZoneId, items);
+    if (!elevator) return 0;
     return this.doorTransmission(elevator, nowMs);
+  }
+
+  /** Return whether a one-shot can transmit now or during the active door transition. */
+  canTransmit(
+    listenerZoneId: string,
+    sourceZoneId: string,
+    items: Map<string, WorldItem>,
+  ): boolean {
+    if (listenerZoneId === sourceZoneId) return true;
+    const elevator = this.connectedElevator(listenerZoneId, sourceZoneId, items);
+    if (!elevator) return false;
+    return ['opening', 'arriving', 'door_open', 'closing'].includes(
+      String(elevator.params.state ?? 'idle'),
+    );
   }
 
   couldConnect(listenerZoneId: string, sourceZoneId: string, items: Map<string, WorldItem>): boolean {
     if (listenerZoneId === sourceZoneId) return true;
+    const elevator = this.connectedElevator(listenerZoneId, sourceZoneId, items);
+    return !!elevator && String(elevator.params.state ?? 'idle') !== 'moving';
+  }
+
+  private connectedElevator(
+    listenerZoneId: string,
+    sourceZoneId: string,
+    items: Map<string, WorldItem>,
+  ): WorldItem | null {
     const listenerFloor = parseFloorZone(listenerZoneId);
     const sourceFloor = parseFloorZone(sourceZoneId);
     const elevatorId = parseElevatorZone(listenerZoneId) ?? parseElevatorZone(sourceZoneId);
     const floorZ = listenerFloor ?? sourceFloor;
-    if (!elevatorId || floorZ === null) return false;
+    if (!elevatorId || floorZ === null) return null;
     const elevator = items.get(elevatorId);
-    if (!elevator || elevator.type !== 'elevator' || Number(elevator.params.currentZ) !== floorZ) return false;
-    return String(elevator.params.state ?? 'idle') !== 'moving';
+    if (!elevator || elevator.type !== 'elevator' || Number(elevator.params.currentZ) !== floorZ) return null;
+    return elevator;
   }
 }

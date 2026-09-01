@@ -60,6 +60,7 @@ Current defaults:
 - Solid walls use transmission `0`; curtains default to `0.5`. Multiple crossed walls multiply (for example, two curtains produce `0.25`).
 - Wall gain applies to LiveKit voice, radios, item emitters, elevator landing audio, footsteps, teleports, clocks, piano notes, and positional item-use sounds. Active continuous and one-shot mixes update as the listener or wall layout changes.
 - `WorldAudioRouter` is the single entry point for sampled world one-shots. It applies the world-layer toggle, acoustic-zone transmission, wall gain/filtering, range, distance, and pan for footsteps, teleports, structure contact, item-use sounds, and clock sequences.
+- One-shot admission uses stable acoustic connectivity rather than requiring positive gain at the packet instant. Elevator ding and opening samples can therefore begin at zero transmission and fade in with the opening door, while closed or moving cabin/floor pairs remain rejected.
 - One-shot packets carry the authoritative source acoustic-zone id. This keeps all floor sounds outside a closed or moving elevator cabin and fades them consistently with the door transition.
 - Wall occlusion never drives LiveKit subscription changes. Floor/acoustic-zone connectivity remains the stable bandwidth gate; walls are a fast local gain adjustment.
 - A ray passing exactly through a grid corner follows diagonal movement semantics: one occupied component edge leaves an open route, while two occupied edges apply both transmissions.

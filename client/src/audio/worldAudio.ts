@@ -4,7 +4,6 @@ import {
   type SpatialAudioPosition,
   type SpatialTransmissionResolver,
 } from './audioEngine';
-import { normalizeAcousticMix } from './acoustics';
 
 export const WORLD_FOOTSTEP_GAIN = 0.7;
 
@@ -14,6 +13,10 @@ export type WorldSoundSource = SpatialAudioPosition & {
 };
 
 type ListenerPositionGetter = () => SpatialAudioPosition;
+type AcousticConnectivityResolver = (
+  source: SpatialAudioPosition,
+  listener: SpatialAudioPosition,
+) => boolean;
 
 /** Central entry point for positional one-shot sounds emitted by the world. */
 export class WorldAudioRouter {
@@ -22,12 +25,13 @@ export class WorldAudioRouter {
     private readonly getListenerPosition: ListenerPositionGetter,
     private readonly isWorldLayerEnabled: () => boolean,
     private readonly resolveTransmission: SpatialTransmissionResolver,
+    private readonly canRouteSource: AcousticConnectivityResolver,
   ) {
     this.audio.setSpatialTransmissionResolver(resolveTransmission);
   }
 
   playSample(url: string, source: WorldSoundSource): void {
-    if (!url || !this.canHear(source)) return;
+    if (!url || !this.canRoute(source)) return;
     void this.audio.playSpatialSample(
       url,
       source,
@@ -38,9 +42,9 @@ export class WorldAudioRouter {
   }
 
   async playSequence(urls: string[], source: WorldSoundSource): Promise<void> {
-    if (urls.length === 0 || !this.canHear(source)) return;
+    if (urls.length === 0 || !this.canRoute(source)) return;
     for (const url of urls) {
-      if (!url || !this.canHear(source)) return;
+      if (!url || !this.canRoute(source)) return;
       await this.audio.playSpatialSampleAndWait(
         url,
         source,
@@ -51,8 +55,8 @@ export class WorldAudioRouter {
     }
   }
 
-  private canHear(source: WorldSoundSource): boolean {
+  private canRoute(source: WorldSoundSource): boolean {
     return this.isWorldLayerEnabled()
-      && normalizeAcousticMix(this.resolveTransmission(source, this.getListenerPosition())).gain > 0;
+      && this.canRouteSource(source, this.getListenerPosition());
   }
 }

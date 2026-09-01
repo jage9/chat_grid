@@ -227,6 +227,18 @@ async def test_elevator_opens_then_second_use_enters(
         "/sounds/elevator_up.ogg",
         "/sounds/elevator_open.ogg",
     ]
+    opening_index = next(
+        index
+        for index, packet in enumerate(broadcast)
+        if isinstance(packet, ItemUpsertPacket)
+        and packet.item.params["state"] == "opening"
+    )
+    first_sound_index = next(
+        index
+        for index, packet in enumerate(broadcast)
+        if isinstance(packet, ItemUseSoundPacket)
+    )
+    assert opening_index < first_sound_index
 
     await server.item_runtime.elevator.use(client, elevator)
     assert client.elevator_id is None

@@ -16,10 +16,13 @@ const source = { x: 3, y: 4, z: 0, acousticZoneId: 'floor:0' };
 describe('WorldAudioRouter', () => {
   it('suppresses every world one-shot when its source zone is isolated', () => {
     const audio = createAudioMock();
-    const router = new WorldAudioRouter(audio, () => listener, () => true, () => ({
-      gain: 0,
-      lowpassHz: 800,
-    }));
+    const router = new WorldAudioRouter(
+      audio,
+      () => listener,
+      () => true,
+      () => ({ gain: 0, lowpassHz: 800 }),
+      () => false,
+    );
 
     router.playSample('/sounds/step-1.ogg', source);
 
@@ -28,10 +31,13 @@ describe('WorldAudioRouter', () => {
 
   it('passes audible sources through the shared positional engine', () => {
     const audio = createAudioMock();
-    const router = new WorldAudioRouter(audio, () => listener, () => true, () => ({
-      gain: 0.4,
-      lowpassHz: 800,
-    }));
+    const router = new WorldAudioRouter(
+      audio,
+      () => listener,
+      () => true,
+      () => ({ gain: 0.4, lowpassHz: 800 }),
+      () => true,
+    );
 
     router.playSample('/sounds/step-1.ogg', { ...source, gain: 0.7, range: 12 });
 
@@ -44,12 +50,32 @@ describe('WorldAudioRouter', () => {
     );
   });
 
+  it('starts a connected sample at zero transmission so an opening door can reveal it', () => {
+    const audio = createAudioMock();
+    const landingListener = { ...listener, acousticZoneId: 'floor:0' };
+    const cabinSource = { ...source, acousticZoneId: 'elevator:car-1' };
+    const router = new WorldAudioRouter(
+      audio,
+      () => landingListener,
+      () => true,
+      () => ({ gain: 0, lowpassHz: 800 }),
+      () => true,
+    );
+
+    router.playSample('/sounds/elevator_open.ogg', cabinSource);
+
+    expect(audio.playSpatialSample).toHaveBeenCalled();
+  });
+
   it('suppresses every world one-shot when the world layer is disabled', () => {
     const audio = createAudioMock();
-    const router = new WorldAudioRouter(audio, () => listener, () => false, () => ({
-      gain: 1,
-      lowpassHz: 20_000,
-    }));
+    const router = new WorldAudioRouter(
+      audio,
+      () => listener,
+      () => false,
+      () => ({ gain: 1, lowpassHz: 20_000 }),
+      () => true,
+    );
 
     router.playSample('/sounds/step-1.ogg', source);
 

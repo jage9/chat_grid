@@ -421,6 +421,11 @@ const worldAudio = new WorldAudioRouter(
       lowpassHz: wall.lowpassHz,
     };
   },
+  (source, listener) => acousticZoneRuntime.canTransmit(
+    listener.acousticZoneId,
+    source.acousticZoneId,
+    state.items,
+  ),
 );
 let replaceTextOnNextType = false;
 let pendingEscapeDisconnect = false;

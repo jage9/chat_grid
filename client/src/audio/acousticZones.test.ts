@@ -64,6 +64,20 @@ describe('AcousticZoneRuntime', () => {
     expect(runtime.couldConnect(cabin, floorAcousticZoneId(40), items)).toBe(false);
   });
 
+  it('admits one-shots during door transitions but not while landed closed', () => {
+    const runtime = new AcousticZoneRuntime();
+    const item = elevator('idle');
+    const items = new Map([['car-1', item]]);
+    const cabin = elevatorAcousticZoneId('car-1');
+    const floor = floorAcousticZoneId(0);
+
+    expect(runtime.canTransmit(cabin, floor, items)).toBe(false);
+    item.params.state = 'opening';
+    expect(runtime.canTransmit(cabin, floor, items)).toBe(true);
+    item.params.state = 'moving';
+    expect(runtime.canTransmit(cabin, floor, items)).toBe(false);
+  });
+
   it('places a multi-floor item on the listener-connected landing', () => {
     const car = elevator('door_open', 40);
     car.params.floorZs = [0, 40];
