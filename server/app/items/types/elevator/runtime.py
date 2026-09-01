@@ -12,7 +12,7 @@ from websockets.asyncio.server import ServerConnection
 
 from ....acoustic_zones import (
     client_position_packet,
-    elevator_acoustic_zone_id,
+    floor_acoustic_zone_id,
 )
 from ....client import ClientConnection
 from ....models import (
@@ -357,7 +357,7 @@ class ElevatorRuntime:
     async def _broadcast_sound(
         self, item: WorldItem, current_z: int, sound: str
     ) -> None:
-        """Emit one cabin-zone sound audible to riders and connected landings."""
+        """Emit one landing-zone sound transmitted through the door to riders."""
 
         packet = ItemUseSoundPacket(
             type="item_use_sound",
@@ -366,7 +366,7 @@ class ElevatorRuntime:
             x=item.x,
             y=item.y,
             z=current_z,
-            acousticZoneId=elevator_acoustic_zone_id(item.id),
+            acousticZoneId=floor_acoustic_zone_id(current_z),
             range=self.callbacks.get_emit_range(item),
         )
         await self.callbacks.broadcast(packet)

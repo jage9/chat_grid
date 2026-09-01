@@ -50,19 +50,17 @@ describe('WorldAudioRouter', () => {
     );
   });
 
-  it('starts a connected sample at zero transmission so an opening door can reveal it', () => {
+  it('starts a landing sample at zero rider transmission so an opening door can reveal it', () => {
     const audio = createAudioMock();
-    const landingListener = { ...listener, acousticZoneId: 'floor:0' };
-    const cabinSource = { ...source, acousticZoneId: 'elevator:car-1' };
     const router = new WorldAudioRouter(
       audio,
-      () => landingListener,
+      () => listener,
       () => true,
       () => ({ gain: 0, lowpassHz: 800 }),
       () => true,
     );
 
-    router.playSample('/sounds/elevator_open.ogg', cabinSource);
+    router.playSample('/sounds/elevator_open.ogg', source);
 
     expect(audio.playSpatialSample).toHaveBeenCalled();
   });

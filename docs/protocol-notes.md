@@ -103,7 +103,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_upsert.item.occupiedOffsets` contains the server-owned horizontal footprint relative to the item anchor.
 - Elevator travel sends progressive intermediate `update_position.z` values so rider coordinates advance throughout the trip while remaining outside both floor audio and visibility groups until arrival.
 - Elevator entry and exit also broadcast `update_position` even when coordinates do not change, so every client updates the rider's acoustic-zone membership immediately.
-- Elevator opening, closing, and direction cues send one `item_use_sound` in the elevator cabin zone; the direction cue is sent immediately before opening so both sounds overlap. Riders receive full cabin transmission, while landing listeners hear the same source through the door transition.
+- Elevator opening, closing, and direction cues send one `item_use_sound` in the current landing's floor zone; the direction cue is sent immediately before opening so both sounds overlap. Landing listeners hear these external sources directly, while riders hear the same source through the opening/closing door transmission.
 
 ## Welcome Metadata
 
