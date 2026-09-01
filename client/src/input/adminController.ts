@@ -108,14 +108,14 @@ export function createAdminController(deps: AdminControllerDeps): {
   function openAdminMenu(): void {
     const actions = getAvailableAdminActions();
     if (actions.length === 0) {
-      deps.updateStatus('No admin actions available.');
+      deps.updateStatus('No user or admin actions available.');
       deps.sfxUiCancel();
       return;
     }
     adminMenuActions.splice(0, adminMenuActions.length, ...actions);
     adminMenuIndex = 0;
     deps.state.mode = 'adminMenu';
-    deps.announceMenuEntry('Admin', adminMenuActions[0].label);
+    deps.announceMenuEntry('Users and administration', adminMenuActions[0].label);
   }
 
   function handleAdminRolesList(message: Extract<IncomingMessage, { type: 'admin_roles_list' }>): void {
@@ -269,6 +269,12 @@ export function createAdminController(deps: AdminControllerDeps): {
     if (control.type === 'select') {
       const selected = adminMenuActions[adminMenuIndex];
       if (!selected) return;
+      if (selected.id === 'list_users') {
+        adminPendingUserAction = null;
+        deps.signalingSend({ type: 'admin_users_list' });
+        deps.updateStatus('Loading users...');
+        return;
+      }
       if (selected.id === 'manage_roles') {
         deps.signalingSend({ type: 'admin_roles_list' });
         deps.updateStatus('Loading roles...');
@@ -491,7 +497,7 @@ export function createAdminController(deps: AdminControllerDeps): {
     if (control.type === 'cancel') {
       deps.state.mode = 'adminMenu';
       adminPendingUserAction = null;
-      deps.updateStatus('Admin menu.');
+      deps.updateStatus('Users and administration.');
       deps.sfxUiCancel();
     }
   }

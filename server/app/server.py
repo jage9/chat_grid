@@ -146,6 +146,7 @@ AdminActionName: TypeAlias = Literal[
     "role_create",
     "role_update_permissions",
     "role_delete",
+    "user_list",
     "user_set_role",
     "user_ban",
     "user_unban",
@@ -1651,12 +1652,16 @@ class SignalingServer:
             return True
 
         if isinstance(packet, AdminUsersListPacket):
-            if not (
-                self._client_has_permission(client, "user.change_role")
-                or self._client_has_permission(client, "user.ban_unban")
-                or self._client_has_permission(client, "account.delete.any")
-            ):
-                await deny("user_set_role", "Not authorized.")
+            action_permissions: dict[str | None, tuple[str, AdminActionName]] = {
+                None: ("user.list", "user_list"),
+                "set_role": ("user.change_role", "user_set_role"),
+                "ban": ("user.ban_unban", "user_ban"),
+                "unban": ("user.ban_unban", "user_unban"),
+                "delete_account": ("account.delete.any", "user_delete"),
+            }
+            required_permission, denied_action = action_permissions[packet.action]
+            if not self._client_has_permission(client, required_permission):
+                await deny(denied_action, "Not authorized.")
                 return True
             users = self.auth_service.list_users_for_admin()
             online_user_ids = {

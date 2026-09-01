@@ -20,6 +20,7 @@ from app.models import (
     BroadcastPositionPacket,
     BroadcastTeleportCompletePacket,
     AdminActionResultPacket,
+    AdminUsersListResultPacket,
     AuthResultPacket,
     ItemActionResultPacket,
     ItemTransferTargetsResultPacket,
@@ -1202,6 +1203,76 @@ async def test_admin_user_delete_requires_permission(
     assert packet.ok is False
     assert packet.action == "user_delete"
     assert "not authorized" in packet.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_user_list_permission_allows_read_only_registered_user_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="Tester"),
+        user_id="1",
+        username="tester",
+        permissions={"user.list"},
+    )
+    server.clients[ws] = client
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(
+        server.auth_service,
+        "list_users_for_admin",
+        lambda: [
+            {
+                "id": "1",
+                "username": "tester",
+                "role": "user",
+                "status": "active",
+                "lastSeenAt": 1_800_000_000_000,
+            }
+        ],
+    )
+
+    await server._handle_message(client, json.dumps({"type": "admin_users_list"}))
+
+    result = _last_packet_of_type(send_payloads, AdminUsersListResultPacket)
+    assert result.users[0].username == "tester"
+    assert result.users[0].online is True
+
+
+@pytest.mark.asyncio
+async def test_user_list_permission_does_not_allow_admin_target_lists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = SignalingServer("127.0.0.1", 8765, None, None)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="Tester"),
+        user_id="1",
+        username="tester",
+        permissions={"user.list"},
+    )
+    server.clients[ws] = client
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "admin_users_list", "action": "ban"}),
+    )
+
+    result = _last_packet_of_type(send_payloads, AdminActionResultPacket)
+    assert result.ok is False
+    assert result.action == "user_ban"
 
 
 @pytest.mark.asyncio

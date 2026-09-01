@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -26,6 +27,22 @@ def test_register_and_resume_session(tmp_path: Path) -> None:
         resumed = service.resume(session.token)
         assert resumed.user.id == session.user.id
         assert resumed.user.role == "user"
+        assert "user.list" in resumed.user.permissions
+    finally:
+        service.close()
+
+
+def test_user_list_permission_defaults_to_user_and_editor(tmp_path: Path) -> None:
+    service = make_auth_service(tmp_path)
+    try:
+        roles = {
+            str(role["name"]): set(cast(list[str], role["permissions"]))
+            for role in service.list_roles_with_counts()
+        }
+        assert "user.list" in roles["admin"]
+        assert "user.list" in roles["editor"]
+        assert "user.list" in roles["user"]
+        assert "user.list" not in roles["guest"]
     finally:
         service.close()
 

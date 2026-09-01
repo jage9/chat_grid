@@ -42,6 +42,7 @@ PERMISSIONS: tuple[str, ...] = (
     "voice.send",
     "profile.update_nickname",
     "account.delete.any",
+    "user.list",
     "user.ban_unban",
     "user.change_role",
     "role.manage",
@@ -65,6 +66,7 @@ PERMISSION_DESCRIPTIONS: dict[str, str] = {
     "voice.send": "Allow transmitting microphone audio.",
     "profile.update_nickname": "Allow changing nickname.",
     "account.delete.any": "Allow deleting other user accounts.",
+    "user.list": "Allow listing registered users and their presence.",
     "user.ban_unban": "Allow banning and unbanning users.",
     "user.change_role": "Allow assigning user roles.",
     "role.manage": "Allow creating, editing, and deleting roles.",
@@ -89,6 +91,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[str]] = {
         "chat.send",
         "voice.send",
         "profile.update_nickname",
+        "user.list",
         "world.structure.edit",
     },
     "user": {
@@ -101,6 +104,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[str]] = {
         "chat.send",
         "voice.send",
         "profile.update_nickname",
+        "user.list",
     },
     "guest": {
         "item.use",

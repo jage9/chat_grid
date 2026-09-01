@@ -66,7 +66,7 @@ Core incoming message effects:
 - `auth_result`: auth success/failure with optional session token + account metadata + `authPolicy`.
 - `auth_permissions`: live permission refresh (role + permission set) after role/permission admin changes.
 - `admin_roles_list`: role metadata + user counts + permission keys for role management UI.
-- `admin_users_list`: user metadata list for role/ban admin flows.
+- `admin_users_list`: registered-user metadata for the read-only Shift+Z list and role/ban administration flows.
 - `admin_action_result`: success/error for role/user admin mutations.
 - `update_position`: update peer position; movement may route a footstep through the shared world-audio path.
 - `teleport_complete`: route the peer landing sound from its final tile and acoustic zone through the shared world-audio path.

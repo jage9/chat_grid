@@ -616,6 +616,7 @@ class AdminActionResultPacket(BasePacket):
         "role_create",
         "role_update_permissions",
         "role_delete",
+        "user_list",
         "user_set_role",
         "user_ban",
         "user_unban",

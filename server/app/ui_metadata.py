@@ -34,6 +34,12 @@ class MainModeServerCommandDefinition(TypedDict):
 
 ADMIN_MENU_ACTION_DEFINITIONS: tuple[AdminMenuActionDefinition, ...] = (
     {
+        "id": "list_users",
+        "label": "List users",
+        "tooltip": "List registered users with role, status, and last-seen presence.",
+        "permission": "user.list",
+    },
+    {
         "id": "manage_roles",
         "label": "Role management",
         "tooltip": "Manage roles and their permission sets.",

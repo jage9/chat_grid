@@ -281,10 +281,10 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
   },
   {
     id: 'openAdminMenu',
-    label: 'Open admin menu',
+    label: 'Open users and administration',
     shortcut: 'Shift+Z',
-    tooltip: 'Open the admin actions menu when permitted.',
-    section: 'Admin',
+    tooltip: 'List registered users and open permitted administration actions.',
+    section: 'Users',
     isAvailable: (context) => context.hasAdminActions,
   },
   {
