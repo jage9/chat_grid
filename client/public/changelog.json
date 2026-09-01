@@ -3,7 +3,9 @@
     {
       "date": "August 31, 2026",
       "items": [
-        "Added walls. Press W for the World Editor. Walls can optionally block sound or movement."
+        "Added walls. Press W for the World Editor. Walls can optionally block sound or movement.",
+        "Added last seen time to users.",
+        "Expanded clock object with many more time zones."
       ]
     },
     {
