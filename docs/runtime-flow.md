@@ -69,7 +69,7 @@ Core incoming message effects:
 - `admin_users_list`: user metadata list for role/ban admin flows.
 - `admin_action_result`: success/error for role/user admin mutations.
 - `update_position`: update peer position; movement may route a footstep through the shared world-audio path.
-- `teleport_complete`: play peer teleport landing sound at final tile.
+- `teleport_complete`: route the peer landing sound from its final tile and acoustic zone through the shared world-audio path.
 - `update_nickname`: update peer display name.
 - `chat_message`: append/readable status; optional system sound class.
 - `item_upsert`: replace item snapshot and resync item runtimes.

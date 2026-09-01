@@ -299,7 +299,8 @@
   "sound": "sounds/roll.ogg",
   "x": 12,
   "y": 8,
-  "z": 0
+  "z": 0,
+  "acousticZoneId": "floor:0"
 }
 ```
 
@@ -312,7 +313,8 @@
   "sounds": ["/sounds/clock/el640/its.ogg", "/sounds/clock/el640/2.ogg", "/sounds/clock/el640/PM.ogg"],
   "x": 12,
   "y": 8,
-  "z": 0
+  "z": 0,
+  "acousticZoneId": "floor:0"
 }
 ```
 

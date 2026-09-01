@@ -53,7 +53,7 @@ Current defaults:
 - The ground floor is `z=0` and the second floor is `z=40`; sound never crosses between them.
 - LiveKit remains one room, but the client unsubscribes from audio publications for users on other floors. This preserves the global roster without downloading unheard voice tracks.
 - Elevator riders are published at progressively changing intermediate heights while the car moves, which keeps them unsubscribed from both floor audio groups.
-- The dedicated client elevator runtime loops `/sounds/elevator_inside.ogg` from a randomized offset. A passenger hears it in every car state; a landing listener hears it spatially only when nearby on the same floor with the door fully open.
+- The dedicated client elevator runtime loops `/sounds/elevator_inside.ogg` from a randomized offset. A passenger hears it in every car state; a nearby landing listener hears it through the opening/closing door transmission while the car is at that floor.
 - An elevator's optional `emitSound` remains on the multi-floor shaft object rather than following the car, so it emits independently from both landings. A rider hears it through normal distance rules while the door is open; the client suppresses it only while that rider is inside with the door closed.
 - Door opening and closing play their spatial clips for landing listeners and riders. Entry/exit remains blocked for each clip's duration. `/sounds/elevator_up.ogg` or `/sounds/elevator_down.ogg` starts alongside the opening clip so the direction beep adds no delay.
 - On the same floor, the client traces a center-to-center ray through canonical wall edges and multiplies every crossed wall's `soundTransmission` into the existing distance gain.
