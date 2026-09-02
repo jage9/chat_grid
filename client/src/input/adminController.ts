@@ -115,7 +115,7 @@ export function createAdminController(deps: AdminControllerDeps): {
     adminMenuActions.splice(0, adminMenuActions.length, ...actions);
     adminMenuIndex = 0;
     deps.state.mode = 'adminMenu';
-    deps.announceMenuEntry('Users and administration', adminMenuActions[0].label);
+    deps.announceMenuEntry('Users', adminMenuActions[0].label);
   }
 
   function handleAdminRolesList(message: Extract<IncomingMessage, { type: 'admin_roles_list' }>): void {
@@ -497,7 +497,7 @@ export function createAdminController(deps: AdminControllerDeps): {
     if (control.type === 'cancel') {
       deps.state.mode = 'adminMenu';
       adminPendingUserAction = null;
-      deps.updateStatus('Users and administration.');
+      deps.updateStatus('Users.');
       deps.sfxUiCancel();
     }
   }

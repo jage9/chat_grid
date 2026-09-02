@@ -32,7 +32,7 @@ This document is the authoritative keymap for the client.
   - `/me <action>`: Send action text without `name:`
   - `/up`: Show server uptime (self only)
   - `/version`: Show server version (self only)
-- `Shift+Z`: Users and administration menu (available to the built-in user role and above)
+- `Shift+Z`: Users menu (available to the built-in user role and above)
 - `,` / `.`: Previous/next message
 - `<` / `>`: First/last message
 
@@ -131,9 +131,9 @@ Applies to effect select, user/item list modes, item selection, item property li
 - `Enter`: Confirm current choice (default selection is `No`)
 - `Escape`: Cancel
 
-## Users and Administration Modes
+## Users Menu
 
-- `Shift+Z`: Open users and administration
+- `Shift+Z`: Open users
 - `Space` on root actions: Read tooltip/help for the selected action
 - Menu options are permission-gated and include:
   - list registered users with role, account status, and online/last-seen presence (`user.list`; built-in user, editor, and admin roles)

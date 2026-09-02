@@ -32,7 +32,7 @@ describe('admin controller registered-user list', () => {
     ]);
 
     controller.openAdminMenu();
-    expect(deps.announceMenuEntry).toHaveBeenCalledWith('Users and administration', 'List users');
+    expect(deps.announceMenuEntry).toHaveBeenCalledWith('Users', 'List users');
 
     controller.handleAdminMenuModeInput('Enter', 'Enter');
     expect(deps.signalingSend).toHaveBeenCalledWith({ type: 'admin_users_list' });
