@@ -35,7 +35,7 @@ from .acoustic_zones import (
 )
 from .client import ClientConnection
 from .config import load_config
-from .delivery import Delivery, Transport
+from .delivery import Delivery, Transport, WebsocketTransport
 from .item_catalog import (
     ITEM_TYPE_EDITABLE_PROPERTIES,
     ITEM_TYPE_LABELS,
@@ -155,29 +155,6 @@ AdminActionName: TypeAlias = Literal[
 ]
 
 
-class _ForwardingDelivery(Delivery):
-    """Temporary delivery that forwards to the legacy _send/_broadcast methods; removed in step 3 of issue #3."""
-
-    def __init__(self, server: SignalingServer) -> None:
-        """Bind the server whose legacy methods remain patchable by tests."""
-
-        self.server = server
-
-    async def send(self, client: ClientConnection, packet: object) -> None:
-        """Forward one client packet to the legacy send method."""
-
-        await self.server._send(client.websocket, packet)
-
-    async def broadcast(
-        self, packet: object, exclude: ClientConnection | None = None
-    ) -> None:
-        """Forward a broadcast with the excluded client's websocket."""
-
-        await self.server._broadcast(
-            packet, exclude=exclude.websocket if exclude else None
-        )
-
-
 class SignalingServer:
     """Coordinates websocket clients, signaling, and authoritative item actions."""
 
@@ -220,11 +197,7 @@ class SignalingServer:
         self.max_message_size = max_message_size
         self._ssl_context = self._build_ssl_context(ssl_cert, ssl_key)
         self.clients: dict[ServerConnection, ClientConnection] = {}
-        self.delivery: Delivery = (
-            Delivery(transport, self.clients)
-            if transport is not None
-            else _ForwardingDelivery(self)
-        )
+        self.delivery = Delivery(transport or WebsocketTransport(), self.clients)
         resolved_auth_db_path = auth_db_path or Path.cwd() / "runtime" / "chatgrid.db"
         auth_secret = (
             auth_token_hash_secret.strip()
@@ -1932,15 +1905,6 @@ class SignalingServer:
             PACKET_LOGGER.warning("invalid packet from id=%s: %s", client.id, exc)
             return
 
-        # Test-harness compatibility: some unit tests inject clients directly into
-        # `server.clients` without running auth handshake packets.
-        if not client.authenticated and client.websocket in self.clients:
-            client.authenticated = True
-            client.user_id = client.user_id or client.id
-            client.username = client.username or client.nickname
-            client.role = "admin"
-            client.permissions = set(self.auth_service.list_all_permissions())
-
         if await self._handle_auth_packet(client, packet):
             return
         if not client.authenticated:
@@ -2254,20 +2218,6 @@ class SignalingServer:
         if await self.item_runtime.handle_packet(client, packet):
             return
 
-    async def _broadcast(
-        self, packet: object, exclude: ServerConnection | None = None
-    ) -> None:
-        """Broadcast one packet to all clients except an optional websocket."""
-
-        recipients = [
-            websocket for websocket in self.clients if websocket is not exclude
-        ]
-        if not recipients:
-            return
-        await asyncio.gather(
-            *(self._send(websocket, packet) for websocket in recipients)
-        )
-
     async def _broadcast_wall_sound(
         self,
         wall: WallStructure,
@@ -2293,20 +2243,6 @@ class SignalingServer:
             ),
             exclude=exclude,
         )
-
-    async def _send(self, websocket: ServerConnection, packet: object) -> None:
-        """Send one packet to one websocket, swallowing per-client send failures."""
-
-        try:
-            if hasattr(packet, "model_dump"):
-                data = packet.model_dump(exclude_none=True)
-            else:
-                data = packet
-            await websocket.send(json.dumps(data))
-        except (
-            Exception
-        ) as exc:  # intentionally broad to keep server alive per client error
-            LOGGER.debug("send failure: %s", exc)
 
     def _find_by_id(self, client_id: str) -> ClientConnection | None:
         """Resolve a client id to an active connection."""
