@@ -5,15 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import cast
 
 import pytest
-from websockets.asyncio.server import ServerConnection
 
-from app.client import ClientConnection
 from app.item_service import ItemService
 from app.items.types.elevator.actions import secondary_use_item
 from app.items.types.elevator.validator import validate_update
+
 from app.models import (
     BroadcastPositionPacket,
     ItemActionResultPacket,
@@ -26,22 +24,14 @@ from app.items.types.elevator.runtime import (
     ELEVATOR_DOOR_OPEN_SECONDS,
     ELEVATOR_DOOR_OPEN_SOUND_SECONDS,
 )
-from app.server import SignalingServer
 
 
-def _fake_ws() -> ServerConnection:
-    """Return a lightweight websocket identity for unit tests."""
-
-    return cast(ServerConnection, object())
-
-
-def test_elevator_single_square_occupies_both_floors() -> None:
+def test_elevator_single_square_occupies_both_floors(make_world) -> None:
     """One elevator entity should expose its anchor square on both landings."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    client = ClientConnection(
-        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=0
-    )
+    world = make_world(grid_size=41)
+    server = world.server
+    client = world.join("tester", x=10, y=10, z=0, client_id="u1")
     elevator = server.item_service.default_item(client, "elevator")
     elevator.z = 0
 
@@ -52,26 +42,26 @@ def test_elevator_single_square_occupies_both_floors() -> None:
     assert not server.item_runtime.item_is_on_client_square(elevator, client)
 
 
-def test_same_xy_on_another_floor_is_not_the_same_item_square() -> None:
+def test_same_xy_on_another_floor_is_not_the_same_item_square(make_world) -> None:
     """Ordinary item occupancy should compare height as well as x and y."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    client = ClientConnection(
-        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=40
-    )
+    world = make_world(grid_size=41)
+    server = world.server
+    client = world.join("tester", x=10, y=10, z=40, client_id="u1")
     item = server.item_service.default_item(client, "dice")
     item.z = 0
 
     assert not server.item_runtime.item_is_on_client_square(item, client)
 
 
-def test_elevator_timing_and_emitter_are_editable_but_runtime_state_is_not() -> None:
+def test_elevator_timing_and_emitter_are_editable_but_runtime_state_is_not(
+    make_world,
+) -> None:
     """Elevator edits should accept timing/audio without exposing runtime state."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    client = ClientConnection(
-        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=0
-    )
+    world = make_world(grid_size=41)
+    server = world.server
+    client = world.join("tester", x=10, y=10, z=0, client_id="u1")
     elevator = server.item_service.default_item(client, "elevator")
 
     params = validate_update(
@@ -138,13 +128,14 @@ def test_elevator_timing_and_emitter_are_editable_but_runtime_state_is_not() -> 
         ("travelSeconds", "not a number"),
     ],
 )
-def test_elevator_rejects_invalid_editable_durations(key: str, value: object) -> None:
+def test_elevator_rejects_invalid_editable_durations(
+    make_world, key: str, value: object
+) -> None:
     """Editable elevator timing must remain finite and within its UI range."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    client = ClientConnection(
-        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=0
-    )
+    world = make_world(grid_size=41)
+    server = world.server
+    client = world.join("tester", x=10, y=10, z=0, client_id="u1")
     elevator = server.item_service.default_item(client, "elevator")
 
     with pytest.raises(ValueError):
@@ -173,14 +164,13 @@ def test_elevator_rejects_invalid_editable_durations(key: str, value: object) ->
     ],
 )
 def test_elevator_secondary_use_reports_simple_car_state(
-    params: dict[str, object], expected: str
+    make_world, params: dict[str, object], expected: str
 ) -> None:
     """Secondary use should report only landing/door or destination/direction."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    client = ClientConnection(
-        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=0
-    )
+    world = make_world(grid_size=41)
+    server = world.server
+    client = world.join("tester", x=10, y=10, z=0, client_id="u1")
     elevator = server.item_service.default_item(client, "elevator")
     elevator.params.update(params)
 
@@ -192,37 +182,23 @@ def test_elevator_secondary_use_reports_simple_car_state(
 
 @pytest.mark.asyncio
 async def test_elevator_opens_then_second_use_enters(
-    monkeypatch: pytest.MonkeyPatch,
+    make_world,
 ) -> None:
     """A present elevator should reject boarding until its opening sound ends."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    client = ClientConnection(
-        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=0
-    )
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    observer = world.join("observer", x=40, y=40)
+    client = world.join("tester", x=10, y=10, z=0, client_id="u1")
     elevator = server.item_service.default_item(client, "elevator")
     elevator.z = 0
     server.item_service.add_item(elevator)
-
-    sent: list[object] = []
-    broadcast: list[object] = []
-
-    async def fake_send(websocket: ServerConnection, packet: object) -> None:
-        sent.append(packet)
-
-    async def fake_broadcast(packet: object, exclude=None) -> None:
-        broadcast.append(packet)
-
-    monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
     await server.item_runtime.elevator.use(client, elevator)
     assert elevator.params["state"] == "opening"
     assert elevator.params["doorOpen"] is False
     assert client.elevator_id is None
-    door_packets = [
-        packet for packet in broadcast if isinstance(packet, ItemUseSoundPacket)
-    ]
+    door_packets = transport.packets_of_type(observer, ItemUseSoundPacket)
     door_sounds = [packet.sound for packet in door_packets]
     assert door_sounds == [
         "/sounds/elevator_up.ogg",
@@ -231,34 +207,26 @@ async def test_elevator_opens_then_second_use_enters(
     assert all(packet.acousticZoneId == "floor:0" for packet in door_packets)
     opening_index = next(
         index
-        for index, packet in enumerate(broadcast)
+        for index, packet in enumerate(transport.packets_to(observer))
         if isinstance(packet, ItemUpsertPacket)
         and packet.item.params["state"] == "opening"
     )
     first_sound_index = next(
         index
-        for index, packet in enumerate(broadcast)
+        for index, packet in enumerate(transport.packets_to(observer))
         if isinstance(packet, ItemUseSoundPacket)
     )
     assert opening_index < first_sound_index
 
     await server.item_runtime.elevator.use(client, elevator)
     assert client.elevator_id is None
-    result = next(
-        packet
-        for packet in reversed(sent)
-        if isinstance(packet, ItemActionResultPacket)
-    )
+    result = transport.last_packet_of_type(client, ItemActionResultPacket)
     assert result.message == "The elevator door is opening."
 
     elevator.params["state"] = "closing"
     await server.item_runtime.elevator.use(client, elevator)
     assert client.elevator_id is None
-    result = next(
-        packet
-        for packet in reversed(sent)
-        if isinstance(packet, ItemActionResultPacket)
-    )
+    result = transport.last_packet_of_type(client, ItemActionResultPacket)
     assert result.message == "The elevator door is closing."
 
     elevator.params["state"] = "door_open"
@@ -268,29 +236,17 @@ async def test_elevator_opens_then_second_use_enters(
     assert client.elevator_id == elevator.id
     assert elevator.params["departOnCloseZ"] == 40
     assert any(
-        isinstance(packet, ItemElevatorStatusPacket) and packet.event == "entered"
-        for packet in sent
+        packet.event == "entered"
+        for packet in transport.packets_of_type(client, ItemElevatorStatusPacket)
     )
-    presence = next(
-        packet
-        for packet in reversed(broadcast)
-        if isinstance(packet, BroadcastPositionPacket)
-    )
+    presence = transport.last_packet_of_type(observer, BroadcastPositionPacket)
     assert presence.acousticZoneId == f"elevator:{elevator.id}"
-    result = next(
-        packet
-        for packet in reversed(sent)
-        if isinstance(packet, ItemActionResultPacket)
-    )
+    result = transport.last_packet_of_type(client, ItemActionResultPacket)
     assert result.message == "You enter Elevator. The door will close in 8.2 seconds."
 
     await server.item_runtime.elevator.use(client, elevator)
     assert client.elevator_id is None
-    exit_presence = next(
-        packet
-        for packet in reversed(broadcast)
-        if isinstance(packet, BroadcastPositionPacket)
-    )
+    exit_presence = transport.last_packet_of_type(observer, BroadcastPositionPacket)
     assert exit_presence.acousticZoneId == "floor:0"
 
     await server.item_runtime.elevator.cancel(elevator.id)
@@ -298,29 +254,17 @@ async def test_elevator_opens_then_second_use_enters(
 
 @pytest.mark.asyncio
 async def test_absent_elevator_is_called_and_moving_calls_are_queued(
-    monkeypatch: pytest.MonkeyPatch,
+    make_world,
 ) -> None:
     """A landing use should call an absent car and queue a later opposite call."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    ground_client = ClientConnection(
-        websocket=_fake_ws(), id="ground", nickname="ground", x=10, y=10, z=0
-    )
-    second_client = ClientConnection(
-        websocket=_fake_ws(), id="second", nickname="second", x=10, y=10, z=40
-    )
+    world = make_world(grid_size=41)
+    server = world.server
+    ground_client = world.join("ground", x=10, y=10, z=0, client_id="ground")
+    second_client = world.join("second", x=10, y=10, z=40, client_id="second")
     elevator = server.item_service.default_item(ground_client, "elevator")
     elevator.params["currentZ"] = 40
     server.item_service.add_item(elevator)
-
-    async def fake_send(_websocket: ServerConnection, _packet: object) -> None:
-        return None
-
-    async def fake_broadcast(_packet: object, exclude=None) -> None:
-        return None
-
-    monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
     await server.item_runtime.elevator.use(ground_client, elevator)
     assert elevator.params["state"] == "moving"
@@ -335,64 +279,41 @@ async def test_absent_elevator_is_called_and_moving_calls_are_queued(
 
 @pytest.mark.asyncio
 async def test_opposite_landing_call_is_queued_while_door_is_closing(
-    monkeypatch: pytest.MonkeyPatch,
+    make_world,
 ) -> None:
     """A closing door should block traversal without dropping an away-floor call."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    client = ClientConnection(
-        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=40
-    )
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    client = world.join("tester", x=10, y=10, z=40, client_id="u1")
     elevator = server.item_service.default_item(client, "elevator")
     elevator.params.update({"currentZ": 0, "state": "closing", "doorOpen": False})
     server.item_service.add_item(elevator)
-    sent: list[object] = []
-
-    async def fake_send(_websocket: ServerConnection, packet: object) -> None:
-        sent.append(packet)
-
-    async def fake_broadcast(_packet: object, exclude=None) -> None:
-        return None
-
-    monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
     await server.item_runtime.elevator.use(client, elevator)
 
     assert client.elevator_id is None
     assert elevator.params["state"] == "closing"
     assert elevator.params["queuedZ"] == 40
-    result = next(
-        packet for packet in sent if isinstance(packet, ItemActionResultPacket)
-    )
+    result = transport.packets_of_type(client, ItemActionResultPacket)[0]
     assert result.message == "You call Elevator."
 
 
 @pytest.mark.asyncio
 async def test_multiple_elevators_keep_independent_state(
-    monkeypatch: pytest.MonkeyPatch,
+    make_world,
 ) -> None:
     """Using one elevator must not mutate another elevator object."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    client = ClientConnection(
-        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=0
-    )
+    world = make_world(grid_size=41)
+    server = world.server
+    client = world.join("tester", x=10, y=10, z=0, client_id="u1")
     first = server.item_service.default_item(client, "elevator")
     second = server.item_service.default_item(client, "elevator")
     second.x = 20
     second.y = 20
     server.item_service.add_item(first)
     server.item_service.add_item(second)
-
-    async def fake_send(_websocket: ServerConnection, _packet: object) -> None:
-        return None
-
-    async def fake_broadcast(_packet: object, exclude=None) -> None:
-        return None
-
-    monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
     await server.item_runtime.elevator.use(client, first)
 
@@ -406,22 +327,17 @@ async def test_multiple_elevators_keep_independent_state(
 
 @pytest.mark.asyncio
 async def test_elevator_arrival_moves_rider_and_carried_item(
+    make_world,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Arrival should move the rider and held item to the destination floor."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    websocket = _fake_ws()
-    client = ClientConnection(
-        websocket=websocket,
-        id="u1",
-        nickname="tester",
-        x=10,
-        y=10,
-        z=0,
-        elevator_id="elevator-1",
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    observer = world.join("observer", x=40, y=40)
+    client = world.join(
+        "tester", x=10, y=10, z=0, elevator_id="elevator-1", client_id="u1"
     )
-    server.clients[websocket] = client
     elevator = server.item_service.default_item(client, "elevator")
     elevator.id = "elevator-1"
     elevator.z = 0
@@ -440,23 +356,13 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
     carried.carrierId = client.id
     server.item_service.add_item(carried)
 
-    sent: list[object] = []
-    broadcast: list[object] = []
     sleeps: list[tuple[float, str]] = []
 
     async def immediate_sleep(seconds: float) -> None:
         sleeps.append((seconds, str(elevator.params["state"])))
         return None
 
-    async def fake_send(websocket: ServerConnection, packet: object) -> None:
-        sent.append(packet)
-
-    async def fake_broadcast(packet: object, exclude=None) -> None:
-        broadcast.append(packet)
-
     monkeypatch.setattr(asyncio, "sleep", immediate_sleep)
-    monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
     await server.item_runtime.elevator.run_cycle(elevator.id)
 
@@ -467,13 +373,11 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
     assert carried.z == 40
     arrival = next(
         packet
-        for packet in sent
-        if isinstance(packet, ItemElevatorStatusPacket) and packet.event == "arrived"
+        for packet in transport.packets_of_type(client, ItemElevatorStatusPacket)
+        if packet.event == "arrived"
     )
     assert arrival.message == "Elevator arrives on Second floor. The door opens."
-    elevator_sounds = [
-        packet for packet in broadcast if isinstance(packet, ItemUseSoundPacket)
-    ]
+    elevator_sounds = transport.packets_of_type(observer, ItemUseSoundPacket)
     assert [packet.sound for packet in elevator_sounds] == [
         "/sounds/elevator_down.ogg",
         "/sounds/elevator_open.ogg",
@@ -491,25 +395,19 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
 
 @pytest.mark.asyncio
 async def test_elevator_door_sound_announces_next_upward_trip(
-    monkeypatch: pytest.MonkeyPatch,
+    make_world,
 ) -> None:
     """A ground-floor door opening should announce the next upward trip."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    client = ClientConnection(
-        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=40
-    )
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    observer = world.join("observer", x=40, y=40)
+    client = world.join("tester", x=10, y=10, z=40, client_id="u1")
     elevator = server.item_service.default_item(client, "elevator")
-    broadcast: list[object] = []
-
-    async def fake_broadcast(packet: object, exclude=None) -> None:
-        broadcast.append(packet)
-
-    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
     await server.item_runtime.elevator.broadcast_direction_sound(elevator, 0)
 
-    arrival_sound = cast(ItemUseSoundPacket, broadcast[0])
+    arrival_sound = transport.packets_of_type(observer, ItemUseSoundPacket)[0]
     assert arrival_sound.sound == "/sounds/elevator_up.ogg"
     assert arrival_sound.z == 0
     assert arrival_sound.acousticZoneId == "floor:0"
@@ -517,14 +415,14 @@ async def test_elevator_door_sound_announces_next_upward_trip(
 
 @pytest.mark.asyncio
 async def test_elevator_waits_for_closing_sound_before_travel(
+    make_world,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The runtime must not begin car movement until the closing clip finishes."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    client = ClientConnection(
-        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=0
-    )
+    world = make_world(grid_size=41)
+    server = world.server
+    client = world.join("tester", x=10, y=10, z=0, client_id="u1")
     elevator = server.item_service.default_item(client, "elevator")
     elevator.params.update(
         {
@@ -548,11 +446,7 @@ async def test_elevator_waits_for_closing_sound_before_travel(
         assert completed_sleeps == [ELEVATOR_DOOR_CLOSE_SOUND_SECONDS]
         raise asyncio.CancelledError
 
-    async def fake_broadcast(_packet: object, exclude=None) -> None:
-        return None
-
     monkeypatch.setattr(asyncio, "sleep", immediate_sleep)
-    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
     monkeypatch.setattr(server.item_runtime.elevator, "advance_travel", stop_at_travel)
 
     await server.item_runtime.elevator.run_cycle(elevator.id)
@@ -563,14 +457,14 @@ async def test_elevator_waits_for_closing_sound_before_travel(
 
 @pytest.mark.asyncio
 async def test_editable_elevator_durations_drive_runtime_timing(
+    make_world,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Door dwell and floor travel should use each elevator's editable values."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    client = ClientConnection(
-        websocket=_fake_ws(), id="u1", nickname="tester", x=10, y=10, z=0
-    )
+    world = make_world(grid_size=41)
+    server = world.server
+    client = world.join("tester", x=10, y=10, z=0, client_id="u1")
     elevator = server.item_service.default_item(client, "elevator")
     elevator.params.update(
         {
@@ -586,11 +480,7 @@ async def test_editable_elevator_durations_drive_runtime_timing(
     async def immediate_sleep(seconds: float) -> None:
         sleeps.append(seconds)
 
-    async def fake_broadcast(_packet: object, exclude=None) -> None:
-        return None
-
     monkeypatch.setattr(asyncio, "sleep", immediate_sleep)
-    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
     await server.item_runtime.elevator.run_cycle(elevator.id)
     assert sleeps[:2] == [7.5, ELEVATOR_DOOR_CLOSE_SOUND_SECONDS]
@@ -602,37 +492,20 @@ async def test_editable_elevator_durations_drive_runtime_timing(
 
 @pytest.mark.asyncio
 async def test_stopped_rider_waits_for_reopened_door_before_exiting(
-    monkeypatch: pytest.MonkeyPatch,
+    make_world,
 ) -> None:
     """A rider should remain inside until a stopped car finishes reopening."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    websocket = _fake_ws()
-    client = ClientConnection(
-        websocket=websocket,
-        id="u1",
-        nickname="tester",
-        x=10,
-        y=10,
-        z=40,
-        elevator_id="elevator-1",
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    observer = world.join("observer", x=40, y=40)
+    client = world.join(
+        "tester", x=10, y=10, z=40, elevator_id="elevator-1", client_id="u1"
     )
-    server.clients[websocket] = client
     elevator = server.item_service.default_item(client, "elevator")
     elevator.id = "elevator-1"
     elevator.params["currentZ"] = 40
     server.item_service.add_item(elevator)
-    sent: list[object] = []
-    broadcast: list[object] = []
-
-    async def fake_send(_websocket: ServerConnection, packet: object) -> None:
-        sent.append(packet)
-
-    async def fake_broadcast(packet: object, exclude=None) -> None:
-        broadcast.append(packet)
-
-    monkeypatch.setattr(server, "_send", fake_send)
-    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
 
     await server.item_runtime.elevator.use(client, elevator)
 
@@ -640,11 +513,12 @@ async def test_stopped_rider_waits_for_reopened_door_before_exiting(
     assert elevator.params["state"] == "opening"
     assert elevator.params["doorOpen"] is False
     assert not any(
-        isinstance(packet, ItemElevatorStatusPacket) and packet.event == "exited"
-        for packet in sent
+        packet.event == "exited"
+        for packet in transport.packets_of_type(client, ItemElevatorStatusPacket)
     )
     door_sounds = [
-        packet.sound for packet in broadcast if isinstance(packet, ItemUseSoundPacket)
+        packet.sound
+        for packet in transport.packets_of_type(observer, ItemUseSoundPacket)
     ]
     assert door_sounds == [
         "/sounds/elevator_down.ogg",
@@ -659,8 +533,8 @@ async def test_stopped_rider_waits_for_reopened_door_before_exiting(
     await server.item_runtime.elevator.use(client, elevator)
     assert client.elevator_id is None
     assert any(
-        isinstance(packet, ItemElevatorStatusPacket) and packet.event == "exited"
-        for packet in sent
+        packet.event == "exited"
+        for packet in transport.packets_of_type(client, ItemElevatorStatusPacket)
     )
 
     await server.item_runtime.elevator.cancel(elevator.id)
@@ -668,42 +542,28 @@ async def test_stopped_rider_waits_for_reopened_door_before_exiting(
 
 @pytest.mark.asyncio
 async def test_rider_cannot_exit_while_elevator_is_moving(
-    monkeypatch: pytest.MonkeyPatch,
+    make_world,
 ) -> None:
     """A rider must remain in the car until it reaches a landing."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    websocket = _fake_ws()
-    client = ClientConnection(
-        websocket=websocket,
-        id="u1",
-        nickname="tester",
-        x=10,
-        y=10,
-        z=20,
-        elevator_id="elevator-1",
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    client = world.join(
+        "tester", x=10, y=10, z=20, elevator_id="elevator-1", client_id="u1"
     )
     elevator = server.item_service.default_item(client, "elevator")
     elevator.id = "elevator-1"
     elevator.params.update({"state": "moving", "targetZ": 40})
     server.item_service.add_item(elevator)
-    sent: list[object] = []
-
-    async def fake_send(_websocket: ServerConnection, packet: object) -> None:
-        sent.append(packet)
-
-    monkeypatch.setattr(server, "_send", fake_send)
 
     await server.item_runtime.elevator.use(client, elevator)
 
     assert client.elevator_id == elevator.id
     assert not any(
-        isinstance(packet, ItemElevatorStatusPacket) and packet.event == "exited"
-        for packet in sent
+        packet.event == "exited"
+        for packet in transport.packets_of_type(client, ItemElevatorStatusPacket)
     )
-    result = next(
-        packet for packet in sent if isinstance(packet, ItemActionResultPacket)
-    )
+    result = transport.packets_of_type(client, ItemActionResultPacket)[0]
     assert result.message == "The elevator is moving."
 
 
@@ -713,6 +573,7 @@ async def test_rider_cannot_exit_while_elevator_is_moving(
     [(0, 40, 1, 38), (40, 0, 39, 2)],
 )
 async def test_elevator_travel_height_progresses_between_acoustic_floors(
+    make_world,
     monkeypatch: pytest.MonkeyPatch,
     origin_z: int,
     destination_z: int,
@@ -721,44 +582,27 @@ async def test_elevator_travel_height_progresses_between_acoustic_floors(
 ) -> None:
     """Travel should progressively move riders without publishing either landing."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    websocket = _fake_ws()
-    client = ClientConnection(
-        websocket=websocket,
-        id="u1",
-        nickname="tester",
-        x=10,
-        y=10,
-        z=origin_z,
-        elevator_id="elevator-1",
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    observer = world.join("observer", x=40, y=40)
+    client = world.join(
+        "tester", x=10, y=10, z=origin_z, elevator_id="elevator-1", client_id="u1"
     )
-    server.clients[websocket] = client
     elevator = server.item_service.default_item(client, "elevator")
     elevator.id = "elevator-1"
     elevator.params["currentZ"] = origin_z
     server.item_service.add_item(elevator)
-    broadcast: list[object] = []
-    sent: list[object] = []
-
-    async def fake_broadcast(packet: object, exclude=None) -> None:
-        broadcast.append(packet)
-
-    async def fake_send(_websocket: ServerConnection, packet: object) -> None:
-        sent.append(packet)
 
     async def immediate_sleep(_seconds: float) -> None:
         return None
 
     monkeypatch.setattr(asyncio, "sleep", immediate_sleep)
-    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
-    monkeypatch.setattr(server, "_send", fake_send)
 
     await server.item_runtime.elevator.advance_travel(elevator, origin_z, destination_z)
 
     heights = [
-        cast(BroadcastPositionPacket, packet).z
-        for packet in broadcast
-        if getattr(packet, "type", "") == "update_position"
+        packet.z
+        for packet in transport.packets_of_type(observer, BroadcastPositionPacket)
     ]
     assert heights[0] == first_height
     assert heights[-1] == last_height
@@ -771,26 +615,25 @@ async def test_elevator_travel_height_progresses_between_acoustic_floors(
     assert client.z == heights[-1]
     status_heights = [
         packet.z
-        for packet in sent
-        if isinstance(packet, ItemElevatorStatusPacket) and packet.event == "moving"
+        for packet in transport.packets_of_type(client, ItemElevatorStatusPacket)
+        if packet.event == "moving"
     ]
     assert status_heights == heights
-    assert not any(isinstance(packet, ItemUpsertPacket) for packet in broadcast)
+    assert [
+        packet.z
+        for packet in transport.packets_of_type(client, BroadcastPositionPacket)
+    ] == heights
+    assert not transport.packets_of_type(observer, ItemUpsertPacket)
     assert elevator.z == origin_z
 
 
-def test_disconnecting_rider_returns_to_last_landing() -> None:
+def test_disconnecting_rider_returns_to_last_landing(make_world) -> None:
     """An unfinished trip must never persist an intermediate elevator height."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
-    client = ClientConnection(
-        websocket=_fake_ws(),
-        id="u1",
-        nickname="tester",
-        x=10,
-        y=10,
-        z=20,
-        elevator_id="elevator-1",
+    world = make_world(grid_size=41)
+    server = world.server
+    client = world.join(
+        "tester", x=10, y=10, z=20, elevator_id="elevator-1", client_id="u1"
     )
     elevator = server.item_service.default_item(client, "elevator")
     elevator.id = "elevator-1"
