@@ -35,6 +35,7 @@ from .acoustic_zones import (
 )
 from .client import ClientConnection
 from .config import load_config
+from .delivery import Delivery, Transport
 from .item_catalog import (
     ITEM_TYPE_EDITABLE_PROPERTIES,
     ITEM_TYPE_LABELS,
@@ -154,6 +155,29 @@ AdminActionName: TypeAlias = Literal[
 ]
 
 
+class _ForwardingDelivery(Delivery):
+    """Temporary delivery that forwards to the legacy _send/_broadcast methods; removed in step 3 of issue #3."""
+
+    def __init__(self, server: SignalingServer) -> None:
+        """Bind the server whose legacy methods remain patchable by tests."""
+
+        self.server = server
+
+    async def send(self, client: ClientConnection, packet: object) -> None:
+        """Forward one client packet to the legacy send method."""
+
+        await self.server._send(client.websocket, packet)
+
+    async def broadcast(
+        self, packet: object, exclude: ClientConnection | None = None
+    ) -> None:
+        """Forward a broadcast with the excluded client's websocket."""
+
+        await self.server._broadcast(
+            packet, exclude=exclude.websocket if exclude else None
+        )
+
+
 class SignalingServer:
     """Coordinates websocket clients, signaling, and authoritative item actions."""
 
@@ -186,6 +210,8 @@ class SignalingServer:
         livekit_api_key: str | None = None,
         livekit_api_secret: str | None = None,
         livekit_room_name: str = "chatgrid",
+        *,
+        transport: Transport | None = None,
     ):
         """Initialize runtime state, TLS context, and item service."""
 
@@ -194,6 +220,11 @@ class SignalingServer:
         self.max_message_size = max_message_size
         self._ssl_context = self._build_ssl_context(ssl_cert, ssl_key)
         self.clients: dict[ServerConnection, ClientConnection] = {}
+        self.delivery: Delivery = (
+            Delivery(transport, self.clients)
+            if transport is not None
+            else _ForwardingDelivery(self)
+        )
         resolved_auth_db_path = auth_db_path or Path.cwd() / "runtime" / "chatgrid.db"
         auth_secret = (
             auth_token_hash_secret.strip()
@@ -621,8 +652,8 @@ class SignalingServer:
         """Push one authenticated client's current role + permission set."""
 
         permissions = self._refresh_client_permissions(client)
-        await self._send(
-            client.websocket,
+        await self.delivery.send(
+            client,
             AuthPermissionsPacket(
                 type="auth_permissions",
                 role=client.role,
@@ -910,8 +941,8 @@ class SignalingServer:
                     AuthResumePacket(type="auth_resume", sessionToken=cookie_token),
                 )
             if not client.authenticated:
-                await self._send(
-                    websocket,
+                await self.delivery.send(
+                    client,
                     AuthRequiredPacket(
                         type="auth_required",
                         message="Authentication required.",
@@ -951,17 +982,17 @@ class SignalingServer:
                     disconnected.nickname,
                     len(self.clients),
                 )
-                await self._broadcast(
+                await self.delivery.broadcast(
                     UserLeftPacket(type="user_left", id=disconnected.id),
-                    exclude=websocket,
+                    exclude=disconnected,
                 )
-                await self._broadcast(
+                await self.delivery.broadcast(
                     BroadcastChatMessagePacket(
                         type="chat_message",
                         message=f"{disconnected.nickname} has logged out.",
                         system=True,
                     ),
-                    exclude=websocket,
+                    exclude=disconnected,
                 )
 
     async def _send_welcome(self, client: ClientConnection) -> None:
@@ -1026,10 +1057,10 @@ class SignalingServer:
                 "policy": self._auth_policy(),
             },
         )
-        await self._send(client.websocket, packet)
+        await self.delivery.send(client, packet)
         if self.livekit_enabled:
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 LiveKitTokenPacket(
                     type="livekit_token",
                     token=self._generate_livekit_token(client),
@@ -1081,23 +1112,23 @@ class SignalingServer:
             client.username,
             len(self.clients),
         )
-        await self._broadcast(
+        await self.delivery.broadcast(
             client_position_packet(client),
-            exclude=client.websocket,
+            exclude=client,
         )
-        await self._broadcast(
+        await self.delivery.broadcast(
             BroadcastNicknamePacket(
                 type="update_nickname", id=client.id, nickname=client.nickname
             ),
-            exclude=client.websocket,
+            exclude=client,
         )
-        await self._broadcast(
+        await self.delivery.broadcast(
             BroadcastChatMessagePacket(
                 type="chat_message",
                 message=f"{client.nickname} has logged in.",
                 system=True,
             ),
-            exclude=client.websocket,
+            exclude=client,
         )
 
     async def _handle_auth_packet(
@@ -1108,8 +1139,8 @@ class SignalingServer:
         if client.authenticated and isinstance(
             packet, (AuthLoginPacket, AuthRegisterPacket, AuthResumePacket)
         ):
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 AuthResultPacket(
                     type="auth_result",
                     ok=False,
@@ -1129,8 +1160,8 @@ class SignalingServer:
                 packet.type,
             )
             await self._sleep_auth_failure_jitter()
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 AuthResultPacket(
                     type="auth_result",
                     ok=False,
@@ -1186,8 +1217,8 @@ class SignalingServer:
                     self._client_ip(client),
                     client.username,
                 )
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     AuthResultPacket(
                         type="auth_result",
                         ok=True,
@@ -1217,8 +1248,8 @@ class SignalingServer:
                 packet.type,
                 str(exc),
             )
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 AuthResultPacket(
                     type="auth_result",
                     ok=False,
@@ -1239,8 +1270,8 @@ class SignalingServer:
                 self._client_ip(client),
                 packet.type,
             )
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 AuthResultPacket(
                     type="auth_result",
                     ok=False,
@@ -1263,8 +1294,8 @@ class SignalingServer:
         client.saved_x = session.user.last_x
         client.saved_y = session.user.last_y
         client.saved_z = session.user.last_z
-        await self._send(
-            client.websocket,
+        await self.delivery.send(
+            client,
             AuthResultPacket(
                 type="auth_result",
                 ok=True,
@@ -1318,8 +1349,8 @@ class SignalingServer:
     ) -> None:
         """Send one structured admin action result packet to caller."""
 
-        await self._send(
-            client.websocket,
+        await self.delivery.send(
+            client,
             AdminActionResultPacket(
                 type="admin_action_result", ok=ok, action=action, message=message
             ),
@@ -1356,8 +1387,8 @@ class SignalingServer:
             else "delete"
         )
         if not self._client_has_permission(client, "world.structure.edit"):
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 StructureActionResultPacket(
                     type="structure_action_result",
                     ok=False,
@@ -1414,11 +1445,11 @@ class SignalingServer:
             else:
                 wall = self.structure_service.remove(packet.structureId)
                 self._request_state_save()
-                await self._broadcast(
+                await self.delivery.broadcast(
                     StructureRemovePacket(type="structure_remove", structureId=wall.id)
                 )
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     StructureActionResultPacket(
                         type="structure_action_result",
                         ok=True,
@@ -1429,8 +1460,8 @@ class SignalingServer:
                 )
                 return True
         except StructureError as exc:
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 StructureActionResultPacket(
                     type="structure_action_result",
                     ok=False,
@@ -1441,11 +1472,11 @@ class SignalingServer:
             return True
 
         self._request_state_save()
-        await self._broadcast(
+        await self.delivery.broadcast(
             StructureUpsertPacket(type="structure_upsert", structure=wall)
         )
-        await self._send(
-            client.websocket,
+        await self.delivery.send(
+            client,
             StructureActionResultPacket(
                 type="structure_action_result",
                 ok=True,
@@ -1518,8 +1549,8 @@ class SignalingServer:
         command = command_token.casefold()
         if command == "me":
             if not separator or remainder == "":
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     BroadcastChatMessagePacket(
                         type="chat_message",
                         message="Usage: /me <action>",
@@ -1527,7 +1558,7 @@ class SignalingServer:
                     ),
                 )
                 return True
-            await self._broadcast(
+            await self.delivery.broadcast(
                 BroadcastChatMessagePacket(
                     type="chat_message",
                     message=f"{client.nickname} {remainder}",
@@ -1539,8 +1570,8 @@ class SignalingServer:
             )
             return True
         if command == "up":
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 BroadcastChatMessagePacket(
                     type="chat_message",
                     message=f"Server uptime: {self._format_uptime()}",
@@ -1549,8 +1580,8 @@ class SignalingServer:
             )
             return True
         if command == "version":
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 BroadcastChatMessagePacket(
                     type="chat_message",
                     message=f"Server version: {self.server_version}",
@@ -1560,8 +1591,8 @@ class SignalingServer:
             return True
         if command == "reboot":
             if not self._client_has_permission(client, "server.allow_reboot"):
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     BroadcastChatMessagePacket(
                         type="chat_message",
                         message="Not authorized to reboot server.",
@@ -1573,8 +1604,8 @@ class SignalingServer:
             if not self._schedule_reboot(
                 client.username or client.nickname, reboot_message
             ):
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     BroadcastChatMessagePacket(
                         type="chat_message",
                         message="Server reboot already in progress.",
@@ -1585,7 +1616,7 @@ class SignalingServer:
             announcement = "Server rebooting in 5 seconds."
             if reboot_message:
                 announcement = f"{announcement} {reboot_message}"
-            await self._broadcast(
+            await self.delivery.broadcast(
                 BroadcastChatMessagePacket(
                     type="chat_message",
                     message=announcement,
@@ -1593,8 +1624,8 @@ class SignalingServer:
                 )
             )
             return True
-        await self._send(
-            client.websocket,
+        await self.delivery.send(
+            client,
             BroadcastChatMessagePacket(
                 type="chat_message",
                 message=f"Unknown command: /{command_token}",
@@ -1640,8 +1671,8 @@ class SignalingServer:
                 AdminRoleSummary.model_validate(role)
                 for role in self.auth_service.list_roles_with_counts()
             ]
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 AdminRolesListResultPacket(
                     type="admin_roles_list",
                     roles=roles,
@@ -1680,8 +1711,8 @@ class SignalingServer:
                     entry for entry in users if str(entry.get("status")) == "disabled"
                 ]
             user_summaries = [AdminUserSummary.model_validate(entry) for entry in users]
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 AdminUsersListResultPacket(
                     type="admin_users_list", users=user_summaries
                 ),
@@ -1815,8 +1846,8 @@ class SignalingServer:
                 for active in list(self.clients.values()):
                     if active.user_id != target_id:
                         continue
-                    await self._send(
-                        active.websocket,
+                    await self.delivery.send(
+                        active,
                         AuthResultPacket(
                             type="auth_result", ok=False, message="Account is disabled."
                         ),
@@ -1868,8 +1899,8 @@ class SignalingServer:
                 for active in list(self.clients.values()):
                     if active.user_id != target_id:
                         continue
-                    await self._send(
-                        active.websocket,
+                    await self.delivery.send(
+                        active,
                         AuthResultPacket(
                             type="auth_result", ok=False, message="Account deleted."
                         ),
@@ -1913,8 +1944,8 @@ class SignalingServer:
         if await self._handle_auth_packet(client, packet):
             return
         if not client.authenticated:
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 AuthResultPacket(
                     type="auth_result",
                     ok=False,
@@ -1930,8 +1961,8 @@ class SignalingServer:
         if isinstance(packet, PingPacket):
             if client.world_ready:
                 self._persist_client_last_seen(client)
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 PongPacket(type="pong", clientSentAt=packet.clientSentAt),
             )
             return
@@ -1950,8 +1981,8 @@ class SignalingServer:
 
         if isinstance(packet, UpdatePositionPacket):
             if client.elevator_id is not None:
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     client_position_packet(client),
                 )
                 return
@@ -1963,8 +1994,8 @@ class SignalingServer:
                     packet.y,
                     self.grid_size,
                 )
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     client_position_packet(client),
                 )
                 return
@@ -1987,8 +2018,8 @@ class SignalingServer:
                     remaining,
                     client.movement_window_index,
                 )
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     client_position_packet(client),
                 )
                 return
@@ -2012,21 +2043,21 @@ class SignalingServer:
                     x=client.x,
                     y=client.y,
                     z=client.z,
-                    exclude=client.websocket,
+                    exclude=client,
                 )
-                await self._send(client.websocket, client_position_packet(client))
+                await self.delivery.send(client, client_position_packet(client))
                 return
             client.x = packet.x
             client.y = packet.y
             client.last_position_update_ms = now_ms
             self._persist_client_position(client)
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 client_position_packet(client),
             )
-            await self._broadcast(
+            await self.delivery.broadcast(
                 client_position_packet(client),
-                exclude=client.websocket,
+                exclude=client,
             )
             for crossed_wall in crossed_walls:
                 await self._broadcast_wall_sound(
@@ -2034,15 +2065,15 @@ class SignalingServer:
                     x=client.x,
                     y=client.y,
                     z=client.z,
-                    exclude=client.websocket,
+                    exclude=client,
                 )
             await self.item_runtime.sync_carried_item(client)
             return
 
         if isinstance(packet, TeleportCompletePacket):
             if client.elevator_id is not None:
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     client_position_packet(client),
                 )
                 return
@@ -2054,8 +2085,8 @@ class SignalingServer:
                     packet.y,
                     self.grid_size,
                 )
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     client_position_packet(client),
                 )
                 return
@@ -2064,16 +2095,16 @@ class SignalingServer:
             client.y = packet.y
             client.last_position_update_ms = self.item_service.now_ms()
             self._persist_client_position(client, force=True)
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 client_position_packet(client),
             )
-            await self._broadcast(
+            await self.delivery.broadcast(
                 client_position_packet(client),
-                exclude=client.websocket,
+                exclude=client,
             )
             await self.item_runtime.sync_carried_item(client)
-            await self._broadcast(
+            await self.delivery.broadcast(
                 BroadcastTeleportCompletePacket(
                     type="teleport_complete",
                     id=client.id,
@@ -2082,14 +2113,14 @@ class SignalingServer:
                     z=client.z,
                     acousticZoneId=client_acoustic_zone_id(client),
                 ),
-                exclude=client.websocket,
+                exclude=client,
             )
             return
 
         if isinstance(packet, UpdateNicknamePacket):
             if not self._client_has_permission(client, "profile.update_nickname"):
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     NicknameResultPacket(
                         type="nickname_result",
                         accepted=False,
@@ -2101,8 +2132,8 @@ class SignalingServer:
                 return
             requested_nickname = packet.nickname.strip()
             if not requested_nickname:
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     NicknameResultPacket(
                         type="nickname_result",
                         accepted=False,
@@ -2114,8 +2145,8 @@ class SignalingServer:
                 return
             old_nickname = client.nickname
             if self._is_nickname_taken(requested_nickname, exclude_client_id=client.id):
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     NicknameResultPacket(
                         type="nickname_result",
                         accepted=False,
@@ -2126,8 +2157,8 @@ class SignalingServer:
                 )
                 return
             if requested_nickname == old_nickname:
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     NicknameResultPacket(
                         type="nickname_result",
                         accepted=True,
@@ -2148,8 +2179,8 @@ class SignalingServer:
                     old_nickname,
                     client.nickname,
                 )
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 NicknameResultPacket(
                     type="nickname_result",
                     accepted=True,
@@ -2157,37 +2188,37 @@ class SignalingServer:
                     effectiveNickname=client.nickname,
                 ),
             )
-            await self._broadcast(
+            await self.delivery.broadcast(
                 BroadcastNicknamePacket(
                     type="update_nickname", id=client.id, nickname=client.nickname
                 ),
-                exclude=client.websocket,
+                exclude=client,
             )
             if old_nickname == "user...":
-                await self._broadcast(
+                await self.delivery.broadcast(
                     BroadcastChatMessagePacket(
                         type="chat_message",
                         message=f"{client.nickname} has logged in.",
                         system=True,
                     ),
-                    exclude=client.websocket,
+                    exclude=client,
                 )
             else:
-                await self._broadcast(
+                await self.delivery.broadcast(
                     BroadcastChatMessagePacket(
                         type="chat_message",
                         message=f"{old_nickname} is now known as {client.nickname}.",
                         system=True,
                     ),
-                    exclude=client.websocket,
+                    exclude=client,
                 )
             self_message = (
                 f"Welcome. Logged in as {client.nickname}."
                 if old_nickname == "user..."
                 else f"You are now known as {client.nickname}."
             )
-            await self._send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 BroadcastChatMessagePacket(
                     type="chat_message",
                     message=self_message,
@@ -2198,8 +2229,8 @@ class SignalingServer:
 
         if isinstance(packet, ChatMessagePacket):
             if not self._client_has_permission(client, "chat.send"):
-                await self._send(
-                    client.websocket,
+                await self.delivery.send(
+                    client,
                     BroadcastChatMessagePacket(
                         type="chat_message",
                         message="You are not allowed to send chat messages.",
@@ -2209,7 +2240,7 @@ class SignalingServer:
                 return
             if await self._handle_chat_command(client, packet.message):
                 return
-            await self._broadcast(
+            await self.delivery.broadcast(
                 BroadcastChatMessagePacket(
                     type="chat_message",
                     message=packet.message,
@@ -2244,14 +2275,14 @@ class SignalingServer:
         x: int,
         y: int,
         z: int,
-        exclude: ServerConnection,
+        exclude: ClientConnection,
     ) -> None:
         """Broadcast one validated wall impact/crossing sound to other users."""
 
         sound = str(wall.contactSound).strip()
         if not sound:
             return
-        await self._broadcast(
+        await self.delivery.broadcast(
             WorldSoundPacket(
                 type="world_sound",
                 sound=sound,

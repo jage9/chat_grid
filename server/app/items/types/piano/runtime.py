@@ -6,9 +6,8 @@ import asyncio
 import time
 from typing import Literal, Protocol, TypedDict
 
-from websockets.asyncio.server import ServerConnection
-
 from ....client import ClientConnection
+from ....delivery import Delivery
 from ....item_service import ItemService
 from ....models import (
     ItemPianoNoteBroadcastPacket,
@@ -53,6 +52,8 @@ class PianoRecordingSession(TypedDict, total=False):
 class PianoRuntimeHost(Protocol):
     """Server operations required by the piano runtime."""
 
+    delivery: Delivery
+
     @property
     def item_service(self) -> ItemService: ...
 
@@ -69,13 +70,7 @@ class PianoRuntimeHost(Protocol):
 
     def request_state_save(self) -> None: ...
 
-    async def broadcast(
-        self, packet: object, exclude: ServerConnection | None = None
-    ) -> None: ...
-
     async def broadcast_item(self, item: WorldItem) -> None: ...
-
-    async def send(self, websocket: ServerConnection, packet: object) -> None: ...
 
     async def send_result(
         self,
@@ -94,6 +89,7 @@ class PianoRuntime:
         """Create an empty piano runtime bound to server delivery operations."""
 
         self.host = host
+        self.delivery = host.delivery
         self.active_keys_by_client: dict[str, set[str]] = {}
         self.recording_state_by_item: dict[str, PianoRecordingSession] = {}
         self.playback_tasks_by_item: dict[str, asyncio.Task[None]] = {}
@@ -206,7 +202,7 @@ class PianoRuntime:
             key_id=packet.keyId,
             midi=packet.midi,
             on=packet.on,
-            exclude=client.websocket,
+            exclude=client,
         )
         return
 
@@ -408,7 +404,7 @@ class PianoRuntime:
         release_override: int | None = None,
         brightness_override: int | None = None,
         emit_range_override: int | None = None,
-        exclude: ServerConnection | None = None,
+        exclude: ClientConnection | None = None,
     ) -> None:
         """Broadcast one piano note event using current item synth settings."""
 
@@ -473,7 +469,7 @@ class PianoRuntime:
             else 15
         )
         source_x, source_y, source_z = self._get_piano_source_position(item)
-        await self.host.broadcast(
+        await self.delivery.broadcast(
             ItemPianoNoteBroadcastPacket(
                 type="item_piano_note",
                 itemId=item.id,
@@ -923,8 +919,8 @@ class PianoRuntime:
     ) -> None:
         """Send structured piano state transitions without relying on status-message text."""
 
-        await self.host.send(
-            client.websocket,
+        await self.delivery.send(
+            client,
             ItemPianoStatusPacket(
                 type="item_piano_status",
                 itemId=item_id,

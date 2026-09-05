@@ -7,8 +7,7 @@ from datetime import datetime
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
-from websockets.asyncio.server import ServerConnection
-
+from ....delivery import Delivery
 from ....item_catalog import CLOCK_DEFAULT_TIME_ZONE, CLOCK_TIME_ZONE_OPTIONS
 from ....items.types.clock.time_format import parse_alarm_time_flexible
 from ....models import ItemClockAnnouncePacket, WorldItem
@@ -19,16 +18,14 @@ CLOCK_ANNOUNCE_POLL_INTERVAL_S = 1.0
 class ClockRuntimeHost(Protocol):
     """Server operations required by clock announcements."""
 
+    delivery: Delivery
+
     @property
     def items(self) -> dict[str, WorldItem]: ...
 
     def get_sound_source(self, item: WorldItem) -> tuple[int, int, int, str]: ...
 
     def get_emit_range(self, item: WorldItem) -> int: ...
-
-    async def broadcast(
-        self, packet: object, exclude: ServerConnection | None = None
-    ) -> None: ...
 
 
 class ClockRuntime:
@@ -38,6 +35,7 @@ class ClockRuntime:
         """Create an idle clock runtime bound to authoritative item state."""
 
         self.host = host
+        self.delivery = host.delivery
         self._task: asyncio.Task[None] | None = None
         self._top_of_hour_markers: dict[str, str] = {}
         self._alarm_markers: dict[str, str] = {}
@@ -135,7 +133,7 @@ class ClockRuntime:
         )
         if not sounds:
             return
-        await self.host.broadcast(
+        await self.delivery.broadcast(
             ItemClockAnnouncePacket(
                 type="item_clock_announce",
                 itemId=item.id,
