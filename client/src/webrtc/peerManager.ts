@@ -193,11 +193,10 @@ export class PeerManager {
 
   async setOutputDevice(deviceId: string): Promise<void> {
     this.outputDeviceId = deviceId;
+    await this.audio.setOutputDevice(deviceId).catch(() => {
+      this.status('Could not switch audio output. Check your output device.');
+    });
     await this.room?.switchActiveDevice('audiooutput', deviceId).catch(() => undefined);
-    for (const peer of this.peers.values()) {
-      const sinkTarget = peer.audioElement as (HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> }) | undefined;
-      await sinkTarget?.setSinkId?.(deviceId).catch(() => undefined);
-    }
   }
 
   suspendRemoteAudio(): void {
@@ -206,7 +205,7 @@ export class PeerManager {
 
   async resumeRemoteAudio(): Promise<void> {
     for (const peer of this.peers.values()) {
-      if (peer.remoteStream) await this.audio.attachRemoteStream(peer, peer.remoteStream, this.outputDeviceId);
+      if (peer.remoteStream) await this.audio.attachRemoteStream(peer, peer.remoteStream);
     }
   }
 
@@ -234,7 +233,7 @@ export class PeerManager {
     this.audio.cleanupPeerAudio(peer);
     peer.remoteStream = stream;
     if (this.audio.isVoiceLayerEnabled()) {
-      void this.audio.attachRemoteStream(peer, stream, this.outputDeviceId);
+      void this.audio.attachRemoteStream(peer, stream);
     }
   }
 

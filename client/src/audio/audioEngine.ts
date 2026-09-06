@@ -56,6 +56,7 @@ type ActiveSpatialSampleRuntime = {
 
 export class AudioEngine {
   private audioCtx: AudioContext | null = null;
+  private outputDeviceId = '';
   private masterGainNode: GainNode | null = null;
   private sfxGainNode: GainNode | null = null;
   private readonly sampleCache = new Map<string, AudioBuffer>();
@@ -95,6 +96,8 @@ export class AudioEngine {
       this.masterGainNode.connect(this.audioCtx.destination);
       this.sfxGainNode = this.audioCtx.createGain();
       this.sfxGainNode.connect(this.masterGainNode);
+      // An unavailable saved speaker must not prevent microphone setup or playback.
+      await this.setOutputDevice(this.outputDeviceId).catch(() => undefined);
     }
     if (this.audioCtx.state === 'suspended') {
       await this.audioCtx.resume();
@@ -113,11 +116,13 @@ export class AudioEngine {
     return !!this.audioCtx && typeof this.audioCtx.createStereoPanner === 'function';
   }
 
-  supportsSinkId(element: HTMLMediaElement): boolean {
-    return (
-      typeof (element as HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> }).setSinkId ===
-      'function'
-    );
+  /** Routes all Web Audio output, retaining the selection until a context exists. */
+  async setOutputDevice(deviceId: string): Promise<void> {
+    this.outputDeviceId = deviceId;
+    const context = this.audioCtx as (AudioContext & { setSinkId?: (id: string) => Promise<void> }) | null;
+    if (typeof context?.setSinkId === 'function') {
+      await context.setSinkId(deviceId);
+    }
   }
 
   async configureOutboundStream(inputStream: MediaStream): Promise<MediaStream> {
@@ -277,7 +282,6 @@ export class AudioEngine {
   async attachRemoteStream(
     peer: SpatialPeerRuntime,
     stream: MediaStream,
-    outputDeviceId: string,
   ): Promise<void> {
     await this.ensureContext();
     if (!this.audioCtx) return;
@@ -286,11 +290,6 @@ export class AudioEngine {
     const audioElement = new Audio();
     audioElement.srcObject = stream;
     audioElement.muted = true;
-
-    if (outputDeviceId && this.supportsSinkId(audioElement)) {
-      const sinkTarget = audioElement as HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };
-      await sinkTarget.setSinkId?.(outputDeviceId);
-    }
 
     await audioElement.play().catch(() => undefined);
     document.body.appendChild(audioElement);
