@@ -483,7 +483,10 @@ const signalingProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const signalingUrl = `${signalingProtocol}://${window.location.host}${withBase('ws')}`;
 const signaling = new SignalingClient(signalingUrl, handleSignalingStatus);
 
-const peerManager = new PeerManager(audio, updateStatus);
+const peerManager = new PeerManager(audio, updateStatus, {
+  isSessionRunning: () => state.running,
+  requestToken: () => signaling.send({ type: 'livekit_token_request' }),
+});
 
 /** Synchronizes voice subscriptions with the server-authoritative acoustic zones. */
 function refreshAcousticModel(): void {
@@ -1837,11 +1840,10 @@ function disconnect(): void {
 /** Connects the authenticated browser to its LiveKit voice room. */
 async function connectLiveKit(url: string, token: string): Promise<void> {
   try {
-    await peerManager.connectToRoom(url, token);
+    if (!await peerManager.connectToRoom(url, token)) return;
     for (const peer of state.peers.values()) peerManager.ensurePeer(peer.id, peer);
   } catch (error) {
     console.error('LiveKit connection failed:', error);
-    updateStatus('Voice connection failed.');
   }
 }
 

@@ -62,6 +62,12 @@ class WelcomeReadyPacket(BasePacket):
     type: Literal["welcome_ready"]
 
 
+class LiveKitTokenRequestPacket(BasePacket):
+    """Request fresh voice credentials for the current authenticated session."""
+
+    type: Literal["livekit_token_request"]
+
+
 class AdminRolesListPacket(BasePacket):
     type: Literal["admin_roles_list"]
 
@@ -240,6 +246,7 @@ ClientPacket = (
     | AuthResumePacket
     | AuthLogoutPacket
     | WelcomeReadyPacket
+    | LiveKitTokenRequestPacket
     | AdminRolesListPacket
     | AdminRoleCreatePacket
     | AdminRoleUpdatePermissionsPacket

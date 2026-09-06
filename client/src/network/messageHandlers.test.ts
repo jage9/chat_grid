@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createInitialState } from '../state/gameState';
 import { createOnMessageHandler } from './messageHandlers';
+import { incomingMessageSchema } from './protocol';
 
 function setupRemoteMovement() {
   const state = createInitialState();
@@ -59,4 +60,20 @@ describe('remote movement audio', () => {
       gain: 0.7,
     });
   });
+});
+
+it('validates and forwards each fresh LiveKit token to the voice connection', async () => {
+  const connectToLiveKit = vi.fn();
+  const handler = createOnMessageHandler({
+    connectToLiveKit,
+  } as unknown as Parameters<typeof createOnMessageHandler>[0]);
+
+  for (const token of ['initial-token', 'fresh-token']) {
+    await handler(incomingMessageSchema.parse({ type: 'livekit_token', url: 'wss://voice.test', token }));
+  }
+
+  expect(connectToLiveKit.mock.calls).toEqual([
+    ['wss://voice.test', 'initial-token'],
+    ['wss://voice.test', 'fresh-token'],
+  ]);
 });

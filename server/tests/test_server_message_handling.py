@@ -230,6 +230,83 @@ async def test_welcome_includes_livekit_token_when_configured(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("authenticated", "world_ready", "enabled", "expected_types"),
+    [
+        (True, True, True, ["livekit_token"]),
+        (False, False, True, ["auth_result"]),
+        (True, False, True, []),
+        (True, True, False, []),
+    ],
+)
+async def test_livekit_token_request(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    authenticated: bool,
+    world_ready: bool,
+    enabled: bool,
+    expected_types: list[str],
+) -> None:
+    """Fresh voice credentials go only to an authenticated, ready requester."""
+
+    server = SignalingServer(
+        "127.0.0.1",
+        8765,
+        None,
+        None,
+        auth_db_path=tmp_path / "auth.db",
+        livekit_url="wss://livekit.example.test" if enabled else None,
+        livekit_api_key="key" if enabled else None,
+        livekit_api_secret="test-livekit-secret-with-at-least-32-bytes"
+        if enabled
+        else None,
+    )
+    client = ClientConnection(websocket=_fake_ws(), id="requester", nickname="tester")
+    if authenticated:
+        _activate_client(client, permissions={"voice.send"})
+        server.clients[client.websocket] = client
+    client.world_ready = world_ready
+    other = _activate_client(
+        ClientConnection(websocket=_fake_ws(), id="other", nickname="other")
+    )
+    server.clients[other.websocket] = other
+    deliveries: list[tuple[ServerConnection, object]] = []
+
+    async def record_send(websocket: ServerConnection, packet: object) -> None:
+        deliveries.append((websocket, packet))
+
+    monkeypatch.setattr(server, "_send", record_send)
+    await server._handle_message(client, json.dumps({"type": "livekit_token_request"}))
+
+    assert _packet_types([packet for _, packet in deliveries]) == expected_types
+    assert all(websocket is client.websocket for websocket, _ in deliveries)
+    if authenticated and world_ready and enabled:
+        token_packet = _last_packet_of_type(
+            [packet for _, packet in deliveries], LiveKitTokenPacket
+        )
+        assert token_packet.url == server.livekit_url
+        assert token_packet.token
+        deliveries.clear()
+        monkeypatch.setattr(server, "_generate_livekit_token", lambda _: "fresh-token")
+        await server._handle_message(
+            client, json.dumps({"type": "livekit_token_request"})
+        )
+        assert deliveries == [
+            (
+                client.websocket,
+                LiveKitTokenPacket(
+                    type="livekit_token", token="fresh-token", url=server.livekit_url
+                ),
+            )
+        ]
+    elif not authenticated:
+        result = _last_packet_of_type(
+            [packet for _, packet in deliveries], AuthResultPacket
+        )
+        assert result.ok is False
+
+
+@pytest.mark.asyncio
 async def test_radio_metadata_refresh_updates_station_and_title(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

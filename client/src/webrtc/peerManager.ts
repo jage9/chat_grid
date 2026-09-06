@@ -1,4 +1,5 @@
 import {
+  ConnectionState,
   LocalAudioTrack,
   type RemoteParticipant,
   type RemoteTrack,
@@ -26,12 +27,19 @@ export class PeerManager {
   private room: Room | null = null;
   private localTrack: LocalAudioTrack | null = null;
   private outboundTrack: MediaStreamTrack | null = null;
+  private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+  private recoveryDelayMs = 2_000;
+  private recovering = false;
   private listenerZ = 0;
   private subscriptionResolver: (peer: PeerRuntime) => boolean = (peer) => peer.z === this.listenerZ;
 
   constructor(
     private readonly audio: AudioEngine,
     private readonly status: StatusHandler,
+    private readonly recovery: {
+      isSessionRunning: () => boolean;
+      requestToken: () => void;
+    },
   ) {}
 
   getPeer(id: string): PeerRuntime | undefined {
@@ -42,10 +50,11 @@ export class PeerManager {
     return this.peers.values();
   }
 
-  /** Connect to the authenticated LiveKit room. */
-  async connectToRoom(url: string, token: string): Promise<void> {
-    this.room?.disconnect();
-    this.localTrack = null;
+  /** Join with fresh credentials; return false if cleanup or another join supersedes it. */
+  async connectToRoom(url: string, token: string): Promise<boolean> {
+    this.clearRecoveryTimer();
+    if (!this.recovery.isSessionRunning()) return false;
+    this.releaseRoom();
 
     const room = new Room({
       audioOutput: { deviceId: this.outputDeviceId || undefined },
@@ -82,12 +91,32 @@ export class PeerManager {
     });
     room.on(RoomEvent.Reconnecting, () => this.status('Voice reconnecting...'));
     room.on(RoomEvent.Reconnected, () => this.status('Voice reconnected.'));
-    room.on(RoomEvent.Disconnected, () => this.status('Voice disconnected.'));
+    room.on(RoomEvent.Disconnected, () => {
+      if (this.room !== room) return;
+      this.releaseRoom();
+      this.scheduleRecovery();
+    });
 
-    await room.connect(url, token);
     this.room = room;
-    this.syncFloorSubscriptions();
-    await this.publishOutboundTrack();
+    try {
+      await room.connect(url, token);
+      if (this.room !== room) {
+        void room.disconnect(false);
+        return false;
+      }
+      this.syncFloorSubscriptions();
+      await this.publishOutboundTrack();
+      if (this.room !== room) return false;
+      if (this.recovering) this.status('Voice reconnected.');
+      this.recovering = false;
+      this.recoveryDelayMs = 2_000;
+      return true;
+    } catch (error) {
+      if (this.room !== room) return false;
+      this.releaseRoom();
+      this.scheduleRecovery();
+      throw error;
+    }
   }
 
   /** Ensure a grid participant exists before attaching their LiveKit track. */
@@ -132,12 +161,42 @@ export class PeerManager {
   }
 
   cleanupAll(): void {
+    this.clearRecoveryTimer();
+    this.recovering = false;
+    this.recoveryDelayMs = 2_000;
+    this.releaseRoom();
     for (const id of Array.from(this.peers.keys())) this.removePeer(id);
     this.pendingRemoteStreams.clear();
-    this.room?.disconnect();
+    this.outboundTrack = null;
+  }
+
+  private clearRecoveryTimer(): void {
+    if (this.recoveryTimer !== null) clearTimeout(this.recoveryTimer);
+    this.recoveryTimer = null;
+  }
+
+  private scheduleRecovery(): void {
+    if (!this.recovery.isSessionRunning() || this.recoveryTimer !== null) return;
+    if (!this.recovering) this.status('Voice reconnecting...');
+    this.recovering = true;
+    this.recoveryTimer = setTimeout(() => {
+      this.recoveryTimer = null;
+      if (!this.recovery.isSessionRunning()) return;
+      this.recoveryDelayMs = Math.min(this.recoveryDelayMs * 2, 30_000);
+      this.scheduleRecovery();
+      this.recovery.requestToken();
+    }, this.recoveryDelayMs);
+  }
+
+  /** Detach the room while keeping the processed microphone track available for rejoin. */
+  private releaseRoom(): void {
+    const room = this.room;
     this.room = null;
     this.localTrack = null;
-    this.outboundTrack = null;
+    room?.removeAllListeners();
+    void room?.disconnect(false);
+    this.pendingRemoteStreams.clear();
+    for (const id of this.peers.keys()) this.clearRemoteStream(id);
   }
 
   setPeerPosition(id: string, x: number, y: number, z: number, acousticZoneId: string): void {
@@ -210,7 +269,7 @@ export class PeerManager {
   }
 
   private async publishOutboundTrack(): Promise<void> {
-    if (!this.room || !this.outboundTrack) return;
+    if (this.room?.state !== ConnectionState.Connected || !this.outboundTrack) return;
     if (this.localTrack) {
       await this.localTrack.replaceTrack(this.outboundTrack, true);
       return;

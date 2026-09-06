@@ -74,6 +74,7 @@ from .models import (
     ChatMessagePacket,
     ClientPacket,
     LiveKitTokenPacket,
+    LiveKitTokenRequestPacket,
     NicknameResultPacket,
     PingPacket,
     PongPacket,
@@ -1027,6 +1028,11 @@ class SignalingServer:
             },
         )
         await self._send(client.websocket, packet)
+        await self._send_livekit_token(client)
+
+    async def _send_livekit_token(self, client: ClientConnection) -> None:
+        """Send fresh voice credentials only to this authenticated browser."""
+
         if self.livekit_enabled:
             await self._send(
                 client.websocket,
@@ -1940,6 +1946,10 @@ class SignalingServer:
             PACKET_LOGGER.info(
                 "ignoring pre-ready packet id=%s type=%s", client.id, packet.type
             )
+            return
+
+        if isinstance(packet, LiveKitTokenRequestPacket):
+            await self._send_livekit_token(client)
             return
 
         if await self._handle_admin_packet(client, packet):

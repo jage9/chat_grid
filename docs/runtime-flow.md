@@ -61,7 +61,7 @@ Radio metadata polling is limited to stations near a listener, deduplicated by s
 
 Core incoming message effects:
 
-- `livekit_token`: connects the authenticated browser to the LiveKit audio room.
+- `livekit_token`: cancels pending voice token requests and joins the LiveKit audio room with fresh credentials. Rejoining republishes the existing processed microphone track and re-ensures grid peers.
 - `auth_required`: prompt client to authenticate before gameplay messages.
 - `auth_result`: auth success/failure with optional session token + account metadata + `authPolicy`.
 - `auth_permissions`: live permission refresh (role + permission set) after role/permission admin changes.
@@ -87,6 +87,10 @@ Core incoming message effects:
   - negative `clientSentAt`: internal heartbeat response
 
 ## Stale Connection Recovery
+
+- Voice recovers independently when LiveKit emits `Disconnected` while the grid session is running. `PeerManager` announces "Voice reconnecting..." and asks `main.ts` to send `livekit_token_request` after 2 seconds, then 4, 8, 16, and at most 30 seconds between requests. It never rejoins with a cached token.
+- A fresh `livekit_token` stops the request timer. If joining or publishing fails, requests resume with the backoff; a successful join announces "Voice reconnected." and resets the delay.
+- Intentional room replacement and grid cleanup suppress voice recovery. Cleanup cancels pending requests and prevents an unfinished join from reviving the voice session.
 
 - If websocket closes unexpectedly, client starts reconnect flow immediately.
 - While running, client also sends heartbeat `ping` every 10 seconds (fallback for silent half-open cases).

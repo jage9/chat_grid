@@ -489,6 +489,7 @@ export type OutgoingMessage =
   | { type: 'auth_resume'; sessionToken: string }
   | { type: 'auth_logout' }
   | { type: 'welcome_ready' }
+  | { type: 'livekit_token_request' }
   | { type: 'admin_roles_list' }
   | { type: 'admin_role_create'; name: string }
   | { type: 'admin_role_update_permissions'; role: string; permissions: string[] }
