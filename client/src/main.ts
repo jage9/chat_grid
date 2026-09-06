@@ -45,6 +45,12 @@ import { formatSteppedNumber, snapNumberToStep } from './input/numeric';
 import { type IncomingMessage, type OutgoingMessage } from './network/protocol';
 import { createOnMessageHandler } from './network/messageHandlers';
 import { SignalingClient } from './network/signalingClient';
+import {
+  jitterReconnectDelayMs,
+  nextHeartbeatState,
+  reconnectDelayMs,
+  shouldAnnounceReconnect,
+} from './network/reconnectPolicy';
 import { CanvasRenderer } from './render/canvasRenderer';
 import {
   GRID_SIZE,
@@ -104,8 +110,8 @@ const MIC_CALIBRATION_ACTIVE_RMS_THRESHOLD = 0.003;
 const MIC_INPUT_GAIN_SCALE_MULTIPLIER = 2;
 const MIC_INPUT_GAIN_STEP = 0.05;
 const HEARTBEAT_INTERVAL_MS = 10_000;
-const RECONNECT_DELAY_MS = 5_000;
-const RECONNECT_MAX_ATTEMPTS = 3;
+// Allow the signaling open timeout (10s) plus the server welcome timeout (8s).
+const RECONNECT_ATTEMPT_TIMEOUT_MS = 18_000;
 const AUDIO_SUBSCRIPTION_REFRESH_MS = 500;
 const TELEPORT_SQUARES_PER_SECOND = 20;
 const AUTH_POLICY_STORAGE_KEY = 'chgridAuthPolicy';
@@ -440,7 +446,11 @@ let commandPaletteReturnMode: GameMode = 'normal';
 let heartbeatTimerId: number | null = null;
 let heartbeatNextPingId = -1;
 let heartbeatAwaitingPong = false;
+let heartbeatMissedPongs = 0;
 let reconnectInFlight = false;
+let reconnectController: AbortController | null = null;
+let retryPending: (() => void) | null = null;
+let connectionGeneration = 0;
 let activeServerInstanceId: string | null = null;
 let reloadScheduledForVersionMismatch = false;
 let peerListenGainByNickname = settings.loadPeerListenGains();
@@ -974,12 +984,14 @@ function toggleAudioLayer(layer: keyof AudioLayerState): void {
 
 /** Routes signaling transport status messages through chat buffer + status output. */
 function handleSignalingStatus(message: string): void {
+  if (reconnectInFlight) {
+    if (message === 'Disconnected.' && state.running) disconnect();
+    return;
+  }
   if (message === 'Connected.') {
     return;
   }
-  if (message === 'Disconnected.' && state.running && !reconnectInFlight) {
-    setConnectionStatus('Disconnected from server. Reconnecting...');
-    pushChatMessage('Disconnected from server. Reconnecting...');
+  if (message === 'Disconnected.' && state.running) {
     void reconnectAfterSocketClose();
     return;
   }
@@ -1568,6 +1580,7 @@ function stopHeartbeat(): void {
     heartbeatTimerId = null;
   }
   heartbeatAwaitingPong = false;
+  heartbeatMissedPongs = 0;
 }
 
 /** Sends one heartbeat ping packet using reserved negative ids. */
@@ -1580,11 +1593,12 @@ function sendHeartbeatPing(): void {
 /** Starts heartbeat timer for stale-connection detection. */
 function startHeartbeat(): void {
   stopHeartbeat();
-  heartbeatAwaitingPong = false;
   sendHeartbeatPing();
   heartbeatTimerId = window.setInterval(() => {
     if (!state.running) return;
-    if (heartbeatAwaitingPong) {
+    const heartbeat = nextHeartbeatState(heartbeatMissedPongs, !heartbeatAwaitingPong);
+    heartbeatMissedPongs = heartbeat.missedPongs;
+    if (heartbeat.stale) {
       void reconnectAfterHeartbeatTimeout();
       return;
     }
@@ -1592,43 +1606,89 @@ function startHeartbeat(): void {
   }, HEARTBEAT_INTERVAL_MS);
 }
 
-/** Performs one reconnect attempt when heartbeat timeout indicates stale signaling. */
+/** Starts recovery when consecutive missed heartbeats indicate stale signaling. */
 async function reconnectAfterHeartbeatTimeout(): Promise<void> {
-  await reconnectWithRetry('heartbeat');
+  await reconnectWithRetry();
 }
 
-/** Performs immediate reconnect when websocket closes unexpectedly. */
+/** Starts recovery when the websocket closes unexpectedly. */
 async function reconnectAfterSocketClose(): Promise<void> {
-  await reconnectWithRetry('socketClose');
+  await reconnectWithRetry();
 }
 
-/** Reconnects after disconnect with delay and bounded retry attempts. */
-async function reconnectWithRetry(reason: 'heartbeat' | 'socketClose'): Promise<void> {
-  if (reconnectInFlight || !state.running) return;
-  reconnectInFlight = true;
-  stopHeartbeat();
-  if (reason === 'heartbeat') {
-    pushChatMessage('Connection stale. Reconnecting...');
-  }
-  disconnect();
-  for (let attempt = 1; attempt <= RECONNECT_MAX_ATTEMPTS; attempt += 1) {
-    await new Promise((resolve) => window.setTimeout(resolve, RECONNECT_DELAY_MS));
-    await connect();
-    const waitStartedAt = Date.now();
-    while (!state.running && Date.now() - waitStartedAt < 4_000) {
-      await new Promise((resolve) => window.setTimeout(resolve, 100));
-    }
-    if (state.running) {
-      reconnectInFlight = false;
-      return;
-    }
-    if (attempt < RECONNECT_MAX_ATTEMPTS) {
-      pushChatMessage(`Reconnect attempt ${attempt} failed. Retrying in 5 seconds...`);
-    }
-  }
-  pushChatMessage('Reconnect failed after 3 attempts. Press Connect to retry.');
-  audio.sfxUiCancel();
+/** Waits without leaving a retry or polling timer behind on cancellation. */
+function waitForReconnect(delayMs: number, signal: AbortSignal, backoff = false): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const finish = () => {
+      window.clearTimeout(timerId);
+      signal.removeEventListener('abort', finish);
+      if (retryPending === finish) retryPending = null;
+      resolve();
+    };
+    const timerId = window.setTimeout(finish, delayMs);
+    signal.addEventListener('abort', finish, { once: true });
+    if (backoff) retryPending = finish;
+  });
+}
+
+/** Cancels the current recovery cycle before a manual connection action. */
+function cancelReconnect(): void {
+  reconnectController?.abort();
+  reconnectController = null;
   reconnectInFlight = false;
+}
+
+/** Retries until welcome or cancellation, with capped exponential delays. */
+async function reconnectWithRetry(): Promise<void> {
+  if (reconnectInFlight || !state.running) return;
+  const controller = new AbortController();
+  const { signal } = controller;
+  reconnectController = controller;
+  reconnectInFlight = true;
+  disconnect();
+  dom.disconnectButton.classList.remove('hidden');
+  for (let attempt = 1; !signal.aborted; attempt += 1) {
+    const baseDelayMs = reconnectDelayMs(attempt);
+    await waitForReconnect(jitterReconnectDelayMs(baseDelayMs, Math.random()), signal, true);
+    if (signal.aborted) return;
+    if (state.running) break;
+    if (attempt === 1 || shouldAnnounceReconnect(baseDelayMs)) {
+      setConnectionStatus('Reconnecting...');
+      pushChatMessage('Reconnecting...');
+    }
+    let attemptActive = true;
+    // Scope delayed connect callbacks to this attempt, including its welcome timeout.
+    void runConnectFlow(getConnectionFlowDeps(() => attemptActive && !signal.aborted));
+    const waitStartedAt = Date.now();
+    while (!signal.aborted && !state.running && mediaSession.isConnecting()
+      && Date.now() - waitStartedAt < RECONNECT_ATTEMPT_TIMEOUT_MS) {
+      await waitForReconnect(100, signal);
+    }
+    if (signal.aborted) return;
+    if (state.running) break;
+    attemptActive = false;
+    disconnect();
+    dom.disconnectButton.classList.remove('hidden');
+  }
+  if (reconnectController === controller) {
+    reconnectController = null;
+    reconnectInFlight = false;
+  }
+}
+
+/** Gives manual Connect priority over automatic recovery. */
+async function connectManually(): Promise<void> {
+  const wasReconnecting = reconnectInFlight;
+  cancelReconnect();
+  if (wasReconnecting) disconnect();
+  await connect();
+}
+
+/** Stops automatic recovery as well as the current connection. */
+function disconnectManually(): void {
+  cancelReconnect();
+  disconnect();
 }
 
 /** Sends current auth request over signaling websocket after socket open. */
@@ -1697,12 +1757,15 @@ function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admi
 }
 
 /** Builds dependencies shared by connect/disconnect flow helpers. */
-function getConnectionFlowDeps(): ConnectFlowDeps {
+function getConnectionFlowDeps(isAttemptActive = () => true): ConnectFlowDeps {
+  const generation = connectionGeneration;
+  const isActive = () => generation === connectionGeneration && isAttemptActive();
   return {
     state,
     dom,
     sanitizeName,
     updateStatus: (message) => {
+      if (!isActive() || reconnectInFlight) return;
       if (!state.running) {
         setConnectionStatus(message);
         return;
@@ -1712,19 +1775,28 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
       } else if (message.startsWith('Connect failed.')) {
         setConnectionStatus(message);
       }
-      if (reconnectInFlight && message === 'Disconnected.') {
-        return;
-      }
       pushChatMessage(message);
     },
-    updateConnectAvailability,
-    mediaIsConnecting: () => mediaSession.isConnecting(),
-    mediaSetConnecting: (value) => mediaSession.setConnecting(value),
-    mediaStopLocalMedia: () => stopLocalMedia(),
+    updateConnectAvailability: () => {
+      if (isActive()) updateConnectAvailability();
+    },
+    mediaIsConnecting: () => isActive() && mediaSession.isConnecting(),
+    mediaSetConnecting: (value) => {
+      if (isActive()) mediaSession.setConnecting(value);
+    },
+    mediaStopLocalMedia: () => {
+      if (isActive()) stopLocalMedia();
+    },
     signalingConnect: (handler) => signaling.connect(handler as (message: IncomingMessage) => Promise<void>),
-    signalingSendAuth: () => sendAuthRequest(),
-    signalingDisconnect: () => signaling.disconnect(),
-    onMessage: (message) => onSignalingMessage(message as IncomingMessage),
+    signalingSendAuth: () => {
+      if (isActive()) sendAuthRequest();
+    },
+    signalingDisconnect: () => {
+      if (isActive()) signaling.disconnect();
+    },
+    onMessage: async (message) => {
+      if (isActive()) await onSignalingMessage(message as IncomingMessage);
+    },
     peerManagerCleanupAll: () => peerManager.cleanupAll(),
     radioCleanupAll: () => radioRuntime.cleanupAll(),
     emitCleanupAll: () => {
@@ -1745,9 +1817,10 @@ async function connect(): Promise<void> {
 
 /** Tears down active session state, media, peers, and UI back to pre-connect mode. */
 function disconnect(): void {
+  connectionGeneration += 1;
   stopHeartbeat();
   runDisconnectFlow(getConnectionFlowDeps());
-  setConnectionStatus('Disconnected.');
+  if (!reconnectInFlight) setConnectionStatus('Disconnected.');
   pendingEscapeDisconnect = false;
   restoreLoopbackAfterMicGainEdit();
   subscriptionRefreshPending = false;
@@ -1850,9 +1923,10 @@ const onAppMessage = createOnMessageHandler({
 
 /** Handles signaling packets with heartbeat/restart metadata before app-level dispatch. */
 async function onSignalingMessage(message: IncomingMessage): Promise<void> {
-  if (message.type === 'pong' && message.clientSentAt < 0) {
+  if (message.type === 'pong') {
+    heartbeatMissedPongs = nextHeartbeatState(heartbeatMissedPongs, true).missedPongs;
     heartbeatAwaitingPong = false;
-    return;
+    if (message.clientSentAt < 0) return;
   }
   let restartAnnouncement: string | null = null;
   let connectedAnnouncement: string | null = null;
@@ -2290,7 +2364,7 @@ function openChatCommand(): void {
 function escapeCommand(): void {
   if (pendingEscapeDisconnect) {
     pendingEscapeDisconnect = false;
-    disconnect();
+    disconnectManually();
     return;
   }
   pendingEscapeDisconnect = true;
@@ -3065,8 +3139,8 @@ mobileControls = setupMobileControls({
 setupDomUiHandlers({
   dom,
   updateConnectAvailability,
-  connect,
-  disconnect,
+  connect: connectManually,
+  disconnect: disconnectManually,
   openSettings,
   closeSettings,
   updateStatus,
@@ -3082,7 +3156,14 @@ setupDomUiHandlers({
   setOutputDevice: (id) => peerManager.setOutputDevice(id),
 });
 authController.setupUiHandlers({
-  connect,
+  connect: connectManually,
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') retryPending?.();
+});
+window.addEventListener('beforeunload', () => {
+  cancelReconnect();
+  stopHeartbeat();
 });
 authController.initializeUi();
 updateDeviceSummary();

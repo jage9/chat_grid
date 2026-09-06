@@ -90,8 +90,11 @@ Core incoming message effects:
 
 - If websocket closes unexpectedly, client starts reconnect flow immediately.
 - While running, client also sends heartbeat `ping` every 10 seconds (fallback for silent half-open cases).
-- If one heartbeat `pong` is missed (10-second interval), client starts reconnect flow.
-- Reconnect flow waits 5 seconds and retries up to 3 times.
+- Two consecutive heartbeat intervals without a `pong` start reconnect flow; one missed interval is tolerated. Any received pong resets the miss counter.
+- Reconnect attempts wait 2, 4, 8, 16, 32, then 60 seconds, with up to +/-15% jitter. The base delay stays at 60 seconds for subsequent attempts.
+- Retries continue indefinitely until the grid connects, the user presses Connect or Disconnect, or the page unloads. Manual actions cancel the pending retry timer and take priority over that recovery cycle.
+- The first reconnect attempt is announced. Later attempts are announced only when their scheduled base delay is at least 16 seconds, so short-delay retries stay quiet.
+- Returning to a visible tab while a retry is waiting triggers that retry immediately. It does not start another attempt while one is already connecting.
 - If reconnect lands on a different `welcome.serverInfo.instanceId`, client announces server restart.
 - Connect/reconnect status message is emitted from `welcome` and includes server version.
 - Server-only deploys no longer force browser reloads unless `expectedClientRevision` changes.
