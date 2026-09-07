@@ -263,7 +263,7 @@ export class PianoController {
     const itemId = this.activePianoItemId;
     for (const code of Array.from(this.activePianoKeys)) {
       const midi = this.activePianoKeyMidi.get(code);
-      if (!Number.isFinite(midi)) continue;
+      if (typeof midi !== 'number' || !Number.isFinite(midi)) continue;
       this.deps.signalingSend({ type: 'item_piano_note', itemId, keyId: code, midi, on: false });
       this.pianoSynth.noteOff(code);
     }
@@ -401,7 +401,7 @@ export class PianoController {
       if (previousCode && previousCode !== input.code) {
         const previousMidi = this.activePianoKeyMidi.get(previousCode);
         this.pianoSynth.noteOff(previousCode);
-        if (Number.isFinite(previousMidi)) {
+        if (typeof previousMidi === 'number' && Number.isFinite(previousMidi)) {
           this.deps.signalingSend({ type: 'item_piano_note', itemId, keyId: previousCode, midi: previousMidi, on: false });
         }
       }
@@ -421,7 +421,7 @@ export class PianoController {
     const itemId = this.activePianoItemId;
     const midi = this.activePianoKeyMidi.get(code);
     this.activePianoKeyMidi.delete(code);
-    if (!itemId || !Number.isFinite(midi)) {
+    if (!itemId || typeof midi !== 'number' || !Number.isFinite(midi)) {
       this.pianoSynth.noteOff(code);
       if (this.activePianoMonophonicKey === code) {
         this.activePianoMonophonicKey = null;
@@ -453,7 +453,7 @@ export class PianoController {
       return;
     }
     const fallbackMidi = this.activePianoKeyMidi.get(fallbackCode);
-    if (!Number.isFinite(fallbackMidi)) {
+    if (typeof fallbackMidi !== 'number' || !Number.isFinite(fallbackMidi)) {
       this.activePianoMonophonicKey = null;
       return;
     }

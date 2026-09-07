@@ -400,7 +400,7 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
         });
         return;
       }
-      deps.updateStatus(entries[index].tooltip);
+      deps.updateStatus(entries[index].tooltip ?? 'No tooltip available.');
     }, 'Wall actions', openWallList);
   }
 

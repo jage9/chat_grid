@@ -103,7 +103,8 @@ Core incoming message effects:
 
 - Server enforces item/chat/nickname/voice/admin/World Builder permissions for each packet.
 - Role and permission changes apply live to connected users without reconnect.
-- `voice.send` revocation is pushed immediately via `auth_permissions`; client mutes outbound voice track.
+- `voice.send` revocation is pushed immediately via `auth_permissions`; client mutes outbound voice track. Current permissions and the user’s mute setting are reapplied after microphone setup or replacement.
+- Successful role creation/deletion triggers a fresh `admin_roles_list` request so menus reflect the server’s current roles.
 
 ## Floors And Elevators
 

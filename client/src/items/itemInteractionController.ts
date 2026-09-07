@@ -90,13 +90,13 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
   function canManageDeleteItem(item: WorldItem): boolean {
     const metadata = deps.getItemManagementActionMetadata('delete');
     if (metadata?.anyPermission && deps.hasPermission(metadata.anyPermission)) return true;
-    return Boolean(metadata?.ownPermission) && deps.hasPermission(metadata.ownPermission) && deps.getAuthUserId().length > 0 && item.createdBy === deps.getAuthUserId();
+    return !!metadata?.ownPermission && deps.hasPermission(metadata.ownPermission) && deps.getAuthUserId().length > 0 && item.createdBy === deps.getAuthUserId();
   }
 
   function canManageTransferItem(item: WorldItem): boolean {
     const metadata = deps.getItemManagementActionMetadata('transfer');
     if (metadata?.anyPermission && deps.hasPermission(metadata.anyPermission)) return true;
-    return Boolean(metadata?.ownPermission) && deps.hasPermission(metadata.ownPermission) && deps.getAuthUserId().length > 0 && item.createdBy === deps.getAuthUserId();
+    return !!metadata?.ownPermission && deps.hasPermission(metadata.ownPermission) && deps.getAuthUserId().length > 0 && item.createdBy === deps.getAuthUserId();
   }
 
   function getManagementOptions(item: WorldItem): ItemManagementOption[] {

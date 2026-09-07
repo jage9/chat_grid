@@ -598,7 +598,6 @@ const adminController = createAdminController({
   signalingSend: (message) => signaling.send(message),
   announceMenuEntry,
   updateStatus,
-  getGridName: () => activeGridName,
   sfxUiBlip: () => audio.sfxUiBlip(),
   sfxUiCancel: () => audio.sfxUiCancel(),
   applyTextInputEdit,
@@ -1535,7 +1534,7 @@ async function checkMicPermission(): Promise<boolean> {
 /** Starts local microphone capture and rebuilds the outbound track pipeline. */
 async function setupLocalMedia(audioDeviceId = ''): Promise<void> {
   await mediaSession.setupLocalMedia(audioDeviceId);
-  applyVoiceSendPermission();
+  authController.applyVoiceSendPermission();
 }
 
 /** Runs a short RMS sample to estimate and apply a usable microphone input gain. */
@@ -3091,6 +3090,7 @@ setupDomUiHandlers({
   openSettings,
   closeSettings,
   updateStatus,
+  getGridName: () => activeGridName,
   sfxUiBlip: () => audio.sfxUiBlip(),
   setupLocalMedia,
   setPreferredInput: (id, name) => {

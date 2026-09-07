@@ -25,6 +25,9 @@ npm run dev
 
 3) Open `http://localhost:5173`
 
+From `client/`, run `npm run typecheck` for TypeScript validation, `npm test` for
+client tests, or `npm run build` to typecheck and produce a production bundle.
+
 Notes:
 - Server defaults to `config.toml` when present.
 - Server bind/port defaults are `127.0.0.1:8765` unless changed in config or CLI flags.

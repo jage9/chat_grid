@@ -181,24 +181,25 @@ export function createAdminController(deps: AdminControllerDeps): {
       return;
     }
 
-    if (adminPendingUserMutation) {
-      if (adminPendingUserMutation.action === 'set_role') {
-        const target = adminUsers.find((entry) => entry.username === adminPendingUserMutation.username);
+    const pendingUserMutation = adminPendingUserMutation;
+    if (pendingUserMutation) {
+      if (pendingUserMutation.action === 'set_role') {
+        const target = adminUsers.find((entry) => entry.username === pendingUserMutation.username);
         if (target) {
-          target.role = adminPendingUserMutation.role;
+          target.role = pendingUserMutation.role;
         }
         if (deps.state.mode === 'adminUserRoleSelect') {
           deps.state.mode = 'adminUserList';
           adminPendingUserAction = 'set_role';
-          const userIndex = adminUsers.findIndex((entry) => entry.username === adminPendingUserMutation.username);
+          const userIndex = adminUsers.findIndex((entry) => entry.username === pendingUserMutation.username);
           if (userIndex >= 0) {
             adminUserIndex = userIndex;
             const selected = adminUsers[adminUserIndex];
             deps.updateStatus(`${adminUserLabel(selected)}.`);
           }
         }
-      } else if (adminPendingUserMutation.action === 'ban') {
-        adminUsers = adminUsers.filter((entry) => entry.username !== adminPendingUserMutation.username);
+      } else if (pendingUserMutation.action === 'ban') {
+        adminUsers = adminUsers.filter((entry) => entry.username !== pendingUserMutation.username);
         if (deps.state.mode === 'adminUserList' && adminPendingUserAction === 'ban') {
           if (adminUsers.length > 0) {
             adminUserIndex = Math.max(0, Math.min(adminUserIndex, adminUsers.length - 1));
@@ -207,8 +208,8 @@ export function createAdminController(deps: AdminControllerDeps): {
             adminPendingUserAction = null;
           }
         }
-      } else if (adminPendingUserMutation.action === 'unban') {
-        adminUsers = adminUsers.filter((entry) => entry.username !== adminPendingUserMutation.username);
+      } else if (pendingUserMutation.action === 'unban') {
+        adminUsers = adminUsers.filter((entry) => entry.username !== pendingUserMutation.username);
         if (deps.state.mode === 'adminUserList' && adminPendingUserAction === 'unban') {
           if (adminUsers.length > 0) {
             adminUserIndex = Math.max(0, Math.min(adminUserIndex, adminUsers.length - 1));
@@ -217,8 +218,8 @@ export function createAdminController(deps: AdminControllerDeps): {
             adminPendingUserAction = null;
           }
         }
-      } else if (adminPendingUserMutation.action === 'delete_account') {
-        adminUsers = adminUsers.filter((entry) => entry.username !== adminPendingUserMutation.username);
+      } else if (pendingUserMutation.action === 'delete_account') {
+        adminUsers = adminUsers.filter((entry) => entry.username !== pendingUserMutation.username);
         if (deps.state.mode === 'adminUserList' && adminPendingUserAction === 'delete_account') {
           if (adminUsers.length > 0) {
             adminUserIndex = Math.max(0, Math.min(adminUserIndex, adminUsers.length - 1));
@@ -231,21 +232,8 @@ export function createAdminController(deps: AdminControllerDeps): {
       adminPendingUserMutation = null;
     }
 
-    if (message.action === 'role_create' && message.role) {
-      adminRoles.push({
-        id: message.role.id,
-        name: message.role.name,
-        isSystem: message.role.isSystem,
-        userCount: message.role.userCount,
-        permissions: [...message.role.permissions],
-      });
-      adminRoles.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
-    }
-    if (message.action === 'role_delete' && message.roleName) {
-      adminRoles = adminRoles.filter((entry) => entry.name !== message.roleName);
-      if (deps.state.mode === 'adminRoleList') {
-        adminRoleIndex = Math.max(0, Math.min(adminRoleIndex, Math.max(0, adminRoles.length)));
-      }
+    if (message.action === 'role_create' || message.action === 'role_delete') {
+      deps.signalingSend({ type: 'admin_roles_list' });
     }
   }
 

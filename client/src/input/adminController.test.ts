@@ -57,3 +57,26 @@ describe('admin controller registered-user list', () => {
     expect(deps.signalingSend).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('admin controller role mutations', () => {
+  it('refreshes roles after create and delete results', () => {
+    const deps = createDeps();
+    const controller = createAdminController(deps);
+
+    controller.handleAdminActionResult({
+      type: 'admin_action_result',
+      ok: true,
+      action: 'role_create',
+      message: 'Created role moderator.',
+    });
+    controller.handleAdminActionResult({
+      type: 'admin_action_result',
+      ok: true,
+      action: 'role_delete',
+      message: 'Deleted role moderator; reassigned 0 users to user.',
+    });
+
+    expect(deps.signalingSend).toHaveBeenNthCalledWith(1, { type: 'admin_roles_list' });
+    expect(deps.signalingSend).toHaveBeenNthCalledWith(2, { type: 'admin_roles_list' });
+  });
+});
