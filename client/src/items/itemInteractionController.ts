@@ -160,10 +160,11 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
   function selectionItemLabel(item: WorldItem, context: Exclude<SelectionContext, null>): string {
     const baseLabel = deps.itemLabel(item);
     const carriedByPlayer = deps.state.player.id !== null && item.carrierId === deps.state.player.id;
+    const label = carriedByPlayer ? `${baseLabel}, held` : baseLabel;
     if (context === 'pickupDrop') {
-      return `${carriedByPlayer ? 'Drop' : 'Pick up'} ${baseLabel}`;
+      return `${carriedByPlayer ? 'Drop' : 'Pick up'} ${label}`;
     }
-    return carriedByPlayer ? `${baseLabel}, carried` : baseLabel;
+    return label;
   }
 
   function beginItemSelection(context: Exclude<SelectionContext, null>, items: WorldItem[]): void {

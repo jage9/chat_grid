@@ -90,7 +90,7 @@ describe('item interaction controller', () => {
       const fixture = createFixture();
       fixture.controller.beginItemSelection(context, [fixture.held, fixture.ground]);
 
-      expect(fixture.deps.announceMenuEntry).toHaveBeenLastCalledWith('Select item', `${ITEM_TITLE}, carried`);
+      expect(fixture.deps.announceMenuEntry).toHaveBeenLastCalledWith('Select item', `${ITEM_TITLE}, held`);
       fixture.controller.handleSelectItemModeInput('Enter', 'Enter');
       expect(fixture.deps.state.mode).toBe(expectedMode);
       onSelect?.(fixture);
@@ -101,7 +101,7 @@ describe('item interaction controller', () => {
     const fixture = createFixture();
     fixture.controller.beginItemSelection('pickupDrop', [fixture.held, fixture.ground]);
 
-    expect(fixture.deps.announceMenuEntry).toHaveBeenLastCalledWith('Select item', `Drop ${ITEM_TITLE}`);
+    expect(fixture.deps.announceMenuEntry).toHaveBeenLastCalledWith('Select item', `Drop ${ITEM_TITLE}, held`);
     fixture.controller.handleSelectItemModeInput('KeyT', 't');
     expect(fixture.deps.updateStatus).toHaveBeenLastCalledWith(`Pick up ${ITEM_TITLE}`);
     fixture.controller.handleSelectItemModeInput('Enter', 'Enter');
@@ -121,11 +121,13 @@ describe('item interaction controller', () => {
 
     fixture.controller.beginItemSelection('use', candidates);
     fixture.controller.handleSelectItemModeInput('ArrowDown', 'ArrowDown');
+    expect(fixture.deps.updateStatus).toHaveBeenLastCalledWith(`${ITEM_TITLE}, held`);
     fixture.controller.handleSelectItemModeInput('Enter', 'Enter');
     expect(fixture.deps.useItem).toHaveBeenCalledWith(secondHeld);
 
     fixture.controller.beginItemSelection('pickupDrop', candidates);
     fixture.controller.handleSelectItemModeInput('ArrowDown', 'ArrowDown');
+    expect(fixture.deps.updateStatus).toHaveBeenLastCalledWith(`Drop ${ITEM_TITLE}, held`);
     fixture.controller.handleSelectItemModeInput('Enter', 'Enter');
     expect(fixture.deps.pickupDropItem).toHaveBeenCalledWith(secondHeld);
 

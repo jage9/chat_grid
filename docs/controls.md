@@ -48,7 +48,7 @@ This document is the authoritative keymap for the client.
 - `Space` in item management menu: Read tooltip/help for the selected action
 - `Enter`: Use a held item or an item on your square
 - `Shift+Enter`: Secondary action for a held item or an item on your square
-- Item commands act directly when there is one target and open a selection list when there are several. Held items appear first and are marked “carried”; items held by other users are excluded.
+- Item commands act directly when there is one target and open a selection list when there are several. Held items appear first and are announced as “item name, held”; items held by other users are excluded.
 - Carrying defaults to at most two items, configured by the server. `H` announces all held items.
 - For an elevator, `Enter` calls or starts opening it, enters or exits only after the door is fully open, and has no boarding effect while the door is opening or closing.
 
