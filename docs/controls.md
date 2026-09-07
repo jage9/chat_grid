@@ -37,13 +37,16 @@ This document is the authoritative keymap for the client.
 - `<` / `>`: First/last message
 
 ### Items
+- `H`: What are you holding?
 - `I`: Locate nearest item
 - `Shift+I`: List items and teleport to selected item with `Enter`
 - `A`: Add item
 - `O`: Edit item properties
 - `Shift+O`: Inspect all item properties
-- `D`: Pick up/drop item
-- `Z`: Item management menu (delete/transfer when permitted)
+- `D`: Pick up or drop item
+- `Z`: Manage items
+- `Hand to user`: Select an eligible nearby user to receive a held item without changing ownership.
+- `Transfer ownership`: Change an item’s owner without moving it or changing who holds it.
 - `Space` in item management menu: Read tooltip/help for the selected action
 - `Enter`: Use item
 - `Shift+Enter`: Secondary item action

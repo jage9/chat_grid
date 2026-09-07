@@ -79,13 +79,10 @@ class ItemService:
         if item_id in self.items:
             del self.items[item_id]
 
-    def find_carried_item(self, client_id: str) -> WorldItem | None:
-        """Return the currently carried item for a client, if any."""
+    def find_carried_items(self, client_id: str) -> list[WorldItem]:
+        """Return all items currently carried by one client."""
 
-        for item in self.items.values():
-            if item.carrierId == client_id:
-                return item
-        return None
+        return [item for item in self.items.values() if item.carrierId == client_id]
 
     def items_on_square(self, x: int, y: int, z: int) -> list[WorldItem]:
         """Return non-carried items occupying a specific world coordinate."""

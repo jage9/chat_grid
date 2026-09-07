@@ -355,6 +355,9 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
     carried = server.item_service.default_item(client, "dice")
     carried.carrierId = client.id
     server.item_service.add_item(carried)
+    carried_two = server.item_service.default_item(client, "wheel")
+    carried_two.carrierId = client.id
+    server.item_service.add_item(carried_two)
 
     sleeps: list[tuple[float, str]] = []
 
@@ -371,6 +374,7 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
     assert client.z == 40
     assert client.elevator_id == elevator.id
     assert carried.z == 40
+    assert carried_two.z == 40
     arrival = next(
         packet
         for packet in transport.packets_of_type(client, ItemElevatorStatusPacket)

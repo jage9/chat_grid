@@ -288,21 +288,27 @@ export const itemRemoveSchema = z.object({
 export const itemActionResultSchema = z.object({
   type: z.literal('item_action_result'),
   ok: z.boolean(),
-  action: z.enum(['add', 'pickup', 'drop', 'delete', 'transfer', 'use', 'secondary_use', 'update']),
+  action: z.enum(['add', 'pickup', 'drop', 'delete', 'transfer', 'hand', 'use', 'secondary_use', 'update']),
   message: z.string(),
   itemId: z.string().optional(),
+});
+
+const itemTargetSummarySchema = z.object({
+  userId: z.string(),
+  username: z.string(),
+  online: z.boolean(),
 });
 
 export const itemTransferTargetsSchema = z.object({
   type: z.literal('item_transfer_targets'),
   itemId: z.string(),
-  targets: z.array(
-    z.object({
-      userId: z.string(),
-      username: z.string(),
-      online: z.boolean(),
-    }),
-  ),
+  targets: z.array(itemTargetSummarySchema),
+});
+
+export const itemHandTargetsSchema = z.object({
+  type: z.literal('item_hand_targets'),
+  itemId: z.string(),
+  targets: z.array(itemTargetSummarySchema),
 });
 
 export const itemUseSoundSchema = z.object({
@@ -466,6 +472,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   itemRemoveSchema,
   itemActionResultSchema,
   itemTransferTargetsSchema,
+  itemHandTargetsSchema,
   itemUseSoundSchema,
   itemClockAnnounceSchema,
   itemPianoNoteSchema,
@@ -509,6 +516,8 @@ export type OutgoingMessage =
   | { type: 'item_delete'; itemId: string }
   | { type: 'item_transfer_targets'; itemId: string }
   | { type: 'item_transfer'; itemId: string; targetUserId: string }
+  | { type: 'item_hand_targets'; itemId: string }
+  | { type: 'item_hand'; itemId: string; targetUserId: string }
   | { type: 'item_use'; itemId: string }
   | { type: 'item_secondary_use'; itemId: string }
   | { type: 'structure_add_wall'; preset: string; direction: 'north' | 'south' | 'east' | 'west' }

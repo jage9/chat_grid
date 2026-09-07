@@ -189,6 +189,7 @@ class SignalingServer:
         livekit_room_name: str = "chatgrid",
         *,
         transport: Transport | None = None,
+        max_carried_items: int = 2,
     ):
         """Initialize runtime state, TLS context, and item service."""
 
@@ -215,6 +216,9 @@ class SignalingServer:
             username_max_length=username_max_length,
         )
         self.grid_size = max(1, grid_size)
+        if max_carried_items <= 0:
+            raise ValueError("max_carried_items must be greater than zero.")
+        self.max_carried_items = max_carried_items
         self.item_service = ItemService(state_file=state_file)
         structure_state_file = (
             state_file.with_name("structures.json") if state_file else None
@@ -2031,7 +2035,7 @@ class SignalingServer:
                     z=client.z,
                     exclude=client,
                 )
-            await self.item_runtime.sync_carried_item(client)
+            await self.item_runtime.sync_carried_items(client)
             return
 
         if isinstance(packet, TeleportCompletePacket):
@@ -2067,7 +2071,7 @@ class SignalingServer:
                 client_position_packet(client),
                 exclude=client,
             )
-            await self.item_runtime.sync_carried_item(client)
+            await self.item_runtime.sync_carried_items(client)
             await self.delivery.broadcast(
                 BroadcastTeleportCompletePacket(
                     type="teleport_complete",
@@ -2470,5 +2474,6 @@ def run() -> None:
         livekit_api_key=livekit_api_key,
         livekit_api_secret=livekit_api_secret,
         livekit_room_name=config.livekit.room_name,
+        max_carried_items=config.items.max_carried_items,
     )
     asyncio.run(server.start())

@@ -91,16 +91,30 @@ Core incoming message effects:
 - If websocket closes unexpectedly, client starts reconnect flow immediately.
 - While running, client also sends heartbeat `ping` every 10 seconds (fallback for silent half-open cases).
 - If one heartbeat `pong` is missed (10-second interval), client starts reconnect flow.
-- Reconnect flow waits 5 seconds and retries up to 3 times.
+- Reconnect flow waits 5 seconds before each attempt and retries up to 3 times, then asks the user to press Connect.
+- Each attempt waits for a complete server welcome: socket opening has a 10-second timeout, followed by an 8-second welcome timeout. Saved-session authentication uses the same welcome deadline.
+- Disconnect, logout, and a new manual connection cancel pending retries and connection attempts. Closed, failed, and replaced sockets cannot affect a newer attempt; welcome timers are cleared when their attempt finishes.
+- Receiving welcome completes reconnection before microphone setup, so a microphone permission prompt does not consume another retry.
 - If reconnect lands on a different `welcome.serverInfo.instanceId`, client announces server restart.
 - Connect/reconnect status message is emitted from `welcome` and includes server version.
 - Server-only deploys no longer force browser reloads unless `expectedClientRevision` changes.
+
+## Carried Item Presentation
+
+- `H` announces all items held by the local player or says they are holding nothing.
+- `L` and `Shift+L` append carried item titles after the user’s location, only when carrying something. These descriptions use the current server-synchronized `carrierId` on items.
+- Pickup enforces `items.max_carried_items` from server config, default `2`. Every held item follows walking, teleport, and elevator travel. Disconnect drops all of them at the last tile (or the elevator’s last completed landing); reconnect does not restore carrying.
+- Item action menus combine held items with ground items on the current square. `D` selects a pickup or drop action by item; use, secondary use, edit, inspect, and management likewise select one target when there are several.
+
+- Selecting “Hand to user” requests eligible recipients from the server: online, on the same floor within five grid squares (Chebyshev distance), with pickup permission and a free carrying slot. Selecting a name sends the hand request; the server rechecks eligibility before moving the item into that user’s hands, leaving ownership unchanged.
+- “Transfer ownership” works for items on your square or in your hands, including offline recipients and confirmation. Only ownership changes; carrier and position stay unchanged, with no recipient range or capacity requirement.
 
 ## Authorization Runtime
 
 - Server enforces item/chat/nickname/voice/admin/World Builder permissions for each packet.
 - Role and permission changes apply live to connected users without reconnect.
-- `voice.send` revocation is pushed immediately via `auth_permissions`; client mutes outbound voice track.
+- `voice.send` revocation is pushed immediately via `auth_permissions`; client mutes outbound voice track. Current permissions and the user’s mute setting are reapplied after microphone setup or replacement.
+- Successful role creation/deletion triggers a fresh `admin_roles_list` request so menus reflect the server’s current roles.
 
 ## Floors And Elevators
 
@@ -131,6 +145,7 @@ On disconnect:
 
 ## Runtime Components
 
+- `Delivery`: routes typed packets to one client or the authenticated roster through a transport. Production uses the websocket transport; server tests use a recording transport so delivery and fanout assertions do not patch server internals.
 - `PeerManager`: LiveKit room lifecycle and remote track attach.
 - `RadioStationRuntime`: shared stream sources + per-item output/effects/spatialization.
 - `ItemEmitRuntime`: per-item looping emit source + spatialization.

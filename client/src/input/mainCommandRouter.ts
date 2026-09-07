@@ -25,6 +25,7 @@ export type MainModeCommand =
   | 'locateNearestItem'
   | 'listItems'
   | 'pickupDropItem'
+  | 'speakHeldItems'
   | 'openItemManagement'
   | 'editItem'
   | 'inspectItem'
@@ -63,6 +64,7 @@ export function resolveMainModeCommand(code: string, shiftKey: boolean): MainMod
   if (code === 'KeyA') return shiftKey ? null : 'addItem';
   if (code === 'KeyI') return shiftKey ? 'listItems' : 'locateNearestItem';
   if (code === 'KeyD') return shiftKey ? null : 'pickupDropItem';
+  if (code === 'KeyH') return shiftKey ? null : 'speakHeldItems';
   if (code === 'KeyO') return shiftKey ? 'inspectItem' : 'editItem';
   if (code === 'KeyP') return shiftKey ? null : 'pingServer';
   if (code === 'KeyL') return shiftKey ? 'listUsers' : 'locateNearestUser';

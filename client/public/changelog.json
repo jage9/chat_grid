@@ -1,6 +1,12 @@
 {
   "sections": [
     {
+      "date": "September 6, 2026",
+      "items": [
+        "You can now hold up to 2 items at once. Press H to hear what you are holding. You will also hear what others are holding if you list users, and can hand held items to others near you."
+      ]
+    },
+    {
       "date": "August 31, 2026",
       "items": [
         "Added walls. Press W for the World Editor. Walls can optionally block sound or movement.",

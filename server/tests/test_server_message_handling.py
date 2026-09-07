@@ -23,6 +23,7 @@ from app.models import (
     AdminUsersListResultPacket,
     AuthResultPacket,
     ItemActionResultPacket,
+    ItemHandTargetsResultPacket,
     ItemTransferTargetsResultPacket,
     LiveKitTokenPacket,
     PongPacket,
@@ -584,6 +585,109 @@ async def test_item_drop_rejects_out_of_bounds(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("limit", [1, 2, 3])
+async def test_item_pickup_honors_configured_limit(make_world, limit: int) -> None:
+    """Pickup should honor the configured carrying limit per client."""
+
+    world = make_world(grid_size=41, max_carried_items=limit)
+    server, transport = world.server, world.transport
+    client = world.join(
+        "tester",
+        x=5,
+        y=6,
+        client_id="u1",
+        permissions={"item.pickup_drop.any"},
+    )
+    items = [server.item_service.default_item(client, "dice") for _ in range(limit + 1)]
+    for item in items:
+        server.item_service.add_item(item)
+
+    for item in items[:limit]:
+        await server._handle_message(
+            client, json.dumps({"type": "item_pickup", "itemId": item.id})
+        )
+    await server._handle_message(
+        client, json.dumps({"type": "item_pickup", "itemId": items[0].id})
+    )
+    await server._handle_message(
+        client, json.dumps({"type": "item_pickup", "itemId": items[-1].id})
+    )
+
+    assert [item.carrierId for item in items] == ["u1"] * limit + [None]
+    results = transport.packets_of_type(client, ItemActionResultPacket)
+    assert [result.ok for result in results] == [True] * (limit + 1) + [False]
+    assert f"at most {limit}" in results[-1].message
+
+    await server._handle_message(
+        client,
+        json.dumps(
+            {"type": "item_drop", "itemId": items[0].id, "x": 5, "y": 6, "z": 0}
+        ),
+    )
+    await server._handle_message(
+        client, json.dumps({"type": "item_pickup", "itemId": items[-1].id})
+    )
+    assert items[0].carrierId is None
+    assert [item.carrierId for item in items[1:]] == ["u1"] * limit
+
+
+@pytest.mark.asyncio
+async def test_all_carried_items_follow_movement_and_teleport(
+    make_world,
+) -> None:
+    """Every carried item should track ordinary movement and teleport completion."""
+
+    world = make_world(grid_size=41)
+    server = world.server
+    client = world.join("tester", x=5, y=6, client_id="u1")
+    items = [server.item_service.default_item(client, "dice") for _ in range(2)]
+    for item in items:
+        item.carrierId = client.id
+        server.item_service.add_item(item)
+
+    await server._handle_message(
+        client, json.dumps({"type": "update_position", "x": 6, "y": 7, "z": 0})
+    )
+    assert [(item.x, item.y, item.z) for item in items] == [(6, 7, 0), (6, 7, 0)]
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "teleport_complete", "x": 10, "y": 11, "z": 0}),
+    )
+    assert [(item.x, item.y, item.z) for item in items] == [(10, 11, 0), (10, 11, 0)]
+
+
+@pytest.mark.asyncio
+async def test_disconnect_drops_all_carried_items(
+    make_world,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disconnect cleanup should drop every item carried by the client."""
+
+    world = make_world()
+    server = world.server
+    client = world.connect("tester", client_id="u1", x=8, y=9, z=40)
+    items = [server.item_service.default_item(client, "dice") for _ in range(2)]
+    for item in items:
+        item.carrierId = client.id
+        server.item_service.add_item(item)
+
+    broadcasted: list[object] = []
+
+    async def fake_broadcast_item(item: object) -> None:
+        broadcasted.append(item)
+
+    monkeypatch.setattr(server.item_runtime, "broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server.item_runtime, "request_state_save", lambda: None)
+
+    await server.item_runtime.finish_client_disconnect(client)
+
+    assert [item.carrierId for item in items] == [None, None]
+    assert [(item.x, item.y, item.z) for item in items] == [(8, 9, 40), (8, 9, 40)]
+    assert broadcasted == items
+
+
+@pytest.mark.asyncio
 async def test_item_transfer_updates_item_owner(
     make_world,
 ) -> None:
@@ -736,8 +840,9 @@ async def test_item_transfer_accepts_offline_target_user_id(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("carried_by_actor", [False, True], ids=["ground", "held"])
 async def test_item_transfer_targets_lists_online_and_offline(
-    make_world, tmp_path: Path
+    make_world, tmp_path: Path, carried_by_actor: bool
 ) -> None:
     world = make_world(auth_db_path=tmp_path / "auth.db", grid_size=41)
     server, transport = world.server, world.transport
@@ -763,7 +868,7 @@ async def test_item_transfer_targets_lists_online_and_offline(
         y=6,
         client_id="u3",
     )
-    world.join(
+    online = world.join(
         "online",
         user_id=online_session.user.id,
         username=online_session.user.username,
@@ -775,7 +880,15 @@ async def test_item_transfer_targets_lists_online_and_offline(
     item = server.item_service.default_item(owner, "dice")
     item.x = actor.x
     item.y = actor.y
+    if carried_by_actor:
+        item.carrierId = actor.id
     server.item_service.add_item(item)
+    online_carried_items = [
+        server.item_service.default_item(online, "dice") for _ in range(2)
+    ]
+    for online_item in online_carried_items:
+        online_item.carrierId = online.id
+        server.item_service.add_item(online_item)
 
     await server._handle_message(
         actor, json.dumps({"type": "item_transfer_targets", "itemId": item.id})
@@ -881,6 +994,481 @@ async def test_item_transfer_rejects_when_not_authorized(
     assert result.ok is False
     assert result.action == "transfer"
     assert "not authorized" in result.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_hand_item_moves_item_to_nearby_recipient_without_changing_owner(
+    make_world,
+) -> None:
+    """A handoff moves a carried item while ownership stays with its owner."""
+
+    world = make_world(grid_size=41, max_carried_items=2)
+    server, transport = world.server, world.transport
+    owner = world.join(
+        "owner",
+        client_id="u1",
+        user_id="1",
+        username="owner_user",
+        permissions={"item.pickup_drop.own"},
+        x=5,
+        y=6,
+        z=0,
+    )
+    target = world.join(
+        "target",
+        client_id="u2",
+        user_id="2",
+        username="target_user",
+        permissions={"item.pickup_drop.any"},
+        x=8,
+        y=9,
+        z=0,
+    )
+    item = server.item_service.default_item(owner, "dice")
+    item.carrierId = owner.id
+    item.x = owner.x
+    item.y = owner.y
+    item.z = owner.z
+    server.item_service.add_item(item)
+    existing_item = server.item_service.default_item(target, "dice")
+    existing_item.carrierId = target.id
+    server.item_service.add_item(existing_item)
+    original_version = item.version
+
+    await server._handle_message(
+        owner,
+        json.dumps({"type": "item_hand", "itemId": item.id, "targetUserId": "2"}),
+    )
+
+    assert item.carrierId == target.id
+    assert (item.x, item.y, item.z) == (target.x, target.y, target.z)
+    assert item.createdBy == owner.user_id
+    assert item.createdByName == owner.username
+    assert item.version == original_version + 1
+    assert server.item_service.find_carried_items(owner.id) == []
+    assert {held.id for held in server.item_service.find_carried_items(target.id)} == {
+        item.id,
+        existing_item.id,
+    }
+    result = transport.last_packet_of_type(owner, ItemActionResultPacket)
+    assert result.ok is True
+    assert result.action == "hand"
+
+
+@pytest.mark.asyncio
+async def test_hand_targets_require_nearby_same_floor_recipient_permission(
+    make_world,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Hand targets include only nearby online users who can receive the item."""
+
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    actor = world.join(
+        "actor",
+        client_id="u1",
+        user_id="1",
+        username="actor_user",
+        permissions={"item.pickup_drop.any"},
+        x=5,
+        y=6,
+        z=0,
+    )
+    owner = world.join(
+        "owner",
+        client_id="u2",
+        user_id="2",
+        username="owner_user",
+        permissions={"item.pickup_drop.own"},
+        x=10,
+        y=6,
+        z=0,
+    )
+    world.join(
+        "far",
+        client_id="u3",
+        user_id="3",
+        username="far_user",
+        permissions={"item.pickup_drop.any"},
+        x=11,
+        y=6,
+        z=0,
+    )
+    world.join(
+        "other floor",
+        client_id="u4",
+        user_id="4",
+        username="other_floor_user",
+        permissions={"item.pickup_drop.any"},
+        x=10,
+        y=6,
+        z=40,
+    )
+    world.join(
+        "no permission",
+        client_id="u5",
+        user_id="5",
+        username="no_permission_user",
+        permissions=set(),
+        x=10,
+        y=5,
+        z=0,
+    )
+    item = server.item_service.default_item(owner, "dice")
+    item.carrierId = actor.id
+    item.x = actor.x
+    item.y = actor.y
+    item.z = actor.z
+    server.item_service.add_item(item)
+    monkeypatch.setattr(
+        server.auth_service,
+        "list_users_for_admin",
+        lambda: [
+            {"id": "1", "username": "actor_user", "status": "active"},
+            {"id": "2", "username": "owner_user", "status": "active"},
+            {"id": "3", "username": "far_user", "status": "active"},
+            {"id": "4", "username": "other_floor_user", "status": "active"},
+            {"id": "5", "username": "no_permission_user", "status": "active"},
+        ],
+    )
+    await server._handle_message(
+        actor, json.dumps({"type": "item_hand_targets", "itemId": item.id})
+    )
+
+    result = transport.last_packet_of_type(actor, ItemHandTargetsResultPacket)
+    assert [entry.userId for entry in result.targets] == [owner.user_id]
+    assert result.targets[0].online is True
+    owner.x = 11
+    original_state = (item.carrierId, item.x, item.y, item.z, item.version)
+
+    await server._handle_message(
+        actor,
+        json.dumps({"type": "item_hand", "itemId": item.id, "targetUserId": "2"}),
+    )
+
+    assert (item.carrierId, item.x, item.y, item.z, item.version) == original_state
+    hand_result = transport.last_packet_of_type(actor, ItemActionResultPacket)
+    assert hand_result.ok is False
+    assert "nearby" in hand_result.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_hand_item_can_return_borrowed_item_to_owner(
+    make_world,
+) -> None:
+    """The item's owner can receive a borrowed item with own pickup permission."""
+
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    actor = world.join(
+        "borrower",
+        client_id="u1",
+        user_id="1",
+        username="borrower_user",
+        permissions={"item.pickup_drop.any"},
+        x=5,
+        y=6,
+        z=0,
+    )
+    owner = world.join(
+        "owner",
+        client_id="u2",
+        user_id="2",
+        username="owner_user",
+        permissions={"item.pickup_drop.own"},
+        x=10,
+        y=6,
+        z=0,
+    )
+    item = server.item_service.default_item(owner, "dice")
+    item.carrierId = actor.id
+    item.x = actor.x
+    item.y = actor.y
+    item.z = actor.z
+    server.item_service.add_item(item)
+    original_version = item.version
+
+    await server._handle_message(
+        actor,
+        json.dumps({"type": "item_hand", "itemId": item.id, "targetUserId": "2"}),
+    )
+
+    assert item.createdBy == owner.user_id
+    assert item.carrierId == owner.id
+    assert (item.x, item.y, item.z) == (owner.x, owner.y, owner.z)
+    assert item.version == original_version + 1
+    result = transport.last_packet_of_type(actor, ItemActionResultPacket)
+    assert result.ok is True
+    assert result.action == "hand"
+
+
+@pytest.mark.asyncio
+async def test_hand_item_rejects_full_recipient_without_mutation(
+    make_world,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A full recipient rejects a handoff before changing the item."""
+
+    world = make_world(grid_size=41, max_carried_items=2)
+    server, transport = world.server, world.transport
+    owner = world.join(
+        "owner",
+        client_id="u1",
+        user_id="1",
+        username="owner_user",
+        permissions={"item.pickup_drop.own"},
+        x=5,
+        y=6,
+        z=0,
+    )
+    target = world.join(
+        "target",
+        client_id="u2",
+        user_id="2",
+        username="target_user",
+        permissions={"item.pickup_drop.any"},
+        x=8,
+        y=9,
+        z=0,
+    )
+    item = server.item_service.default_item(owner, "dice")
+    item.carrierId = owner.id
+    item.x = owner.x
+    item.y = owner.y
+    item.z = owner.z
+    server.item_service.add_item(item)
+    monkeypatch.setattr(
+        server.auth_service,
+        "list_users_for_admin",
+        lambda: [
+            {"id": "1", "username": "owner_user", "status": "active"},
+            {"id": "2", "username": "target_user", "status": "active"},
+            {"id": "3", "username": "offline_user", "status": "active"},
+        ],
+    )
+    await server._handle_message(
+        owner,
+        json.dumps({"type": "item_hand_targets", "itemId": item.id}),
+    )
+    targets_result = transport.last_packet_of_type(owner, ItemHandTargetsResultPacket)
+    assert [entry.userId for entry in targets_result.targets] == [target.user_id]
+    target_items = [server.item_service.default_item(target, "dice") for _ in range(2)]
+    for target_item in target_items:
+        target_item.carrierId = target.id
+        server.item_service.add_item(target_item)
+    await server._handle_message(
+        owner, json.dumps({"type": "item_hand_targets", "itemId": item.id})
+    )
+    assert (
+        transport.last_packet_of_type(owner, ItemHandTargetsResultPacket).targets == []
+    )
+    original_state = (
+        item.carrierId,
+        item.x,
+        item.y,
+        item.z,
+        item.createdBy,
+        item.version,
+    )
+
+    await server._handle_message(
+        owner,
+        json.dumps({"type": "item_hand", "itemId": item.id, "targetUserId": "2"}),
+    )
+
+    assert (
+        item.carrierId,
+        item.x,
+        item.y,
+        item.z,
+        item.createdBy,
+        item.version,
+    ) == original_state
+    result = transport.last_packet_of_type(owner, ItemActionResultPacket)
+    assert result.ok is False
+    assert result.action == "hand"
+    assert "receive" in result.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_hand_item_rejects_offline_recipient_without_mutation(
+    make_world,
+) -> None:
+    """A carried item cannot be handed to an offline account."""
+
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    owner = world.join(
+        "owner",
+        client_id="u1",
+        user_id="1",
+        username="owner_user",
+        permissions={"item.pickup_drop.own"},
+        x=5,
+        y=6,
+        z=1,
+    )
+    item = server.item_service.default_item(owner, "dice")
+    item.carrierId = owner.id
+    item.x = owner.x
+    item.y = owner.y
+    item.z = owner.z
+    server.item_service.add_item(item)
+    original_state = (item.carrierId, item.createdBy, item.version)
+
+    await server._handle_message(
+        owner,
+        json.dumps({"type": "item_hand", "itemId": item.id, "targetUserId": "2"}),
+    )
+
+    assert (item.carrierId, item.createdBy, item.version) == original_state
+    result = transport.last_packet_of_type(owner, ItemActionResultPacket)
+    assert result.ok is False
+    assert result.action == "hand"
+    assert "receive" in result.message.lower()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target_online", [True, False], ids=["online", "offline"])
+async def test_transfer_allows_item_carried_by_sender_without_moving_it(
+    make_world, tmp_path: Path, target_online: bool
+) -> None:
+    """Ownership transfer changes only ownership for an item held by the sender."""
+
+    world = make_world(auth_db_path=tmp_path / "auth.db", grid_size=41)
+    server, transport = world.server, world.transport
+    owner_session = server.auth_service.register("held_owner", "password99")
+    target_session = server.auth_service.register("held_target", "password99")
+    owner = world.join(
+        "owner",
+        client_id="u1",
+        user_id=owner_session.user.id,
+        username=owner_session.user.username,
+        permissions={"item.transfer.own"},
+        x=5,
+        y=6,
+        z=0,
+    )
+    if target_online:
+        target = world.join(
+            "target",
+            client_id="u2",
+            user_id=target_session.user.id,
+            username=target_session.user.username,
+            permissions=set(),
+            x=20,
+            y=20,
+            z=40,
+        )
+    item = server.item_service.default_item(owner, "dice")
+    item.carrierId = owner.id
+    item.x = owner.x
+    item.y = owner.y
+    item.z = owner.z
+    server.item_service.add_item(item)
+    if target_online:
+        target_items = [
+            server.item_service.default_item(target, "dice") for _ in range(2)
+        ]
+        for target_item in target_items:
+            target_item.carrierId = target.id
+            server.item_service.add_item(target_item)
+    original_position = (item.x, item.y, item.z)
+    original_version = item.version
+
+    await server._handle_message(
+        owner,
+        json.dumps(
+            {
+                "type": "item_transfer",
+                "itemId": item.id,
+                "targetUserId": target_session.user.id,
+            }
+        ),
+    )
+
+    assert item.createdBy == target_session.user.id
+    assert item.createdByName == target_session.user.username
+    assert item.carrierId == owner.id
+    assert (item.x, item.y, item.z) == original_position
+    assert item.version == original_version + 1
+    result = transport.last_packet_of_type(owner, ItemActionResultPacket)
+    assert result.ok is True
+    assert result.action == "transfer"
+
+
+@pytest.mark.asyncio
+async def test_hand_rejects_item_not_held_by_sender(
+    make_world,
+) -> None:
+    """A handoff requires the sender to be carrying the selected item."""
+
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    owner = world.join(
+        "owner",
+        client_id="u1",
+        user_id="1",
+        username="owner_user",
+        permissions={"item.pickup_drop.own"},
+        x=5,
+        y=6,
+        z=0,
+    )
+    item = server.item_service.default_item(owner, "dice")
+    server.item_service.add_item(item)
+
+    await server._handle_message(
+        owner,
+        json.dumps({"type": "item_hand", "itemId": item.id, "targetUserId": "2"}),
+    )
+
+    result = transport.last_packet_of_type(owner, ItemActionResultPacket)
+    assert result.ok is False
+    assert result.action == "hand"
+    assert "carrying" in result.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_held_item_transfer_rejects_item_carried_by_someone_else(
+    make_world,
+) -> None:
+    """Transfer-any permission cannot take an item from another carrier."""
+
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    actor = world.join(
+        "actor",
+        client_id="u1",
+        user_id="1",
+        username="actor_user",
+        permissions={"item.transfer.any"},
+        x=5,
+        y=6,
+    )
+    carrier = world.join(
+        "carrier",
+        client_id="u2",
+        user_id="2",
+        username="carrier_user",
+        permissions=set(),
+        x=5,
+        y=6,
+    )
+    item = server.item_service.default_item(carrier, "dice")
+    item.carrierId = carrier.id
+    server.item_service.add_item(item)
+    original_state = (item.carrierId, item.createdBy, item.version)
+
+    await server._handle_message(
+        actor,
+        json.dumps({"type": "item_transfer", "itemId": item.id, "targetUserId": "1"}),
+    )
+
+    assert (item.carrierId, item.createdBy, item.version) == original_state
+    result = transport.last_packet_of_type(actor, ItemActionResultPacket)
+    assert result.ok is False
+    assert "carried by another" in result.message.lower()
 
 
 @pytest.mark.asyncio

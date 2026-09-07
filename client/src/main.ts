@@ -26,6 +26,8 @@ import {
 } from './input/textInput';
 import { formatCommandMenuLabel, type CommandDescriptor, type ModeInput } from './input/commandTypes';
 import { getAvailableMainModeCommands } from './input/mainModeCommands';
+import { describeHeldItems, formatCarryingSuffix, getCarriedItems } from './items/carriedItems';
+import { getInteractionItems } from './items/itemTargets';
 import { resolveMainModeCommand, type MainModeCommand } from './input/mainCommandRouter';
 import { dispatchModeInput } from './input/modeDispatcher';
 import { handleListControlKey } from './input/listController';
@@ -88,6 +90,7 @@ import { ItemBehaviorRegistry } from './items/types/behaviorRegistry';
 import { SettingsStore } from './settings/settingsStore';
 import { createAuthController } from './session/authController';
 import { runConnectFlow, runDisconnectFlow, type ConnectFlowDeps } from './session/connectionFlow';
+import { runReconnectAttempts } from './session/reconnect';
 import { MediaSession } from './session/mediaSession';
 import { type AudioLayerState } from './types/audio';
 import { setupUiHandlers as setupDomUiHandlers } from './ui/domBindings';
@@ -104,8 +107,6 @@ const MIC_CALIBRATION_ACTIVE_RMS_THRESHOLD = 0.003;
 const MIC_INPUT_GAIN_SCALE_MULTIPLIER = 2;
 const MIC_INPUT_GAIN_STEP = 0.05;
 const HEARTBEAT_INTERVAL_MS = 10_000;
-const RECONNECT_DELAY_MS = 5_000;
-const RECONNECT_MAX_ATTEMPTS = 3;
 const AUDIO_SUBSCRIPTION_REFRESH_MS = 500;
 const TELEPORT_SQUARES_PER_SECOND = 20;
 const AUTH_POLICY_STORAGE_KEY = 'chgridAuthPolicy';
@@ -441,6 +442,8 @@ let heartbeatTimerId: number | null = null;
 let heartbeatNextPingId = -1;
 let heartbeatAwaitingPong = false;
 let reconnectInFlight = false;
+let reconnectAbort: AbortController | null = null;
+let connectionAbort: AbortController | null = null;
 let activeServerInstanceId: string | null = null;
 let reloadScheduledForVersionMismatch = false;
 let peerListenGainByNickname = settings.loadPeerListenGains();
@@ -597,7 +600,6 @@ const adminController = createAdminController({
   signalingSend: (message) => signaling.send(message),
   announceMenuEntry,
   updateStatus,
-  getGridName: () => activeGridName,
   sfxUiBlip: () => audio.sfxUiBlip(),
   sfxUiCancel: () => audio.sfxUiCancel(),
   applyTextInputEdit,
@@ -651,6 +653,7 @@ const itemInteractionController = createItemInteractionController({
   getItemPropertyValue,
   itemPropertyLabel,
   useItem: (item) => useItem(item),
+  pickupDropItem,
   secondaryUseItem: (item) => secondaryUseItem(item),
   openConfirmation: (request) => confirmationController.open(request),
 });
@@ -1149,15 +1152,14 @@ function floorPositionPhrase(z: number): string {
   return `at height ${formatCoordinate(z)}`;
 }
 
-/** Returns the item currently carried by the local player, if any. */
-function getCarriedItem(): WorldItem | null {
-  if (!state.player.id) return null;
-  return Array.from(state.items.values()).find((item) => item.carrierId === state.player.id) || null;
+/** Returns held items and items occupying the current square for action selection. */
+function getCurrentInteractionItems(): WorldItem[] {
+  return getInteractionItems(state.items.values(), state.player);
 }
 
 /** Opens the shared item-selection flow for the provided context and items. */
 function beginItemSelection(
-  context: 'pickup' | 'delete' | 'edit' | 'use' | 'secondaryUse' | 'inspect' | 'manage',
+  context: 'pickupDrop' | 'delete' | 'edit' | 'use' | 'secondaryUse' | 'inspect' | 'manage',
   items: WorldItem[],
 ): void {
   itemInteractionController.beginItemSelection(context, items);
@@ -1534,7 +1536,7 @@ async function checkMicPermission(): Promise<boolean> {
 /** Starts local microphone capture and rebuilds the outbound track pipeline. */
 async function setupLocalMedia(audioDeviceId = ''): Promise<void> {
   await mediaSession.setupLocalMedia(audioDeviceId);
-  applyVoiceSendPermission();
+  authController.applyVoiceSendPermission();
 }
 
 /** Runs a short RMS sample to estimate and apply a usable microphone input gain. */
@@ -1605,30 +1607,30 @@ async function reconnectAfterSocketClose(): Promise<void> {
 /** Reconnects after disconnect with delay and bounded retry attempts. */
 async function reconnectWithRetry(reason: 'heartbeat' | 'socketClose'): Promise<void> {
   if (reconnectInFlight || !state.running) return;
+  // Tear down the interrupted session before starting a cancellable retry sequence.
+  disconnect();
+  const controller = new AbortController();
+  reconnectAbort = controller;
   reconnectInFlight = true;
-  stopHeartbeat();
   if (reason === 'heartbeat') {
     pushChatMessage('Connection stale. Reconnecting...');
   }
-  disconnect();
-  for (let attempt = 1; attempt <= RECONNECT_MAX_ATTEMPTS; attempt += 1) {
-    await new Promise((resolve) => window.setTimeout(resolve, RECONNECT_DELAY_MS));
-    await connect();
-    const waitStartedAt = Date.now();
-    while (!state.running && Date.now() - waitStartedAt < 4_000) {
-      await new Promise((resolve) => window.setTimeout(resolve, 100));
+  try {
+    const connected = await runReconnectAttempts({
+      signal: controller.signal,
+      connect: () => connectAttempt(controller),
+      onRetry: (attempt) => pushChatMessage(`Reconnect attempt ${attempt} failed. Retrying in 5 seconds...`),
+    });
+    if (!connected && !controller.signal.aborted) {
+      pushChatMessage('Reconnect failed after 3 attempts. Press Connect to retry.');
+      audio.sfxUiCancel();
     }
-    if (state.running) {
+  } finally {
+    if (reconnectAbort === controller) {
+      reconnectAbort = null;
       reconnectInFlight = false;
-      return;
-    }
-    if (attempt < RECONNECT_MAX_ATTEMPTS) {
-      pushChatMessage(`Reconnect attempt ${attempt} failed. Retrying in 5 seconds...`);
     }
   }
-  pushChatMessage('Reconnect failed after 3 attempts. Press Connect to retry.');
-  audio.sfxUiCancel();
-  reconnectInFlight = false;
 }
 
 /** Sends current auth request over signaling websocket after socket open. */
@@ -1690,6 +1692,11 @@ function handleItemTransferTargets(message: Extract<IncomingMessage, { type: 'it
   itemInteractionController.handleItemTransferTargets(message);
 }
 
+/** Handles server hand-target list response for item-management handoff flow. */
+function handleItemHandTargets(message: Extract<IncomingMessage, { type: 'item_hand_targets' }>): void {
+  itemInteractionController.handleItemHandTargets(message);
+}
+
 /** Handles structured admin action result packets. */
 function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admin_action_result' }>): void {
   adminController.handleAdminActionResult(message);
@@ -1721,10 +1728,10 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
     mediaIsConnecting: () => mediaSession.isConnecting(),
     mediaSetConnecting: (value) => mediaSession.setConnecting(value),
     mediaStopLocalMedia: () => stopLocalMedia(),
-    signalingConnect: (handler) => signaling.connect(handler as (message: IncomingMessage) => Promise<void>),
+    signalingConnect: (handler, onDisconnected) => signaling.connect(handler as (message: IncomingMessage) => Promise<void>, onDisconnected),
     signalingSendAuth: () => sendAuthRequest(),
     signalingDisconnect: () => signaling.disconnect(),
-    onMessage: (message) => onSignalingMessage(message as IncomingMessage),
+    onMessage: (message, onWelcome) => onSignalingMessage(message as IncomingMessage, onWelcome),
     peerManagerCleanupAll: () => peerManager.cleanupAll(),
     radioCleanupAll: () => radioRuntime.cleanupAll(),
     emitCleanupAll: () => {
@@ -1739,12 +1746,31 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
 
 /** Performs end-to-end connect flow: validation, media setup, then signaling connection. */
 async function connect(): Promise<void> {
+  if (state.running) return;
+  cancelReconnect();
+  connectionAbort?.abort();
+  await connectAttempt(new AbortController());
+}
+
+/** Waits for one complete signaling/authentication attempt. */
+async function connectAttempt(controller: AbortController): Promise<boolean> {
+  connectionAbort = controller;
   setConnectionStatus('Connecting...');
-  await runConnectFlow(getConnectionFlowDeps());
+  return runConnectFlow(getConnectionFlowDeps(), controller.signal);
+}
+
+/** Cancels automatic retries, including any pending connection attempt. */
+function cancelReconnect(): void {
+  reconnectAbort?.abort();
+  reconnectAbort = null;
+  reconnectInFlight = false;
 }
 
 /** Tears down active session state, media, peers, and UI back to pre-connect mode. */
 function disconnect(): void {
+  cancelReconnect();
+  connectionAbort?.abort();
+  connectionAbort = null;
   stopHeartbeat();
   runDisconnectFlow(getConnectionFlowDeps());
   setConnectionStatus('Disconnected.');
@@ -1827,7 +1853,6 @@ const onAppMessage = createOnMessageHandler({
   audioUiBlip: () => audio.sfxUiBlip(),
   audioUiConfirm: () => audio.sfxUiConfirm(),
   audioUiCancel: () => audio.sfxUiCancel(),
-  getCarriedItemId: () => getCarriedItem()?.id ?? null,
   recomputeActiveItemPropertyKeys,
   itemPropertyLabel,
   getItemPropertyValue,
@@ -1842,6 +1867,7 @@ const onAppMessage = createOnMessageHandler({
   handleAdminUsersList,
   handleAdminActionResult,
   handleItemTransferTargets,
+  handleItemHandTargets,
   handleStructureActionResult: (message) => worldBuilderController.handleActionResult(message),
   connectToLiveKit: (url, token) => {
     void connectLiveKit(url, token);
@@ -1849,7 +1875,7 @@ const onAppMessage = createOnMessageHandler({
 });
 
 /** Handles signaling packets with heartbeat/restart metadata before app-level dispatch. */
-async function onSignalingMessage(message: IncomingMessage): Promise<void> {
+async function onSignalingMessage(message: IncomingMessage, onWelcome?: () => void): Promise<void> {
   if (message.type === 'pong' && message.clientSentAt < 0) {
     heartbeatAwaitingPong = false;
     return;
@@ -1890,6 +1916,7 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   }
   await onAppMessage(message);
   if (message.type === 'welcome') {
+    onWelcome?.();
     signaling.send({ type: 'welcome_ready' });
     await setupMediaAfterAuth();
     if (playSelfLoginSound) {
@@ -1948,16 +1975,16 @@ function getCurrentSquareItems(): WorldItem[] {
   return getItemsAtPosition(state.player.x, state.player.y);
 }
 
-function getUsableItemsOnCurrentSquare(): WorldItem[] {
-  return getCurrentSquareItems().filter((item) => item.capabilities.includes('usable'));
+function getUsableInteractionItems(): WorldItem[] {
+  return getCurrentInteractionItems().filter((item) => item.capabilities.includes('usable'));
 }
 
-function getManageableItemsOnCurrentSquare(): WorldItem[] {
-  return getCurrentSquareItems().filter((item) => itemManagementOptionsFor(item).length > 0);
+function getManageableInteractionItems(): WorldItem[] {
+  return getCurrentInteractionItems().filter((item) => itemManagementOptionsFor(item).length > 0);
 }
 
 function canEditCurrentItem(): boolean {
-  return getCurrentSquareItems().length > 0 || Boolean(getCarriedItem());
+  return getCurrentInteractionItems().length > 0;
 }
 
 function canInspectCurrentItem(): boolean {
@@ -2054,12 +2081,7 @@ function openWorldBuilderCommand(): void {
 }
 
 function useItemCommand(): void {
-  const carried = getCarriedItem();
-  if (carried) {
-    useItem(carried);
-    return;
-  }
-  const usable = getUsableItemsOnCurrentSquare();
+  const usable = getUsableInteractionItems();
   if (usable.length === 0) {
     updateStatus('No usable items here.');
     audio.sfxUiCancel();
@@ -2073,12 +2095,7 @@ function useItemCommand(): void {
 }
 
 function secondaryUseItemCommand(): void {
-  const carried = getCarriedItem();
-  if (carried) {
-    secondaryUseItem(carried);
-    return;
-  }
-  const usable = getUsableItemsOnCurrentSquare();
+  const usable = getUsableInteractionItems();
   if (usable.length === 0) {
     updateStatus('No usable items here.');
     audio.sfxUiCancel();
@@ -2155,35 +2172,35 @@ function locateNearestItemCommand(): void {
   updateStatus(`${itemLabel(item)}, ${distanceDirectionPhrase(state.player.x, state.player.y, position.x, position.y)}, ${locationPhrase(position.x, position.y, state.player.z)}`);
 }
 
-function pickupDropItemCommand(): void {
-  const carried = getCarriedItem();
-  if (carried) {
-    signaling.send({ type: 'item_drop', itemId: carried.id, x: state.player.x, y: state.player.y, z: state.player.z });
-    return;
+/** Sends pickup or drop intent for the selected item using its current server state. */
+function pickupDropItem(item: WorldItem): void {
+  if (state.player.id && item.carrierId === state.player.id) {
+    signaling.send({ type: 'item_drop', itemId: item.id, x: state.player.x, y: state.player.y, z: state.player.z });
+  } else {
+    signaling.send({ type: 'item_pickup', itemId: item.id });
   }
-  const squareItems = getCurrentSquareItems();
-  if (squareItems.length === 0) {
-    updateStatus('No items to pick up.');
+}
+
+function pickupDropItemCommand(): void {
+  const items = getCurrentInteractionItems().filter(
+    (item) => item.carrierId === state.player.id || item.capabilities.includes('carryable'),
+  );
+  if (items.length === 0) {
+    updateStatus('No items to pick up or drop.');
     audio.sfxUiCancel();
     return;
   }
-  if (squareItems.length === 1) {
-    signaling.send({ type: 'item_pickup', itemId: squareItems[0].id });
+  if (items.length === 1) {
+    pickupDropItem(items[0]);
     return;
   }
-  beginItemSelection('pickup', squareItems);
+  beginItemSelection('pickupDrop', items);
 }
 
 function openItemManagementCommand(): void {
-  const squareItems = getCurrentSquareItems();
-  if (squareItems.length === 0) {
-    updateStatus('No items to manage on this square.');
-    audio.sfxUiCancel();
-    return;
-  }
-  const manageable = squareItems.filter((item) => itemManagementOptionsFor(item).length > 0);
+  const manageable = getManageableInteractionItems();
   if (manageable.length === 0) {
-    updateStatus('No permitted item management actions here.');
+    updateStatus('No items.');
     audio.sfxUiCancel();
     return;
   }
@@ -2195,41 +2212,31 @@ function openItemManagementCommand(): void {
 }
 
 function editItemCommand(): void {
-  const squareItems = getCurrentSquareItems();
-  const carried = getCarriedItem();
-  if (squareItems.length === 0) {
-    if (!carried) {
-      updateStatus('No editable item here.');
-      audio.sfxUiCancel();
-      return;
-    }
-    beginItemProperties(carried);
+  const items = getCurrentInteractionItems();
+  if (items.length === 0) {
+    updateStatus('No editable item here.');
+    audio.sfxUiCancel();
     return;
   }
-  if (squareItems.length === 1) {
-    beginItemProperties(squareItems[0]);
+  if (items.length === 1) {
+    beginItemProperties(items[0]);
     return;
   }
-  beginItemSelection('edit', squareItems);
+  beginItemSelection('edit', items);
 }
 
 function inspectItemCommand(): void {
-  const squareItems = getCurrentSquareItems();
-  const carried = getCarriedItem();
-  if (squareItems.length === 0) {
-    if (!carried) {
-      updateStatus('No item to inspect.');
-      audio.sfxUiCancel();
-      return;
-    }
-    beginItemProperties(carried, true);
+  const items = getCurrentInteractionItems();
+  if (items.length === 0) {
+    updateStatus('No item to inspect.');
+    audio.sfxUiCancel();
     return;
   }
-  if (squareItems.length === 1) {
-    beginItemProperties(squareItems[0], true);
+  if (items.length === 1) {
+    beginItemProperties(items[0], true);
     return;
   }
-  beginItemSelection('inspect', squareItems);
+  beginItemSelection('inspect', items);
 }
 
 function pingServerCommand(): void {
@@ -2257,7 +2264,7 @@ function listUsersCommand(): void {
   const gainPhrase = `volume ${formatSteppedNumber(getPeerListenGainForNickname(first.nickname), MIC_INPUT_GAIN_STEP)}`;
   announceMenuEntry(
     `${userCount} ${userLabelText}`,
-    `${first.nickname}, ${formatLastSeen(null, true)}, ${gainPhrase}, ${first.z === state.player.z ? distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y) : 'different floor'}, ${locationPhrase(first.x, first.y, first.z)}`,
+    `${first.nickname}, ${formatLastSeen(null, true)}, ${gainPhrase}, ${first.z === state.player.z ? distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y) : 'different floor'}, ${locationPhrase(first.x, first.y, first.z)}${formatCarryingSuffix(state.items.values(), first.id)}`,
   );
 }
 
@@ -2271,7 +2278,7 @@ function locateNearestUserCommand(): void {
   const peer = state.peers.get(nearest.peerId);
   if (!peer) return;
   audio.sfxLocate({ x: peer.x - state.player.x, y: peer.y - state.player.y });
-  updateStatus(`${peer.nickname}, ${distanceDirectionPhrase(state.player.x, state.player.y, peer.x, peer.y)}, ${locationPhrase(peer.x, peer.y, peer.z)}`);
+  updateStatus(`${peer.nickname}, ${distanceDirectionPhrase(state.player.x, state.player.y, peer.x, peer.y)}, ${locationPhrase(peer.x, peer.y, peer.z)}${formatCarryingSuffix(state.items.values(), peer.id)}`);
 }
 
 function openHelpCommand(): void {
@@ -2322,6 +2329,7 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   locateNearestItem: locateNearestItemCommand,
   listItems: listItemsCommand,
   pickupDropItem: pickupDropItemCommand,
+  speakHeldItems: () => updateStatus(describeHeldItems(state.items.values(), state.player.id)),
   openItemManagement: openItemManagementCommand,
   editItem: editItemCommand,
   inspectItem: inspectItemCommand,
@@ -2350,10 +2358,10 @@ function getAvailableCommandPaletteEntriesForMode(mode: GameMode): Array<Command
       visibleItemCount: Array.from(state.items.values()).filter((item) => !item.carrierId).length,
       userCount: state.peers.size,
       chatMessageCount: messageBuffer.length,
-      hasCarriedItem: Boolean(getCarriedItem()),
+      hasCarriedItem: getCarriedItems(state.items.values(), state.player.id).length > 0,
       squareItemCount: getCurrentSquareItems().length,
-      usableItemCount: getUsableItemsOnCurrentSquare().length,
-      manageableItemCount: getManageableItemsOnCurrentSquare().length,
+      usableItemCount: getUsableInteractionItems().length,
+      manageableItemCount: getManageableInteractionItems().length,
       hasEditableItemTarget: canEditCurrentItem(),
       hasInspectableItemTarget: canInspectCurrentItem(),
     });
@@ -2643,7 +2651,7 @@ function handleListModeInput(code: string, key: string): void {
     if (!entry) return;
     const gainPhrase = `volume ${formatSteppedNumber(getPeerListenGainForNickname(entry.nickname), MIC_INPUT_GAIN_STEP)}`;
     updateStatus(
-      `${entry.nickname}, ${formatLastSeen(null, true)}, ${gainPhrase}, ${entry.z === state.player.z ? distanceDirectionPhrase(state.player.x, state.player.y, entry.x, entry.y) : 'different floor'}, ${locationPhrase(entry.x, entry.y, entry.z)}`,
+      `${entry.nickname}, ${formatLastSeen(null, true)}, ${gainPhrase}, ${entry.z === state.player.z ? distanceDirectionPhrase(state.player.x, state.player.y, entry.x, entry.y) : 'different floor'}, ${locationPhrase(entry.x, entry.y, entry.z)}${formatCarryingSuffix(state.items.values(), entry.id)}`,
     );
     if (control.reason === 'initial') {
       audio.sfxUiBlip();
@@ -3070,6 +3078,7 @@ setupDomUiHandlers({
   openSettings,
   closeSettings,
   updateStatus,
+  getGridName: () => activeGridName,
   sfxUiBlip: () => audio.sfxUiBlip(),
   setupLocalMedia,
   setPreferredInput: (id, name) => {

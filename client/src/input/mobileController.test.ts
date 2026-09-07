@@ -84,7 +84,7 @@ function setupHarness() {
               label: 'Test command',
               section: 'Testing',
               tooltip: 'Run the test command.',
-              run: () => dispatched.push('run:test-command'),
+              run: () => { dispatched.push('run:test-command'); },
             },
           ]
         : [],

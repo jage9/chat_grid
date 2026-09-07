@@ -42,7 +42,7 @@ class ElevatorRuntimeCallbacks:
     send_item_result: ItemResultCallback
     request_state_save: Callable[[], None]
     persist_client_position: Callable[[ClientConnection], None]
-    find_carried_item: Callable[[str], WorldItem | None]
+    find_carried_items: Callable[[str], list[WorldItem]]
     now_ms: Callable[[], int]
     floor_name: Callable[[int], str]
     get_emit_range: Callable[[WorldItem], int]
@@ -341,8 +341,8 @@ class ElevatorRuntime:
                     ),
                 ),
             )
-            carried = self.callbacks.find_carried_item(rider.id)
-            if carried is not None:
+            carried_items = self.callbacks.find_carried_items(rider.id)
+            for carried in carried_items:
                 carried.x = rider.x
                 carried.y = rider.y
                 carried.z = rider.z
@@ -377,8 +377,8 @@ class ElevatorRuntime:
             rider.x = item.x
             rider.y = item.y
             rider.z = travel_z
-            carried = self.callbacks.find_carried_item(rider.id)
-            if carried is not None:
+            carried_items = self.callbacks.find_carried_items(rider.id)
+            for carried in carried_items:
                 carried.x = rider.x
                 carried.y = rider.y
                 carried.z = rider.z

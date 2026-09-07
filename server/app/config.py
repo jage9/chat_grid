@@ -110,6 +110,12 @@ class LiveKitConfigSection(BaseModel):
     room_name: str = "chatgrid"
 
 
+class ItemsConfigSection(BaseModel):
+    """Authoritative item interaction limits."""
+
+    max_carried_items: int = Field(default=2, gt=0)
+
+
 class AppConfig(BaseModel):
     """Top-level application configuration document."""
 
@@ -121,6 +127,7 @@ class AppConfig(BaseModel):
     world: WorldConfigSection = WorldConfigSection()
     auth: AuthConfigSection = AuthConfigSection()
     livekit: LiveKitConfigSection = LiveKitConfigSection()
+    items: ItemsConfigSection = ItemsConfigSection()
 
 
 def load_config(path: Path | None) -> AppConfig:

@@ -77,7 +77,8 @@ class RecordingTransport:
         """Return the last matching packet, asserting that one was delivered."""
 
         packets = self.packets_of_type(client, packet_type)
-        assert packets
+        if not packets:
+            raise AssertionError("No packet of the requested type was delivered.")
         return packets[-1]
 
     def all_deliveries(self) -> list[tuple[ClientConnection, object]]:

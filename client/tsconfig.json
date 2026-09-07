@@ -8,7 +8,7 @@
     "noEmit": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["vitest/globals"]
+    "types": ["vite/client", "node", "vitest/globals"]
   },
   "include": ["src", "vite.config.ts"]
 }

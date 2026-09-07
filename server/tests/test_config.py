@@ -23,6 +23,7 @@ def test_load_config_defaults_when_path_none() -> None:
     assert cfg.world.structure_presets["fence"].contact_sound == "/sounds/fence.ogg"
     assert cfg.world.structure_presets["fence"].sound_transmission == 0.7
     assert cfg.livekit.room_name == "chatgrid"
+    assert cfg.items.max_carried_items == 2
 
 
 def test_load_config_requires_tls_when_insecure_disabled(tmp_path: Path) -> None:
@@ -120,3 +121,38 @@ room_name = "grid-room"
     )
     cfg = load_config(config_path)
     assert cfg.livekit.room_name == "grid-room"
+
+
+def test_load_config_reads_max_carried_items(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        """
+[network]
+allow_insecure_ws = true
+
+[items]
+max_carried_items = 4
+""".strip()
+    )
+
+    cfg = load_config(config_path)
+    assert cfg.items.max_carried_items == 4
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_load_config_rejects_invalid_max_carried_items(
+    tmp_path: Path, value: int
+) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        f"""
+[network]
+allow_insecure_ws = true
+
+[items]
+max_carried_items = {value}
+""".strip()
+    )
+
+    with pytest.raises(ValueError):
+        load_config(config_path)

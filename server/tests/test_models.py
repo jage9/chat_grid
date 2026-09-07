@@ -46,6 +46,18 @@ def test_item_transfer_packet_validates() -> None:
     assert packet.type == "item_transfer"
 
 
+def test_item_hand_packets_validate() -> None:
+    adapter: TypeAdapter[ClientPacket] = TypeAdapter(ClientPacket)
+    packet = adapter.validate_python(
+        {"type": "item_hand", "itemId": "i1", "targetUserId": "u2"}
+    )
+    assert packet.type == "item_hand"
+    targets_packet = adapter.validate_python(
+        {"type": "item_hand_targets", "itemId": "i1"}
+    )
+    assert targets_packet.type == "item_hand_targets"
+
+
 def test_admin_user_delete_packet_validates() -> None:
     adapter: TypeAdapter[ClientPacket] = TypeAdapter(ClientPacket)
     packet = adapter.validate_python({"type": "admin_user_delete", "username": "alpha"})

@@ -31,6 +31,9 @@ from .models import (
     ItemAddPacket,
     ItemDeletePacket,
     ItemDropPacket,
+    ItemHandPacket,
+    ItemHandTargetsPacket,
+    ItemHandTargetsResultPacket,
     ItemPianoNotePacket,
     ItemPianoRecordingPacket,
     ItemPickupPacket,
@@ -57,6 +60,7 @@ class ItemRuntimeHost(Protocol):
     clients: dict[ServerConnection, ClientConnection]
     delivery: Delivery
     item_service: ItemService
+    max_carried_items: int
 
     def _client_has_permission(self, client: ClientConnection, key: str) -> bool: ...
 
@@ -94,7 +98,7 @@ class ItemRuntime:
                 persist_client_position=lambda client: (
                     self.host._persist_client_position(client, force=True)
                 ),
-                find_carried_item=self.item_service.find_carried_item,
+                find_carried_items=self.item_service.find_carried_items,
                 now_ms=self.item_service.now_ms,
                 floor_name=self.floor_name,
                 get_emit_range=self.get_emit_range,
@@ -152,20 +156,21 @@ class ItemRuntime:
             await self.broadcast_item(item)
         self.request_state_save()
 
-    async def sync_carried_item(self, client: ClientConnection) -> None:
-        """Move and broadcast the item carried by a moving client."""
+    async def sync_carried_items(self, client: ClientConnection) -> None:
+        """Move and broadcast every item carried by a moving client."""
 
-        carried = self.item_service.find_carried_item(client.id)
-        if carried is None:
+        carried_items = self.item_service.find_carried_items(client.id)
+        if not carried_items:
             return
         actor_id, actor_name = self._item_updated_actor(client)
-        carried.x = client.x
-        carried.y = client.y
-        carried.z = client.z
-        carried.updatedAt = self.item_service.now_ms()
-        carried.updatedBy = actor_id
-        carried.updatedByName = actor_name
-        await self.broadcast_item(carried)
+        for carried in carried_items:
+            carried.x = client.x
+            carried.y = client.y
+            carried.z = client.z
+            carried.updatedAt = self.item_service.now_ms()
+            carried.updatedBy = actor_id
+            carried.updatedByName = actor_name
+            await self.broadcast_item(carried)
 
     def client_has_permission(self, client: ClientConnection, key: str) -> bool:
         """Return whether a client has one item-related permission."""
@@ -212,6 +217,12 @@ class ItemRuntime:
             return True
         if isinstance(packet, ItemTransferPacket):
             await self._handle_transfer(client, packet)
+            return True
+        if isinstance(packet, ItemHandTargetsPacket):
+            await self._handle_hand_targets(client, packet)
+            return True
+        if isinstance(packet, ItemHandPacket):
+            await self._handle_hand(client, packet)
             return True
         if isinstance(packet, ItemUsePacket):
             await self._handle_use(client, packet)
@@ -313,13 +324,17 @@ class ItemRuntime:
                 pickup_item.id,
             )
             return
-        carried = self.item_service.find_carried_item(client.id)
-        if carried and carried.id != pickup_item.id:
+        carried_items = self.item_service.find_carried_items(client.id)
+        if (
+            pickup_item.carrierId != client.id
+            and len(carried_items) >= self.host.max_carried_items
+        ):
             await self.send_result(
                 client,
                 False,
                 "pickup",
-                "You are already carrying an item.",
+                f"You can carry at most {self.host.max_carried_items} "
+                f"{'item' if self.host.max_carried_items == 1 else 'items'}.",
                 pickup_item.id,
             )
             return
@@ -537,16 +552,19 @@ class ItemRuntime:
         if not transfer_targets_item:
             await self.send_result(client, False, "transfer", "Item not found.")
             return
-        if transfer_targets_item.carrierId:
+        if transfer_targets_item.carrierId not in (None, client.id):
             await self.send_result(
                 client,
                 False,
                 "transfer",
-                "Item cannot be transferred while carried.",
+                "Item is carried by another user.",
                 transfer_targets_item.id,
             )
             return
-        if not self.item_is_on_client_square(transfer_targets_item, client):
+        if (
+            transfer_targets_item.carrierId is None
+            and not self.item_is_on_client_square(transfer_targets_item, client)
+        ):
             await self.send_result(
                 client,
                 False,
@@ -578,7 +596,7 @@ class ItemRuntime:
             ItemTransferTargetSummary(
                 userId=str(entry["id"]),
                 username=str(entry["username"]),
-                online=str(entry.get("id")) in connected_user_ids,
+                online=str(entry["id"]) in connected_user_ids,
             )
             for entry in users
             if str(entry.get("status")) == "active"
@@ -603,16 +621,18 @@ class ItemRuntime:
         if not transfer_item:
             await self.send_result(client, False, "transfer", "Item not found.")
             return
-        if transfer_item.carrierId:
+        if transfer_item.carrierId not in (None, client.id):
             await self.send_result(
                 client,
                 False,
                 "transfer",
-                "Item cannot be transferred while carried.",
+                "Item is carried by another user.",
                 transfer_item.id,
             )
             return
-        if not self.item_is_on_client_square(transfer_item, client):
+        if transfer_item.carrierId is None and not self.item_is_on_client_square(
+            transfer_item, client
+        ):
             await self.send_result(
                 client,
                 False,
@@ -653,14 +673,7 @@ class ItemRuntime:
                 transfer_item.id,
             )
             return
-        target = next(
-            (
-                other
-                for other in self.clients.values()
-                if other.authenticated and other.user_id == target_user_id
-            ),
-            None,
-        )
+        target = self._authenticated_client_for_user(target_user_id)
         target_username = (
             target.username
             if target and target.username
@@ -694,6 +707,160 @@ class ItemRuntime:
             transfer_item.id,
         )
         return
+
+    async def _handle_hand_targets(
+        self, client: ClientConnection, packet: ItemHandTargetsPacket
+    ) -> None:
+        """Return nearby authenticated users who can receive a carried item."""
+
+        hand_item = self.items.get(packet.itemId)
+        if not hand_item:
+            await self.send_result(client, False, "hand", "Item not found.")
+            return
+        source_error = self._hand_source_error(client, hand_item)
+        if source_error:
+            await self.send_result(client, False, "hand", source_error, hand_item.id)
+            return
+
+        active_user_names = {
+            str(entry["id"]): str(entry["username"])
+            for entry in self.auth_service.list_users_for_admin()
+            if str(entry.get("status")) == "active"
+        }
+        target_clients: dict[str, ClientConnection] = {}
+        for target in self.clients.values():
+            if target.user_id not in active_user_names:
+                continue
+            if not self._can_hand_to_target(client, target, hand_item):
+                continue
+            target_user_id = target.user_id
+            if target_user_id is None:
+                continue
+            target_clients.setdefault(target_user_id, target)
+        targets = [
+            ItemTransferTargetSummary(
+                userId=user_id,
+                username=target.username
+                or target.nickname
+                or active_user_names.get(user_id, user_id),
+                online=True,
+            )
+            for user_id, target in target_clients.items()
+        ]
+        await self.delivery.send(
+            client,
+            ItemHandTargetsResultPacket(
+                type="item_hand_targets", itemId=hand_item.id, targets=targets
+            ),
+        )
+
+    async def _handle_hand(
+        self, client: ClientConnection, packet: ItemHandPacket
+    ) -> None:
+        """Hand one carried item to a nearby user without changing ownership."""
+
+        hand_item = self.items.get(packet.itemId)
+        if not hand_item:
+            await self.send_result(client, False, "hand", "Item not found.")
+            return
+        source_error = self._hand_source_error(client, hand_item)
+        if source_error:
+            await self.send_result(client, False, "hand", source_error, hand_item.id)
+            return
+        target_user_id = str(packet.targetUserId).strip()
+        if not target_user_id:
+            await self.send_result(
+                client,
+                False,
+                "hand",
+                "Target user is not available.",
+                hand_item.id,
+            )
+            return
+        target = self._hand_target_for_user(client, hand_item, target_user_id)
+        if target is None:
+            await self.send_result(
+                client,
+                False,
+                "hand",
+                "That user is not nearby or cannot receive the item.",
+                hand_item.id,
+            )
+            return
+
+        target_username = target.username or target.nickname or target_user_id
+        hand_item.carrierId = target.id
+        hand_item.x = target.x
+        hand_item.y = target.y
+        hand_item.z = target.z
+        hand_item.updatedAt = self.item_service.now_ms()
+        actor_id, actor_name = self._item_updated_actor(client)
+        hand_item.updatedBy = actor_id
+        hand_item.updatedByName = actor_name
+        hand_item.version += 1
+        await self.broadcast_item(hand_item)
+        self.request_state_save()
+        item_text = f"{hand_item.title} ({self._item_type_label(hand_item)})"
+        await self.delivery.broadcast(
+            BroadcastChatMessagePacket(
+                type="chat_message",
+                message=f"{client.nickname} handed {item_text} to {target_username}.",
+                system=True,
+            ),
+            exclude=client,
+        )
+        await self.send_result(
+            client,
+            True,
+            "hand",
+            f"You handed {item_text} to {target_username}.",
+            hand_item.id,
+        )
+
+    def _can_hand_to_target(
+        self, client: ClientConnection, target: ClientConnection, item: WorldItem
+    ) -> bool:
+        """Return whether one nearby connection can receive a handoff."""
+
+        if not target.authenticated or not target.user_id:
+            return False
+        if target.id == client.id or target.user_id == client.user_id:
+            return False
+        if target.z != client.z:
+            return False
+        if max(abs(target.x - client.x), abs(target.y - client.y)) > 5:
+            return False
+        if not self._can_pickup_drop_item(target, item):
+            return False
+        return self._can_receive_carried_item(target, item)
+
+    def _hand_source_error(
+        self, client: ClientConnection, item: WorldItem
+    ) -> str | None:
+        """Return a concise validation error for a handoff source item."""
+
+        if item.carrierId != client.id:
+            return "You must be carrying that item to hand it to someone."
+        if "carryable" not in item.capabilities:
+            return "That item cannot be handed to someone."
+        if not self._can_pickup_drop_item(client, item):
+            return "Not authorized to hand this item."
+        return None
+
+    def _hand_target_for_user(
+        self, client: ClientConnection, item: WorldItem, target_user_id: str
+    ) -> ClientConnection | None:
+        """Resolve a currently eligible handoff target for final validation."""
+
+        return next(
+            (
+                target
+                for target in self.clients.values()
+                if target.user_id == target_user_id
+                and self._can_hand_to_target(client, target, item)
+            ),
+            None,
+        )
 
     async def _handle_use(
         self, client: ClientConnection, packet: ItemUsePacket
@@ -1097,6 +1264,37 @@ class ItemRuntime:
             return False
         return item.createdBy == client.user_id
 
+    def _authenticated_client_for_user(self, user_id: str) -> ClientConnection | None:
+        """Return the active authenticated connection for one account id."""
+
+        return next(
+            (
+                client
+                for client in self.clients.values()
+                if client.authenticated and client.user_id == user_id
+            ),
+            None,
+        )
+
+    def _can_pickup_drop_item(self, client: ClientConnection, item: WorldItem) -> bool:
+        """Return whether a client may receive or hand one item."""
+
+        return self.client_has_permission(client, "item.pickup_drop.any") or (
+            self.client_has_permission(client, "item.pickup_drop.own")
+            and self._owns_item(client, item)
+        )
+
+    def _can_receive_carried_item(
+        self, client: ClientConnection, item: WorldItem
+    ) -> bool:
+        """Return whether a client has a carrying slot for one transferred item."""
+
+        carried_items = self.item_service.find_carried_items(client.id)
+        carried_count = sum(
+            carried_item.id != item.id for carried_item in carried_items
+        )
+        return carried_count < self.host.max_carried_items
+
     def get_emit_range(self, item: WorldItem) -> int:
         """Return effective emit range for one item with sane bounds."""
 
@@ -1175,6 +1373,7 @@ class ItemRuntime:
             "drop",
             "delete",
             "transfer",
+            "hand",
             "use",
             "secondary_use",
             "update",

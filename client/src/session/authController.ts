@@ -63,6 +63,7 @@ export function createAuthController(deps: AuthControllerDeps): {
   updateConnectAvailability: () => void;
   hasPermission: (key: string) => boolean;
   getVoiceSendAllowed: () => boolean;
+  applyVoiceSendPermission: () => void;
   getAuthUserId: () => string;
   sendAuthRequest: () => void;
   setAuthMode: (mode: AuthMode) => void;
@@ -92,6 +93,7 @@ export function createAuthController(deps: AuthControllerDeps): {
       .slice(0, Math.max(1, maxLength));
   }
 
+  /** Reapply current authorization and user mute state after microphone replacement. */
   function applyVoiceSendPermission(): void {
     voiceSendAllowed = authPermissions.has('voice.send');
     if (voiceSendAllowed) {
@@ -383,8 +385,8 @@ export function createAuthController(deps: AuthControllerDeps): {
     deps.onServerAdminMenuActions([]);
     if (deps.isRunning()) {
       deps.signalingSend({ type: 'auth_logout' });
-      deps.disconnect();
     }
+    deps.disconnect();
     setAuthMode('login');
     deps.updateStatus('Logged out.');
     updateConnectAvailability();
@@ -452,6 +454,7 @@ export function createAuthController(deps: AuthControllerDeps): {
     updateConnectAvailability,
     hasPermission: (key: string) => authPermissions.has(key),
     getVoiceSendAllowed: () => voiceSendAllowed,
+    applyVoiceSendPermission,
     getAuthUserId: () => authUserId,
     sendAuthRequest,
     setAuthMode,
