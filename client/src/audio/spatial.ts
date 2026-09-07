@@ -1,6 +1,7 @@
 export type SpatialMixOptions = {
   dx: number;
   dy: number;
+  dz?: number;
   range: number;
   baseGain?: number;
   nearFieldDistance?: number;
@@ -15,48 +16,113 @@ export type SpatialMixOptions = {
 };
 
 export type SpatialMixResult = {
+  dx: number;
+  dy: number;
+  dz: number;
   distance: number;
   gain: number;
-  pan: number;
 };
 
 export const SPATIAL_RAMP_SECONDS = 0.2;
 export const SPATIAL_TIME_CONSTANT_SECONDS = SPATIAL_RAMP_SECONDS / 3;
 
+export type SpatialMode = 'standard' | 'hrtf';
 type SpatialOutputMode = 'stereo' | 'mono';
+type SpatialScene = {
+  mode: SpatialMode;
+  outputMode: SpatialOutputMode;
+  facingDeg: number;
+  panners: Map<PannerNode, SpatialMixResult | null>;
+};
+const scenes = new WeakMap<BaseAudioContext, SpatialScene>();
+
+function sceneFor(context: BaseAudioContext): SpatialScene {
+  let scene = scenes.get(context);
+  if (!scene) {
+    scene = { mode: 'standard', outputMode: 'stereo', facingDeg: 0, panners: new Map() };
+    scenes.set(context, scene);
+  }
+  return scene;
+}
+
+/** One renderer for all world audio. Distance and transmission remain application-owned. */
+export function createSpatialPanner(context: AudioContext): PannerNode {
+  const panner = context.createPanner();
+  panner.rolloffFactor = 0;
+  panner.coneInnerAngle = 360;
+  panner.coneOuterAngle = 360;
+  panner.channelCountMode = 'clamped-max';
+  sceneFor(context).panners.set(panner, null);
+  updateSpatialPanner(panner, null);
+  return panner;
+}
+
+export function disconnectSpatialPanner(panner: PannerNode | null | undefined): void {
+  if (!panner) return;
+  sceneFor(panner.context).panners.delete(panner);
+  panner.disconnect();
+}
+
+/** Sources are listener-relative, in compass coordinates: +y north, +z up. */
+export function updateSpatialPanner(panner: PannerNode, mix: SpatialMixResult | null): void {
+  const scene = sceneFor(panner.context);
+  scene.panners.set(panner, mix);
+  const model = scene.outputMode === 'stereo' && scene.mode === 'hrtf' ? 'HRTF' : 'equalpower';
+  if (panner.panningModel !== model) panner.panningModel = model;
+  // Mono also downmixes stereo media before positioning, while retaining the HRTF preference.
+  const channelCount = scene.outputMode === 'mono' ? 1 : 2;
+  if (panner.channelCount !== channelCount) panner.channelCount = channelCount;
+  const angle = scene.facingDeg * Math.PI / 180;
+  const centered = !mix || (mix.dx === 0 && mix.dy === 0 && mix.dz === 0) || scene.outputMode === 'mono';
+  const x = centered ? Math.sin(angle) : mix.dx;
+  const y = centered ? 0 : mix.dz;
+  const z = centered ? -Math.cos(angle) : -mix.dy;
+  const now = panner.context.currentTime;
+  panner.positionX.setTargetAtTime(x, now, SPATIAL_TIME_CONSTANT_SECONDS);
+  panner.positionY.setTargetAtTime(y, now, SPATIAL_TIME_CONSTANT_SECONDS);
+  panner.positionZ.setTargetAtTime(z, now, SPATIAL_TIME_CONSTANT_SECONDS);
+}
+
+/** Updates existing sources as well as the defaults for sources created later. */
+export function configureSpatialAudio(
+  context: AudioContext, mode: SpatialMode, outputMode: SpatialOutputMode, facingDeg: number,
+): void {
+  const scene = sceneFor(context);
+  const heading = normalizeDegrees(facingDeg);
+  if (scene.mode === mode && scene.outputMode === outputMode && scene.facingDeg === heading) return;
+  scene.mode = mode;
+  scene.outputMode = outputMode;
+  scene.facingDeg = heading;
+  const angle = heading * Math.PI / 180;
+  const listener = context.listener;
+  listener.forwardX.setTargetAtTime(Math.sin(angle), context.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
+  listener.forwardY.setTargetAtTime(0, context.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
+  listener.forwardZ.setTargetAtTime(-Math.cos(angle), context.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
+  listener.upX.value = 0;
+  listener.upY.value = 1;
+  listener.upZ.value = 0;
+  for (const [panner, mix] of scene.panners) updateSpatialPanner(panner, mix);
+}
 
 type ApplySpatialNodeOptions = {
   audioCtx: AudioContext;
   gainNode: GainNode;
-  pannerNode: StereoPannerNode | null;
+  pannerNode: PannerNode | null;
   mix: SpatialMixResult | null;
-  outputMode: SpatialOutputMode;
   transition: 'linear' | 'target';
 };
 
-/**
- * Applies one resolved spatial mix to gain/pan nodes with a shared transition profile.
- */
+/** Applies shared gain smoothing and 3D positioning without a second attenuation curve. */
 export function applySpatialMixToNodes(options: ApplySpatialNodeOptions): void {
-  const { audioCtx, gainNode, pannerNode, mix, outputMode, transition } = options;
+  const { audioCtx, gainNode, pannerNode, mix, transition } = options;
   const gainValue = mix?.gain ?? 0;
-  const panValue = mix?.pan ?? 0;
-  const resolvedPan = outputMode === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
-
   if (transition === 'linear') {
     gainNode.gain.cancelScheduledValues(audioCtx.currentTime);
     gainNode.gain.linearRampToValueAtTime(gainValue, audioCtx.currentTime + SPATIAL_RAMP_SECONDS);
-    if (pannerNode) {
-      pannerNode.pan.cancelScheduledValues(audioCtx.currentTime);
-      pannerNode.pan.linearRampToValueAtTime(resolvedPan, audioCtx.currentTime + SPATIAL_RAMP_SECONDS);
-    }
-    return;
+  } else {
+    gainNode.gain.setTargetAtTime(gainValue, audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
   }
-
-  gainNode.gain.setTargetAtTime(gainValue, audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
-  if (pannerNode) {
-    pannerNode.pan.setTargetAtTime(resolvedPan, audioCtx.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
-  }
+  if (pannerNode) updateSpatialPanner(pannerNode, mix);
 }
 
 type DirectionalProfile = {
@@ -68,6 +134,7 @@ export function resolveSpatialMix(options: SpatialMixOptions): SpatialMixResult 
   const {
     dx,
     dy,
+    dz = 0,
     range,
     baseGain = 1,
     nearFieldDistance,
@@ -78,7 +145,7 @@ export function resolveSpatialMix(options: SpatialMixOptions): SpatialMixResult 
     return null;
   }
 
-  const distance = Math.hypot(dx, dy);
+  const distance = Math.hypot(dx, dy, dz);
   let effectiveRange = range;
   if (options.directional?.enabled) {
     const directionalProfile = resolveDirectionalProfile(dx, dy, options.directional);
@@ -92,17 +159,13 @@ export function resolveSpatialMix(options: SpatialMixOptions): SpatialMixResult 
   const volumeRatio = Math.max(0, 1 - distance / effectiveRange);
   const shapedVolume = volumeRatio * volumeRatio * (3 - 2 * volumeRatio);
   let gain = baseGain * shapedVolume;
-  const clampedX = Math.max(-range, Math.min(range, dx));
-  let pan = Math.sin((clampedX / range) * (Math.PI / 2));
 
   if (nearFieldDistance !== undefined && distance < nearFieldDistance) {
     gain = baseGain * nearFieldGain;
-    if (nearFieldCenterPan) {
-      pan = 0;
-    }
   }
 
-  return { distance, gain, pan };
+  const centered = nearFieldCenterPan && nearFieldDistance !== undefined && distance < nearFieldDistance;
+  return { distance, gain, dx: centered ? 0 : dx, dy: centered ? 0 : dy, dz: centered ? 0 : dz };
 }
 
 export function resolveDirectionalMuffleRatio(

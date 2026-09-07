@@ -35,5 +35,6 @@ def client_position_packet(client: ClientConnection) -> BroadcastPositionPacket:
         x=client.x,
         y=client.y,
         z=client.z,
+        facingDeg=client.facing_deg,
         acousticZoneId=client_acoustic_zone_id(client),
     )

@@ -1,6 +1,11 @@
 import { HEARING_RADIUS, type WorldItem } from '../../../state/gameState';
 import { AudioEngine } from '../../../audio/audioEngine';
-import { applySpatialMixToNodes, resolveSpatialMix } from '../../../audio/spatial';
+import {
+  applySpatialMixToNodes,
+  createSpatialPanner,
+  disconnectSpatialPanner,
+  resolveSpatialMix,
+} from '../../../audio/spatial';
 import { applyAcousticLowpass, normalizeAcousticMix, type AcousticMix } from '../../../audio/acoustics';
 
 type ElevatorOutput = {
@@ -8,7 +13,7 @@ type ElevatorOutput = {
   source: MediaElementAudioSourceNode;
   gain: GainNode;
   occlusionFilter: BiquadFilterNode;
-  panner: StereoPannerNode | null;
+  panner: PannerNode;
   onLoadedMetadata: () => void;
   onCanPlay: () => void;
   ready: boolean;
@@ -71,7 +76,7 @@ export class ElevatorAudioRuntime {
     output.source.disconnect();
     output.gain.disconnect();
     output.occlusionFilter.disconnect();
-    output.panner?.disconnect();
+    disconnectSpatialPanner(output.panner);
     this.outputs.delete(itemId);
   }
 
@@ -128,14 +133,9 @@ export class ElevatorAudioRuntime {
       occlusionFilter.type = 'lowpass';
       occlusionFilter.frequency.value = 20_000;
       gain.gain.value = 0;
-      let panner: StereoPannerNode | null = null;
       const destination = this.audio.getOutputDestinationNode() ?? audioCtx.destination;
-      if (this.audio.supportsStereoPanner()) {
-        panner = audioCtx.createStereoPanner();
-        source.connect(gain).connect(occlusionFilter).connect(panner).connect(destination);
-      } else {
-        source.connect(gain).connect(occlusionFilter).connect(destination);
-      }
+      const panner = createSpatialPanner(audioCtx);
+      source.connect(gain).connect(occlusionFilter).connect(panner).connect(destination);
       const startAtRandomOffset = (): boolean => {
         const startSeconds = resolveElevatorAmbienceStart(element.duration);
         if (startSeconds <= 0) return false;
@@ -198,11 +198,19 @@ export class ElevatorAudioRuntime {
       const sameLanding = Number.isFinite(currentZ) && currentZ === playerPosition.z;
       const spatialConfig = this.getSpatialConfig(item);
       const mix = inside
-        ? resolveSpatialMix({ dx: 0, dy: 0, range: 1, nearFieldDistance: 1, nearFieldCenterPan: true })
-        : sameLanding
+        ? resolveSpatialMix({
+            dx: 0,
+            dy: 0,
+            dz: 0,
+            range: 1,
+            nearFieldDistance: 1,
+            nearFieldCenterPan: true,
+          })
+          : sameLanding
           ? resolveSpatialMix({
               dx: item.x - playerPosition.x,
               dy: item.y - playerPosition.y,
+              dz: currentZ - playerPosition.z,
               range: Math.max(1, spatialConfig.range || HEARING_RADIUS),
               nearFieldDistance: 1,
               nearFieldCenterPan: true,
@@ -218,7 +226,6 @@ export class ElevatorAudioRuntime {
         gainNode: output.gain,
         pannerNode: output.panner,
         mix: transmittedMix,
-        outputMode: this.audio.getOutputMode(),
         transition: 'target',
       });
       if (output.ready && output.element.paused) {

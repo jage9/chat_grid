@@ -25,7 +25,7 @@
    - applies `welcome.worldConfig.movementTickMs` as movement pacing guidance
    - applies `welcome.worldConfig.movementMaxStepsPerTick` for movement-rate parity
    - applies `welcome.worldConfig.structurePresets` and the canonical wall snapshot for World Builder, rendering, and collision prediction
-  - uses `welcome.player` as authoritative starting position (restored from server-side account state when available)
+   - uses `welcome.player` as authoritative starting position and `facingDeg` (restored position when available; facing defaults north)
    - records `welcome.serverInfo` (`instanceId`, `releaseVersion`, `serverVersion`, `expectedClientRevision`, `gridName`, `welcomeMessage`) for restart detection and client branding
    - if `welcome.serverInfo.expectedClientRevision` differs from the running client revision, auto-reloads the page
    - applies `welcome.uiDefinitions` for item menus/properties/options, server-backed command metadata, item-management metadata, and admin menu labels/order
@@ -51,11 +51,21 @@ Each frame:
 - Update spatial radio audio.
 - Update spatial item emit audio.
 - Trace intervening wall edges for positional audio, multiply their transmission gains, and apply the lowest crossed low-pass cutoff.
-- Recompute active sampled world sounds through the shared world-audio router using source/listener acoustic zones, wall transmission, range, distance, and pan.
+- Recompute active sampled world sounds through the shared world-audio router using source/listener acoustic zones, wall transmission, range, distance, and 3D source direction.
 - A ray grazing the actual endpoint of a wall run applies half-strength occlusion; exact corners inside a continuing run or formed by two walls remain fully occluded.
 - Draw canvas scene.
 
 Radio metadata polling is limited to stations near a listener, deduplicated by stream URL, and uses bounded concurrent fetches so slow stations do not hold up the others. Failed fetches preserve the last known title. Requesting now-playing triggers one immediate fetch when no metadata has been collected yet.
+
+## Spatial Audio And Facing
+
+- Voice, world samples and locate tones, radios, item emitters, elevator ambience, and piano notes use the same positional renderer in `audio/spatial.ts`.
+- Both standard and HRTF modes use a browser `PannerNode`; only its panning model changes (`equalpower` or `HRTF`). The application owns distance gain, source directionality, wall filtering, and acoustic-zone transmission. Browser distance attenuation is disabled to avoid applying a second distance curve.
+- Positions use listener-relative world coordinates, mapping grid north (`+y`) to audio forward (`-z`) and world height to audio up. Server-owned facing rotates the audio listener. Arrows retain compass movement; separate turning keys are not assigned yet.
+- `Shift+4` switches active and future sources immediately and saves the listener's preference in browser storage. Standard mode is the default. Mono centers and downmixes positional sources while preserving the HRTF preference for a return to stereo.
+- Sustained piano notes and release tails update their source position and transmission as the listener or item moves. The shared world transmission resolver also serves voice, sampled world sounds, radio, and emit audio.
+- Co-located held sounds and interior elevator ambience stay centered. Multi-floor item sounds use the appropriate landing height. Elevator landing cues retain their floor source ownership and door transmission rules; HRTF does not connect otherwise isolated floors or cabins.
+- UI cues, local footsteps, and microphone monitoring remain non-positional.
 
 ## Message Handling
 
@@ -68,8 +78,8 @@ Core incoming message effects:
 - `admin_roles_list`: role metadata + user counts + permission keys for role management UI.
 - `admin_users_list`: registered-user metadata for the read-only Shift+Z list and role/ban administration flows.
 - `admin_action_result`: success/error for role/user admin mutations.
-- `update_position`: update peer position; movement may route a footstep through the shared world-audio path.
-- `teleport_complete`: route the peer landing sound from its final tile and acoustic zone through the shared world-audio path.
+- `update_position`: update peer position and authoritative `facingDeg`; movement may route a footstep through the shared world-audio path.
+- `teleport_complete`: route the peer landing sound from its final tile and acoustic zone through the shared world-audio path while preserving its `facingDeg`.
 - `update_nickname`: update peer display name.
 - `chat_message`: append/readable status; optional system sound class.
 - `item_upsert`: replace item snapshot and resync item runtimes.
@@ -125,6 +135,7 @@ Core incoming message effects:
 ## Floors And Elevators
 
 - World positions use integer `x`, `y`, and `z`. Ground is `z=0`; the second floor is `z=40`.
+- Player facing uses eight headings in degrees: `0` north (`+y`), `45` northeast, `90` east (`+x`), `135` southeast, `180` south, `225` southwest, `270` west, and `315` northwest. Successful ordinary movement changes facing; blocked movement, teleports, and elevator travel preserve it.
 - Normal movement and teleport packets must keep the server-owned `z`. Only the elevator changes floors.
 - The client renders only the current floor. Item lists and interactions are current-floor only; the user list remains global and names each floor.
 - Cross-floor user teleport is blocked in the client, and the server rejects any packet that attempts to change `z` directly.

@@ -206,6 +206,7 @@ This is behavior-focused documentation for item types and their defaults.
 - Announces that the user begins playing the piano (client enters piano key mode).
 - Piano mode controls include `,` to start/stop recording (max 30s) and `.` to play saved recording.
 - Recordings are stored on the item (server-authoritative), so nearby users hear playback.
+- Notes and release tails follow the live item position, listener facing, and shared wall/door transmission. Standard and HRTF modes use the same routing; held items on the listener square stay centered.
 
 ### Validation
 - `instrument`: `piano | electric_piano | guitar | organ | bass | violin | synth_lead | brass | nintendo | drum_kit`

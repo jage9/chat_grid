@@ -7,7 +7,15 @@ import {
   type EffectId,
   type EffectRuntime,
 } from './effects';
-import { applySpatialMixToNodes, resolveSpatialMix } from './spatial';
+import {
+  applySpatialMixToNodes,
+  configureSpatialAudio,
+  createSpatialPanner,
+  disconnectSpatialPanner,
+  resolveSpatialMix,
+  updateSpatialPanner,
+  type SpatialMode,
+} from './spatial';
 import { applyAcousticLowpass, normalizeAcousticMix, type AcousticMix } from './acoustics';
 
 export type SpatialPeerRuntime = {
@@ -20,7 +28,7 @@ export type SpatialPeerRuntime = {
   listenGain?: number;
   gain?: GainNode;
   occlusionFilter?: BiquadFilterNode;
-  panner?: StereoPannerNode;
+  panner?: PannerNode;
   audioElement?: HTMLAudioElement;
 };
 
@@ -50,7 +58,7 @@ type ActiveSpatialSampleRuntime = {
   baseGain: number;
   gainNode: GainNode;
   occlusionFilter: BiquadFilterNode;
-  pannerNode: StereoPannerNode | null;
+  pannerNode: PannerNode | null;
   sourceNode: AudioBufferSourceNode;
 };
 
@@ -62,6 +70,7 @@ export class AudioEngine {
   private readonly sampleCache = new Map<string, AudioBuffer>();
   private readonly sampleLoaders = new Map<string, Promise<AudioBuffer>>();
   private readonly activeSpatialSamples = new Set<ActiveSpatialSampleRuntime>();
+  private readonly spatialUpdaters = new Set<() => void>();
   private spatialTransmissionResolver: SpatialTransmissionResolver = () => ({ gain: 1, lowpassHz: 20_000 });
 
   private outboundSource: MediaStreamAudioSourceNode | null = null;
@@ -72,6 +81,8 @@ export class AudioEngine {
   private loopbackEnabled = false;
   private loopbackRuntime: EffectRuntime | null = null;
   private outputMode: OutputMode = 'stereo';
+  private spatialMode: SpatialMode = 'standard';
+  private facingDeg = 0;
   private masterVolume = 50;
   private voiceLayerEnabled = true;
   private effectIndex = EFFECT_SEQUENCE.findIndex((effect) => effect.id === 'off');
@@ -91,6 +102,7 @@ export class AudioEngine {
         (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!Ctor) return;
       this.audioCtx = new Ctor();
+      this.refreshSpatialScene();
       this.masterGainNode = this.audioCtx.createGain();
       this.masterGainNode.gain.value = this.masterVolume / 100;
       this.masterGainNode.connect(this.audioCtx.destination);
@@ -110,10 +122,6 @@ export class AudioEngine {
 
   getOutputDestinationNode(): AudioNode | null {
     return this.masterGainNode ?? this.audioCtx?.destination ?? null;
-  }
-
-  supportsStereoPanner(): boolean {
-    return !!this.audioCtx && typeof this.audioCtx.createStereoPanner === 'function';
   }
 
   /** Routes all Web Audio output, retaining the selection until a context exists. */
@@ -207,9 +215,37 @@ export class AudioEngine {
 
   setOutputMode(mode: OutputMode): void {
     this.outputMode = mode;
+    this.refreshSpatialScene();
   }
 
-  /** Set the shared geometry transmission applied to active positional one-shots. */
+  setSpatialMode(mode: SpatialMode): void {
+    this.spatialMode = mode;
+    this.refreshSpatialScene();
+  }
+
+  getSpatialMode(): SpatialMode {
+    return this.spatialMode;
+  }
+
+  setListenerFacing(facingDeg: number): void {
+    this.facingDeg = facingDeg;
+    this.refreshSpatialScene();
+  }
+
+  private refreshSpatialScene(): void {
+    if (this.audioCtx) configureSpatialAudio(this.audioCtx, this.spatialMode, this.outputMode, this.facingDeg);
+  }
+
+  registerSpatialUpdater(update: () => void): () => void {
+    this.spatialUpdaters.add(update);
+    return () => this.spatialUpdaters.delete(update);
+  }
+
+  resolveSpatialTransmission(source: SpatialAudioPosition, listener: SpatialAudioPosition): AcousticMix {
+    return normalizeAcousticMix(this.spatialTransmissionResolver(source, listener));
+  }
+
+  /** Sets shared wall and acoustic-zone transmission for world audio. */
   setSpatialTransmissionResolver(resolver: SpatialTransmissionResolver): void {
     this.spatialTransmissionResolver = resolver;
   }
@@ -232,7 +268,7 @@ export class AudioEngine {
   }
 
   toggleOutputMode(): OutputMode {
-    this.outputMode = this.outputMode === 'stereo' ? 'mono' : 'stereo';
+    this.setOutputMode(this.outputMode === 'stereo' ? 'mono' : 'stereo');
     return this.outputMode;
   }
 
@@ -301,16 +337,9 @@ export class AudioEngine {
     occlusionFilter.frequency.value = 20_000;
     sourceNode.connect(gainNode);
 
-    let pannerNode: StereoPannerNode | undefined;
-    if (this.supportsStereoPanner()) {
-      pannerNode = this.audioCtx.createStereoPanner();
-      if (this.voiceLayerEnabled) {
-        gainNode.connect(occlusionFilter).connect(pannerNode).connect(this.masterGainNode ?? this.audioCtx.destination);
-      }
-    } else {
-      if (this.voiceLayerEnabled) {
-        gainNode.connect(occlusionFilter).connect(this.masterGainNode ?? this.audioCtx.destination);
-      }
+    const pannerNode = createSpatialPanner(this.audioCtx);
+    if (this.voiceLayerEnabled) {
+      gainNode.connect(occlusionFilter).connect(pannerNode).connect(this.masterGainNode ?? this.audioCtx.destination);
     }
 
     peer.audioElement = audioElement;
@@ -330,6 +359,7 @@ export class AudioEngine {
       const mix = acousticGain > 0 ? resolveSpatialMix({
         dx: peer.x - playerPosition.x,
         dy: peer.y - playerPosition.y,
+        dz: peer.z - playerPosition.z,
         range: HEARING_RADIUS,
         nearFieldDistance: 1.5,
         nearFieldGain: 1,
@@ -344,15 +374,15 @@ export class AudioEngine {
         gainNode: peer.gain,
         pannerNode: peer.panner ?? null,
         mix: scaledMix,
-        outputMode: this.outputMode,
         transition: 'target',
       });
     }
   }
 
-  /** Updates active one-shot spatial sample gain/pan against current listener position. */
+  /** Updates sampled and synthesized world audio against the current listener. */
   updateSpatialSamples(playerPosition: SpatialAudioPosition): void {
     if (!this.audioCtx) return;
+    for (const update of this.spatialUpdaters) update();
     for (const sample of Array.from(this.activeSpatialSamples)) {
       this.applySpatialSampleRuntime(sample, playerPosition);
     }
@@ -407,13 +437,8 @@ export class AudioEngine {
       occlusionFilter.frequency.value = 20_000;
       gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
       source.connect(gainNode);
-      let pannerNode: StereoPannerNode | null = null;
-      if (this.supportsStereoPanner() && this.outputMode === 'stereo') {
-        pannerNode = audioCtx.createStereoPanner();
-        gainNode.connect(occlusionFilter).connect(pannerNode).connect(sfxGainNode);
-      } else {
-        gainNode.connect(occlusionFilter).connect(sfxGainNode);
-      }
+      const pannerNode = createSpatialPanner(audioCtx);
+      gainNode.connect(occlusionFilter).connect(pannerNode).connect(sfxGainNode);
       const runtime: ActiveSpatialSampleRuntime = {
         sourceX: sourcePosition.x,
         sourceY: sourcePosition.y,
@@ -437,7 +462,7 @@ export class AudioEngine {
         }
         gainNode.disconnect();
         occlusionFilter.disconnect();
-        pannerNode?.disconnect();
+        disconnectSpatialPanner(pannerNode);
       };
       source.start();
     } catch {
@@ -467,13 +492,8 @@ export class AudioEngine {
       occlusionFilter.frequency.value = 20_000;
       gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
       source.connect(gainNode);
-      let pannerNode: StereoPannerNode | null = null;
-      if (this.supportsStereoPanner() && this.outputMode === 'stereo') {
-        pannerNode = audioCtx.createStereoPanner();
-        gainNode.connect(occlusionFilter).connect(pannerNode).connect(sfxGainNode);
-      } else {
-        gainNode.connect(occlusionFilter).connect(sfxGainNode);
-      }
+      const pannerNode = createSpatialPanner(audioCtx);
+      gainNode.connect(occlusionFilter).connect(pannerNode).connect(sfxGainNode);
       const runtime: ActiveSpatialSampleRuntime = {
         sourceX: sourcePosition.x,
         sourceY: sourcePosition.y,
@@ -498,7 +518,7 @@ export class AudioEngine {
           }
           gainNode.disconnect();
           occlusionFilter.disconnect();
-          pannerNode?.disconnect();
+          disconnectSpatialPanner(pannerNode);
           resolve();
         };
         source.start();
@@ -570,7 +590,7 @@ export class AudioEngine {
     }
     peer.gain?.disconnect();
     peer.occlusionFilter?.disconnect();
-    peer.panner?.disconnect();
+    disconnectSpatialPanner(peer.panner);
     peer.audioElement = undefined;
     peer.gain = undefined;
     peer.occlusionFilter = undefined;
@@ -631,10 +651,9 @@ export class AudioEngine {
           range: HEARING_RADIUS,
           baseGain,
         })
-      : { gain: baseGain, pan: 0 };
+      : { gain: baseGain, distance: 0, dx: 0, dy: 0, dz: 0 };
     if (!resolved) return;
     const finalGain = resolved.gain;
-    const panValue = spec.sourcePosition ? resolved.pan : undefined;
 
     if (finalGain <= 0) return;
 
@@ -648,13 +667,19 @@ export class AudioEngine {
     gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + spec.duration);
 
     oscillator.connect(gainNode);
-    if (panValue !== undefined && this.supportsStereoPanner() && this.outputMode === 'stereo') {
-      const panner = audioCtx.createStereoPanner();
-      panner.pan.setValueAtTime(Math.max(-1, Math.min(1, panValue)), startTime);
+    let panner: PannerNode | null = null;
+    if (spec.sourcePosition) {
+      panner = createSpatialPanner(audioCtx);
+      updateSpatialPanner(panner, resolved);
       gainNode.connect(panner).connect(sfxGainNode);
     } else {
       gainNode.connect(sfxGainNode);
     }
+    oscillator.onended = () => {
+      oscillator.disconnect();
+      gainNode.disconnect();
+      disconnectSpatialPanner(panner);
+    };
 
     oscillator.start(startTime);
     oscillator.stop(startTime + spec.duration);
@@ -666,7 +691,7 @@ export class AudioEngine {
     initial = false,
   ): void {
     if (!this.audioCtx) return;
-    const acoustic = normalizeAcousticMix(this.spatialTransmissionResolver(
+    const acoustic = this.resolveSpatialTransmission(
       {
         x: sample.sourceX,
         y: sample.sourceY,
@@ -674,12 +699,13 @@ export class AudioEngine {
         acousticZoneId: sample.sourceAcousticZoneId,
       },
       playerPosition,
-    ));
+    );
     const acousticGain = acoustic.gain;
     applyAcousticLowpass(this.audioCtx, sample.occlusionFilter, acoustic.lowpassHz);
     const baseMix = acousticGain > 0 ? resolveSpatialMix({
       dx: sample.sourceX - playerPosition.x,
       dy: sample.sourceY - playerPosition.y,
+      dz: sample.sourceZ - playerPosition.z,
       range: sample.range,
       baseGain: sample.baseGain,
     }) : null;
@@ -687,11 +713,7 @@ export class AudioEngine {
     if (initial) {
       const gainValue = mix?.gain ?? 0;
       sample.gainNode.gain.setTargetAtTime(gainValue, this.audioCtx.currentTime, ONE_SHOT_ATTACK_SECONDS);
-      if (sample.pannerNode) {
-        const panValue = mix?.pan ?? 0;
-        const resolvedPan = this.outputMode === 'mono' ? 0 : Math.max(-1, Math.min(1, panValue));
-        sample.pannerNode.pan.setValueAtTime(resolvedPan, this.audioCtx.currentTime);
-      }
+      if (sample.pannerNode) updateSpatialPanner(sample.pannerNode, mix);
       return;
     }
     applySpatialMixToNodes({
@@ -699,7 +721,6 @@ export class AudioEngine {
       gainNode: sample.gainNode,
       pannerNode: sample.pannerNode,
       mix,
-      outputMode: this.outputMode,
       transition: 'target',
     });
   }

@@ -143,6 +143,10 @@
           "description": "Toggle world layer"
         },
         {
+          "keys": "Shift+4",
+          "description": "Toggle HRTF mode"
+        },
+        {
           "keys": "E",
           "description": "Select voice effect"
         },

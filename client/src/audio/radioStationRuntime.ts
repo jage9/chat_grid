@@ -2,9 +2,15 @@ import { HEARING_RADIUS, type WorldItem } from '../state/gameState';
 import { EFFECT_IDS, clampEffectLevel, connectEffectChain, disconnectEffectRuntime, type EffectId, type EffectRuntime } from './effects';
 import { AudioEngine } from './audioEngine';
 import { freshRadioPlaybackUrl } from './mediaUrl';
-import { applySpatialMixToNodes, resolveSpatialMix } from './spatial';
+import {
+  applySpatialMixToNodes,
+  createSpatialPanner,
+  disconnectSpatialPanner,
+  resolveSpatialMix,
+} from './spatial';
 import { volumePercentToGain } from './volume';
 import { applyAcousticLowpass, normalizeAcousticMix, type AcousticMix } from './acoustics';
+import { resolveWorldItemSourcePosition } from './worldItemPosition';
 
 export const RADIO_CHANNEL_OPTIONS = ['stereo', 'mono', 'left', 'right'] as const;
 export type RadioChannelMode = (typeof RADIO_CHANNEL_OPTIONS)[number];
@@ -31,7 +37,7 @@ type ItemRadioOutput = {
   effectValue: number;
   gain: GainNode;
   occlusionFilter: BiquadFilterNode;
-  panner: StereoPannerNode | null;
+  panner: PannerNode;
   wasAudible: boolean;
 };
 
@@ -171,7 +177,7 @@ export class RadioStationRuntime {
     disconnectEffectRuntime(output.effectRuntime);
     output.gain.disconnect();
     output.occlusionFilter.disconnect();
-    output.panner?.disconnect();
+    disconnectSpatialPanner(output.panner);
     this.itemRadioOutputs.delete(itemId);
     this.releaseSharedSource(output.streamUrl);
   }
@@ -251,9 +257,11 @@ export class RadioStationRuntime {
       const acoustic = normalizeAcousticMix(this.getAcousticMix(item));
       const acousticGain = acoustic.gain;
       applyAcousticLowpass(audioCtx, output.occlusionFilter, acoustic.lowpassHz);
+      const sourcePosition = resolveWorldItemSourcePosition(item, playerPosition.z);
       const mix = acousticGain > 0 ? resolveSpatialMix({
-        dx: item.x - playerPosition.x,
-        dy: item.y - playerPosition.y,
+        dx: sourcePosition.x - playerPosition.x,
+        dy: sourcePosition.y - playerPosition.y,
+        dz: sourcePosition.z - playerPosition.z,
         range: Math.max(1, spatialConfig.range || HEARING_RADIUS),
         baseGain: normalizedVolume,
         nearFieldDistance: 1,
@@ -282,7 +290,6 @@ export class RadioStationRuntime {
         gainNode: output.gain,
         pannerNode: output.panner,
         mix: transmittedMix,
-        outputMode: this.audio.getOutputMode(),
         transition: 'target',
       });
     }
@@ -450,13 +457,8 @@ export class RadioStationRuntime {
     const effectValue = normalizeRadioEffectValue(item.params.mediaEffectValue);
     const effectRuntime = connectEffectChain(audioCtx, effectInput, gain, effect, effectValue);
     const destination = this.audio.getOutputDestinationNode() ?? audioCtx.destination;
-    let panner: StereoPannerNode | null = null;
-    if (this.audio.supportsStereoPanner()) {
-      panner = audioCtx.createStereoPanner();
-      gain.connect(occlusionFilter).connect(panner).connect(destination);
-    } else {
-      gain.connect(occlusionFilter).connect(destination);
-    }
+    const panner = createSpatialPanner(audioCtx);
+    gain.connect(occlusionFilter).connect(panner).connect(destination);
     this.itemRadioOutputs.set(item.id, {
       streamUrl,
       channel,

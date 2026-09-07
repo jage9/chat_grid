@@ -30,3 +30,28 @@ describe('item target protocol messages', () => {
     expect(result).toMatchObject({ type: 'item_action_result', action: 'hand' });
   });
 });
+
+describe('player facing protocol messages', () => {
+  it('accepts canonical facing on presence updates and rejects arbitrary degrees', () => {
+    const position = incomingMessageSchema.parse({
+      type: 'update_position',
+      id: 'peer-1',
+      x: 4,
+      y: 5,
+      z: 0,
+      facingDeg: 315,
+      acousticZoneId: 'floor:0',
+    });
+
+    expect(position).toMatchObject({ type: 'update_position', facingDeg: 315 });
+    expect(() => incomingMessageSchema.parse({
+      type: 'update_position',
+      id: 'peer-1',
+      x: 4,
+      y: 5,
+      z: 0,
+      facingDeg: 22,
+      acousticZoneId: 'floor:0',
+    })).toThrow();
+  });
+});

@@ -1,18 +1,22 @@
 import { type IncomingMessage, type OutgoingMessage } from '../../network/protocol';
 import { type GameMode, type WorldItem } from '../../state/gameState';
 import { type CommandDescriptor, type ModeInput } from '../../input/commandTypes';
+import type { AcousticMix } from '../../audio/acoustics';
+import type { SpatialAudioPosition } from '../../audio/audioEngine';
 
 /** Shared dependencies made available to all client item behavior modules. */
 export type ItemBehaviorDeps = {
   state: {
     mode: GameMode;
     items: Map<string, WorldItem>;
-    player: { id: string | null; x: number; y: number; z: number };
+    player: { id: string | null; x: number; y: number; z: number; acousticZoneId: string };
   };
   audio: {
     ensureContext: () => Promise<void>;
     context: AudioContext | null;
     getOutputDestinationNode: () => AudioNode | null;
+    registerSpatialUpdater: (update: () => void) => () => void;
+    resolveSpatialTransmission: (source: SpatialAudioPosition, listener: SpatialAudioPosition) => AcousticMix;
     sfxUiBlip: () => void;
     sfxUiCancel: () => void;
   };

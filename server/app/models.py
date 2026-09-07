@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field
+
+FacingDeg: TypeAlias = Literal[0, 45, 90, 135, 180, 225, 270, 315]
 
 
 class BasePacket(BaseModel):
@@ -17,6 +19,13 @@ class UpdatePositionPacket(BasePacket):
     x: int
     y: int
     z: int
+
+
+class UpdateFacingPacket(BasePacket):
+    """Request one of the eight canonical player facing headings."""
+
+    type: Literal["update_facing"]
+    facingDeg: FacingDeg
 
 
 class TeleportCompletePacket(BasePacket):
@@ -253,6 +262,7 @@ class StructureDeletePacket(BasePacket):
 
 ClientPacket = (
     UpdatePositionPacket
+    | UpdateFacingPacket
     | TeleportCompletePacket
     | UpdateNicknamePacket
     | ChatMessagePacket
@@ -301,6 +311,7 @@ class RemoteUser(BaseModel):
     x: int
     y: int
     z: int
+    facingDeg: FacingDeg
     acousticZoneId: str
 
 
@@ -359,6 +370,7 @@ class BroadcastPositionPacket(BasePacket):
     x: int
     y: int
     z: int
+    facingDeg: FacingDeg
     acousticZoneId: str
 
 
@@ -368,6 +380,7 @@ class BroadcastTeleportCompletePacket(BasePacket):
     x: int
     y: int
     z: int
+    facingDeg: FacingDeg
     acousticZoneId: str
 
 

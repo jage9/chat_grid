@@ -1,3 +1,4 @@
+import type { SpatialMode } from '../audio/spatial';
 import type { AudioLayerState } from '../types/audio';
 
 const EFFECT_LEVELS_STORAGE_KEY = 'chatGridEffectLevels';
@@ -5,6 +6,7 @@ const AUDIO_INPUT_STORAGE_KEY = 'chatGridAudioInputDeviceId';
 const AUDIO_OUTPUT_STORAGE_KEY = 'chatGridAudioOutputDeviceId';
 const AUDIO_INPUT_NAME_STORAGE_KEY = 'chatGridAudioInputDeviceName';
 const AUDIO_OUTPUT_NAME_STORAGE_KEY = 'chatGridAudioOutputDeviceName';
+const SPATIAL_MODE_STORAGE_KEY = 'chatGridSpatialMode';
 const AUDIO_OUTPUT_MODE_STORAGE_KEY = 'chatGridAudioOutputMode';
 const AUDIO_LAYER_STATE_STORAGE_KEY = 'chatGridAudioLayers';
 const MIC_INPUT_GAIN_STORAGE_KEY = 'chatGridMicInputGain';
@@ -138,6 +140,14 @@ export class SettingsStore {
       return;
     }
     localStorage.removeItem(AUTH_USERNAME_STORAGE_KEY);
+  }
+
+  loadSpatialMode(): SpatialMode {
+    return localStorage.getItem(SPATIAL_MODE_STORAGE_KEY) === 'hrtf' ? 'hrtf' : 'standard';
+  }
+
+  saveSpatialMode(value: SpatialMode): void {
+    localStorage.setItem(SPATIAL_MODE_STORAGE_KEY, value);
   }
 
   loadOutputMode(): 'mono' | 'stereo' {

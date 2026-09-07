@@ -1,5 +1,18 @@
 import { z } from 'zod';
 
+export const facingDegSchema = z.union([
+  z.literal(0),
+  z.literal(45),
+  z.literal(90),
+  z.literal(135),
+  z.literal(180),
+  z.literal(225),
+  z.literal(270),
+  z.literal(315),
+]);
+
+export type FacingDeg = z.infer<typeof facingDegSchema>;
+
 const actionMetadataSchema = z.object({
   id: z.string(),
   label: z.string(),
@@ -65,6 +78,7 @@ export const welcomeMessageSchema = z.object({
     x: z.number().int(),
     y: z.number().int(),
     z: z.number().int(),
+    facingDeg: facingDegSchema,
     acousticZoneId: z.string().min(1),
   }),
   users: z.array(
@@ -75,6 +89,7 @@ export const welcomeMessageSchema = z.object({
       x: z.number().int(),
       y: z.number().int(),
       z: z.number().int(),
+      facingDeg: facingDegSchema,
       acousticZoneId: z.string().min(1),
     }),
   ),
@@ -230,6 +245,7 @@ export const updatePositionSchema = z.object({
   x: z.number().int(),
   y: z.number().int(),
   z: z.number().int(),
+  facingDeg: facingDegSchema,
   acousticZoneId: z.string().min(1),
 });
 
@@ -239,6 +255,7 @@ export const teleportCompleteSchema = z.object({
   x: z.number().int(),
   y: z.number().int(),
   z: z.number().int(),
+  facingDeg: facingDegSchema,
   acousticZoneId: z.string().min(1),
 });
 
@@ -507,6 +524,7 @@ export type OutgoingMessage =
   | { type: 'admin_user_unban'; username: string }
   | { type: 'admin_user_delete'; username: string }
   | { type: 'update_position'; x: number; y: number; z: number }
+  | { type: 'update_facing'; facingDeg: FacingDeg }
   | { type: 'teleport_complete'; x: number; y: number; z: number }
   | { type: 'update_nickname'; nickname: string }
   | { type: 'chat_message'; message: string }
@@ -550,5 +568,6 @@ export type RemoteUser = {
   x: number;
   y: number;
   z: number;
+  facingDeg: number;
   acousticZoneId: string;
 };

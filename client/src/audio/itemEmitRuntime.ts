@@ -3,9 +3,15 @@ import { getItemTypeGlobalProperties } from '../items/itemRegistry';
 import { AudioEngine } from './audioEngine';
 import { connectEffectChain, disconnectEffectRuntime, type EffectId, type EffectRuntime } from './effects';
 import { normalizeRadioEffect, normalizeRadioEffectValue } from './radioStationRuntime';
-import { applySpatialMixToNodes, resolveSpatialMix } from './spatial';
+import {
+  applySpatialMixToNodes,
+  createSpatialPanner,
+  disconnectSpatialPanner,
+  resolveSpatialMix,
+} from './spatial';
 import { volumePercentToGain } from './volume';
 import { applyAcousticLowpass, normalizeAcousticMix, type AcousticMix } from './acoustics';
+import { resolveWorldItemSourcePosition } from './worldItemPosition';
 
 type EmitOutput = {
   soundUrl: string;
@@ -20,7 +26,7 @@ type EmitOutput = {
   loopDelaySeconds: number;
   gain: GainNode;
   occlusionFilter: BiquadFilterNode;
-  panner: StereoPannerNode | null;
+  panner: PannerNode;
 };
 
 type EmitResumeState = {
@@ -138,7 +144,7 @@ export class ItemEmitRuntime {
       disconnectEffectRuntime(output.effectRuntime);
       output.gain.disconnect();
       output.occlusionFilter.disconnect();
-      output.panner?.disconnect();
+      disconnectSpatialPanner(output.panner);
       this.outputs.delete(itemId);
     }
     this.pendingEmitStarts.delete(itemId);
@@ -230,7 +236,6 @@ export class ItemEmitRuntime {
       occlusionFilter.type = 'lowpass';
       occlusionFilter.frequency.value = 20_000;
       gain.gain.value = 0;
-      let panner: StereoPannerNode | null = null;
       source.connect(effectInput);
       const effect = normalizeRadioEffect(item.params.emitEffect);
       const effectValue = normalizeRadioEffectValue(item.params.emitEffectValue);
@@ -334,12 +339,8 @@ export class ItemEmitRuntime {
         }
       }
       const destination = this.audio.getOutputDestinationNode() ?? audioCtx.destination;
-      if (this.audio.supportsStereoPanner()) {
-        panner = audioCtx.createStereoPanner();
-        gain.connect(occlusionFilter).connect(panner).connect(destination);
-      } else {
-        gain.connect(occlusionFilter).connect(destination);
-      }
+      const panner = createSpatialPanner(audioCtx);
+      gain.connect(occlusionFilter).connect(panner).connect(destination);
       this.outputs.set(item.id, {
         soundUrl,
         element,
@@ -422,9 +423,11 @@ export class ItemEmitRuntime {
       const acoustic = normalizeAcousticMix(this.getAcousticMix(item));
       const acousticGain = acoustic.gain;
       applyAcousticLowpass(audioCtx, output.occlusionFilter, acoustic.lowpassHz);
+      const sourcePosition = resolveWorldItemSourcePosition(item, playerPosition.z);
       const mix = acousticGain > 0 ? resolveSpatialMix({
-        dx: item.x - playerPosition.x,
-        dy: item.y - playerPosition.y,
+        dx: sourcePosition.x - playerPosition.x,
+        dy: sourcePosition.y - playerPosition.y,
+        dz: sourcePosition.z - playerPosition.z,
         range: Math.max(1, spatialConfig.range || HEARING_RADIUS),
         baseGain: ITEM_EMIT_BASE_GAIN,
         nearFieldDistance: 1,
@@ -444,7 +447,6 @@ export class ItemEmitRuntime {
         gainNode: output.gain,
         pannerNode: output.panner,
         mix: scaledMix,
-        outputMode: this.audio.getOutputMode(),
         transition: 'target',
       });
       this.tryStartEmitPlayback(itemId, output.element);

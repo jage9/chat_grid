@@ -13,6 +13,7 @@ function setupRemoteMovement() {
     x: 4,
     y: 4,
     z: 0,
+    facingDeg: 0,
     acousticZoneId: 'floor:0',
   });
   const playWorldSound = vi.fn();
@@ -36,12 +37,13 @@ function setupRemoteMovement() {
   return {
     handler: createOnMessageHandler(deps),
     playWorldSound,
+    state,
   };
 }
 
 describe('remote movement audio', () => {
   it('routes footsteps with the authoritative peer acoustic zone', async () => {
-    const { handler, playWorldSound } = setupRemoteMovement();
+    const { handler, playWorldSound, state } = setupRemoteMovement();
 
     await handler({
       type: 'update_position',
@@ -49,6 +51,7 @@ describe('remote movement audio', () => {
       x: 5,
       y: 4,
       z: 0,
+      facingDeg: 90,
       acousticZoneId: 'floor:0',
     });
 
@@ -59,6 +62,23 @@ describe('remote movement audio', () => {
       acousticZoneId: 'floor:0',
       gain: 0.7,
     });
+    expect(state.peers.get('peer-1')?.facingDeg).toBe(90);
+  });
+
+  it('does not play a footstep for a facing-only presence update', async () => {
+    const { handler, playWorldSound } = setupRemoteMovement();
+
+    await handler({
+      type: 'update_position',
+      id: 'peer-1',
+      x: 4,
+      y: 4,
+      z: 0,
+      facingDeg: 135,
+      acousticZoneId: 'floor:0',
+    });
+
+    expect(playWorldSound).not.toHaveBeenCalled();
   });
 });
 

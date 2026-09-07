@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 from websockets.asyncio.server import ServerConnection
 
+from .models import FacingDeg
+
 
 @dataclass
 class ClientConnection:
@@ -26,6 +28,7 @@ class ClientConnection:
     x: int = 20
     y: int = 20
     z: int = 0
+    facing_deg: FacingDeg = 0
     last_position_update_ms: int = 0
     last_seen_at_ms: int = 0
     movement_window_index: int = -1
@@ -42,4 +45,5 @@ class ClientConnection:
             "x": self.x,
             "y": self.y,
             "z": self.z,
+            "facingDeg": self.facing_deg,
         }

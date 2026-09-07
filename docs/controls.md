@@ -80,6 +80,7 @@ This document is the authoritative keymap for the client.
 - `2`: Toggle item layer (emit sounds)
 - `3`: Toggle media layer (radio)
 - `4`: Toggle world layer (other-user world sounds)
+- `Shift+4`: Toggle HRTF spatial audio (saved per browser; standard mode is the default)
 - `E`: Effect select menu
 - `-` / `=`: Lower/raise master volume
 - `_` / `+` (`Shift+-` / `Shift+=`): Lower/raise active effect value

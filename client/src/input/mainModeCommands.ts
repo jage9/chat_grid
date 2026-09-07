@@ -80,6 +80,14 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     isAvailable: () => true,
   },
   {
+    id: 'toggleHrtf',
+    label: 'Toggle HRTF mode',
+    shortcut: 'Shift+4',
+    tooltip: 'Toggle HRTF spatial audio.',
+    section: 'Audio',
+    isAvailable: () => true,
+  },
+  {
     id: 'toggleWorldLayer',
     label: 'Toggle world layer',
     shortcut: '4',

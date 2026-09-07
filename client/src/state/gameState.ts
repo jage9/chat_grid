@@ -88,6 +88,7 @@ export type Player = {
   x: number;
   y: number;
   z: number;
+  facingDeg: number;
   acousticZoneId: string;
   lastMoveTime: number;
 };
@@ -99,6 +100,7 @@ export type PeerState = {
   x: number;
   y: number;
   z: number;
+  facingDeg: number;
   acousticZoneId: string;
 };
 
@@ -158,6 +160,7 @@ export function createInitialState(): GameState {
       x: 20,
       y: 20,
       z: 0,
+      facingDeg: 0,
       acousticZoneId: 'floor:0',
       lastMoveTime: 0,
     },

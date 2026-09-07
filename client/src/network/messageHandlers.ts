@@ -17,9 +17,9 @@ type MessageHandlerDeps = {
   applyServerItemUiDefinitions: (defs: unknown) => boolean;
   state: {
     addItemTypeIndex: number;
-    player: { id: string | null; nickname: string; x: number; y: number; z: number; acousticZoneId: string };
+    player: { id: string | null; nickname: string; x: number; y: number; z: number; facingDeg: number; acousticZoneId: string };
     running: boolean;
-    peers: Map<string, { id: string; userId?: string | null; nickname: string; x: number; y: number; z: number; acousticZoneId: string }>;
+    peers: Map<string, { id: string; userId?: string | null; nickname: string; x: number; y: number; z: number; facingDeg: number; acousticZoneId: string }>;
     items: Map<string, WorldItem>;
     structures: Map<string, WallStructure>;
     mode: string;
@@ -36,7 +36,7 @@ type MessageHandlerDeps = {
     instructions: HTMLElement;
   };
   peerManager: {
-    ensurePeer: (id: string, user: { id: string; nickname: string; x: number; y: number; z: number; acousticZoneId: string }) => unknown;
+    ensurePeer: (id: string, user: { id: string; nickname: string; x: number; y: number; z: number; facingDeg: number; acousticZoneId: string }) => unknown;
     setPeerPosition: (id: string, x: number, y: number, z: number, acousticZoneId: string) => void;
     setListenerFloor: (z: number) => void;
     setPeerNickname: (id: string, nickname: string) => void;
@@ -153,6 +153,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.state.player.x = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.x));
         deps.state.player.y = Math.max(0, Math.min(deps.getWorldGridSize() - 1, message.player.y));
         deps.state.player.z = message.player.z;
+        deps.state.player.facingDeg = message.player.facingDeg;
         deps.state.player.acousticZoneId = message.player.acousticZoneId;
         deps.peerManager.setListenerFloor(message.player.z);
         deps.dom.connectButton.classList.add('hidden');
@@ -195,6 +196,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           deps.state.player.x = message.x;
           deps.state.player.y = message.y;
           deps.state.player.z = message.z;
+          deps.state.player.facingDeg = message.facingDeg;
           const zoneChanged = deps.state.player.acousticZoneId !== message.acousticZoneId;
           deps.state.player.acousticZoneId = message.acousticZoneId;
           if (floorChanged) {
@@ -213,6 +215,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           peer.x = message.x;
           peer.y = message.y;
           peer.z = message.z;
+          peer.facingDeg = message.facingDeg;
           peer.acousticZoneId = message.acousticZoneId;
         } else {
           deps.state.peers.set(message.id, {
@@ -222,6 +225,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
             x: message.x,
             y: message.y,
             z: message.z,
+            facingDeg: message.facingDeg,
             acousticZoneId: message.acousticZoneId,
           });
         }
@@ -230,7 +234,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.refreshAcousticModel();
         if (peer) {
           const movementDelta = Math.hypot(message.x - prevX, message.y - prevY);
-          if (movementDelta <= 1.5) {
+          if (movementDelta > 0 && movementDelta <= 1.5) {
             deps.playWorldSound(deps.randomFootstepUrl(), {
               x: peer.x,
               y: peer.y,
@@ -244,6 +248,10 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
       }
 
       case 'teleport_complete': {
+        const peer = deps.state.peers.get(message.id);
+        if (peer) {
+          peer.facingDeg = message.facingDeg;
+        }
         deps.playWorldSound(deps.TELEPORT_SOUND_URL, message);
         break;
       }

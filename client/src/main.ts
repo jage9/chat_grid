@@ -1,5 +1,6 @@
 import './styles.css';
-import { AudioEngine } from './audio/audioEngine';
+import { AudioEngine, type SpatialAudioPosition } from './audio/audioEngine';
+import { resolveWorldItemSourcePosition } from './audio/worldItemPosition';
 import {
   EFFECT_SEQUENCE,
 } from './audio/effects';
@@ -351,24 +352,29 @@ function wallAcousticMixTo(sourceX: number, sourceY: number, sourceZ: number) {
 }
 
 function itemWallAcousticMix(item: WorldItem) {
-  const floorZs = item.params.floorZs;
-  const sourceZ = Array.isArray(floorZs) && floorZs.some((floorZ) => Number(floorZ) === state.player.z)
-    ? state.player.z
-    : item.z;
-  return wallAcousticMixTo(item.x, item.y, sourceZ);
+  const source = resolveWorldItemSourcePosition(item, state.player.z);
+  return wallAcousticMixTo(source.x, source.y, source.z);
+}
+
+function resolveWorldAcousticMix(source: SpatialAudioPosition, listener: SpatialAudioPosition) {
+  const wall = wallAcousticMixBetween(state.structures.values(), listener, source, wallEdgeIndex);
+  return {
+    gain: acousticZoneRuntime.transmission(listener.acousticZoneId, source.acousticZoneId, state.items) * wall.gain,
+    lowpassHz: wall.lowpassHz,
+  };
+}
+
+function itemAcousticMix(item: WorldItem) {
+  return resolveWorldAcousticMix({
+    ...resolveWorldItemSourcePosition(item, state.player.z),
+    acousticZoneId: worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
+  }, state.player);
 }
 
 const radioRuntime = new RadioStationRuntime(
   audio,
   getItemSpatialConfig,
-  (item) => {
-    const wall = itemWallAcousticMix(item);
-    return { gain: acousticZoneRuntime.transmission(
-      state.player.acousticZoneId,
-      worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
-      state.items,
-    ) * wall.gain, lowpassHz: wall.lowpassHz };
-  },
+  itemAcousticMix,
   (item) => acousticZoneRuntime.couldConnect(
     state.player.acousticZoneId,
     worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
@@ -379,14 +385,7 @@ const itemEmitRuntime = new ItemEmitRuntime(
   audio,
   resolveIncomingSoundUrl,
   getItemSpatialConfig,
-  (item) => {
-    const wall = itemWallAcousticMix(item);
-    return { gain: acousticZoneRuntime.transmission(
-      state.player.acousticZoneId,
-      worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
-      state.items,
-    ) * wall.gain, lowpassHz: wall.lowpassHz };
-  },
+  itemAcousticMix,
   (item) => acousticZoneRuntime.couldConnect(
     state.player.acousticZoneId,
     worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
@@ -412,17 +411,7 @@ const worldAudio = new WorldAudioRouter(
     acousticZoneId: state.player.acousticZoneId,
   }),
   () => audioLayers.world,
-  (source, listener) => {
-    const wall = wallAcousticMixBetween(state.structures.values(), listener, source, wallEdgeIndex);
-    return {
-      gain: acousticZoneRuntime.transmission(
-        listener.acousticZoneId,
-        source.acousticZoneId,
-        state.items,
-      ) * wall.gain,
-      lowpassHz: wall.lowpassHz,
-    };
-  },
+  resolveWorldAcousticMix,
   (source, listener) => acousticZoneRuntime.canTransmit(
     listener.acousticZoneId,
     source.acousticZoneId,
@@ -521,6 +510,7 @@ const itemBehaviorRegistry = new ItemBehaviorRegistry({
 });
 
 audio.setOutputMode(outputMode);
+audio.setSpatialMode(settings.loadSpatialMode());
 
 loadEffectLevels();
 loadAudioLayerState();
@@ -1417,20 +1407,11 @@ function gameLoop(): void {
     acousticZoneId: state.player.acousticZoneId,
   };
   acousticZoneRuntime.sync(state.items.values());
-  const acousticNow = performance.now();
   for (const peer of peerManager.getPeers()) {
-    const wall = wallAcousticMixTo(peer.x, peer.y, peer.z);
-    peerManager.setPeerAcousticMix(
-      peer.id,
-      acousticZoneRuntime.transmission(
-        state.player.acousticZoneId,
-        peer.acousticZoneId,
-        state.items,
-        acousticNow,
-      ) * wall.gain,
-      wall.lowpassHz,
-    );
+    const acoustic = resolveWorldAcousticMix(peer, listenerPosition);
+    peerManager.setPeerAcousticMix(peer.id, acoustic.gain, acoustic.lowpassHz);
   }
+  audio.setListenerFacing(state.player.facingDeg);
   audio.updateSpatialAudio(peerManager.getPeers(), listenerPosition);
   audio.updateSpatialSamples(listenerPosition);
   radioRuntime.updateSpatialAudio(state.items, listenerPosition);
@@ -2018,6 +1999,14 @@ function toggleOutputModeCommand(): void {
   audio.sfxUiBlip();
 }
 
+function toggleHrtfCommand(): void {
+  const mode = audio.getSpatialMode() === 'hrtf' ? 'standard' : 'hrtf';
+  audio.setSpatialMode(mode);
+  settings.saveSpatialMode(mode);
+  updateStatus(mode === 'hrtf' ? (outputMode === 'mono' ? 'HRTF on. Mono output is active.' : 'HRTF on.') : 'HRTF off.');
+  audio.sfxUiBlip();
+}
+
 function toggleLoopbackCommand(): void {
   const enabled = audio.toggleLoopback();
   updateStatus(enabled ? 'Loopback on.' : 'Loopback off.');
@@ -2320,6 +2309,7 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   editNickname: openNicknameEditor,
   toggleMute,
   toggleOutputMode: toggleOutputModeCommand,
+  toggleHrtf: toggleHrtfCommand,
   toggleLoopback: toggleLoopbackCommand,
   toggleVoiceLayer: () => toggleAudioLayer('voice'),
   toggleItemLayer: () => toggleAudioLayer('item'),

@@ -1,4 +1,13 @@
-import { resolveSpatialMix } from './spatial';
+import { applyAcousticLowpass, normalizeAcousticMix, type AcousticMix } from './acoustics';
+import type { SpatialAudioPosition, SpatialTransmissionResolver } from './audioEngine';
+import {
+  applySpatialMixToNodes,
+  createSpatialPanner,
+  disconnectSpatialPanner,
+  resolveSpatialMix,
+  updateSpatialPanner,
+  type SpatialMixResult,
+} from './spatial';
 
 export const PIANO_INSTRUMENT_OPTIONS = [
   'piano',
@@ -31,9 +40,15 @@ export function isPianoInstrumentId(value: string): value is PianoInstrumentId {
   );
 }
 
-type VoiceRuntime = {
-  gain: GainNode;
-  panner: StereoPannerNode | null;
+type SpatialVoiceRuntime = {
+  envelopeGain: GainNode;
+  spatialGain: GainNode;
+  occlusionFilter: BiquadFilterNode;
+  panner: PannerNode;
+  spatialSource: PianoSpatialSource;
+};
+
+type VoiceRuntime = SpatialVoiceRuntime & {
   oscillators: OscillatorNode[];
   modulators: OscillatorNode[];
   releaseSeconds: number;
@@ -45,12 +60,15 @@ type PianoContext = {
   destination: AudioNode;
 };
 
-type PianoSpatialSource = {
+export type PianoSpatialSource = {
   x: number;
   y: number;
+  z?: number;
   range: number;
   acousticGain?: number;
   occlusionLowpassHz?: number;
+  getPosition?: () => SpatialAudioPosition | null;
+  useTransmission?: boolean;
 };
 
 type InstrumentPreset = {
@@ -267,6 +285,8 @@ type DrumVariant =
 
 export class PianoSynth {
   private readonly voices = new Map<string, VoiceRuntime>();
+  private readonly releasingVoices = new Set<VoiceRuntime>();
+  private readonly transientSpatialVoices = new Set<SpatialVoiceRuntime>();
   private readonly activeVoiceKeysByGroup = new Map<string, Set<string>>();
   private readonly drumNoiseBuffers = new WeakMap<AudioContext, AudioBuffer>();
   private readonly bitNoiseBuffers = new WeakMap<AudioContext, AudioBuffer>();
@@ -276,6 +296,68 @@ export class PianoSynth {
     for (const key of Array.from(this.voices.keys())) {
       this.noteOff(key);
     }
+  }
+
+  /** Updates distance, source position, and acoustic transmission for held notes. */
+  updateSpatialAudio(listener: SpatialAudioPosition, resolveTransmission?: SpatialTransmissionResolver): void {
+    for (const voice of this.voices.values()) this.updateSpatialVoice(voice, listener, resolveTransmission);
+    for (const voice of this.releasingVoices) this.updateSpatialVoice(voice, listener, resolveTransmission);
+    for (const voice of this.transientSpatialVoices) this.updateSpatialVoice(voice, listener, resolveTransmission);
+  }
+
+  private updateSpatialVoice(
+    voice: SpatialVoiceRuntime,
+    listener: SpatialAudioPosition,
+    resolveTransmission?: SpatialTransmissionResolver,
+  ): void {
+    const context = voice.envelopeGain.context as AudioContext;
+    const resolved = this.resolveSpatialMix(voice.spatialSource, listener, resolveTransmission);
+    applyAcousticLowpass(context, voice.occlusionFilter, resolved.acoustic.lowpassHz);
+    applySpatialMixToNodes({
+      audioCtx: context,
+      gainNode: voice.spatialGain,
+      pannerNode: voice.panner,
+      mix: resolved.mix,
+      transition: 'target',
+    });
+  }
+
+  private resolveSpatialMix(
+    spatial: PianoSpatialSource,
+    listener?: SpatialAudioPosition,
+    resolveTransmission?: SpatialTransmissionResolver,
+  ): { mix: SpatialMixResult | null; acoustic: AcousticMix } {
+    let dx = spatial.x;
+    let dy = spatial.y;
+    let dz = spatial.z ?? 0;
+    let acoustic = normalizeAcousticMix({
+      gain: spatial.acousticGain ?? 1,
+      lowpassHz: spatial.occlusionLowpassHz ?? 20_000,
+    });
+
+    if (listener && spatial.getPosition) {
+      const source = spatial.getPosition();
+      if (!source) {
+        return { mix: null, acoustic };
+      }
+      dx = source.x - listener.x;
+      dy = source.y - listener.y;
+      dz = source.z - listener.z;
+      if (spatial.useTransmission !== false && resolveTransmission) {
+        acoustic = normalizeAcousticMix(resolveTransmission(source, listener));
+      }
+    }
+
+    return {
+      mix: resolveSpatialMix({
+        dx,
+        dy,
+        dz,
+        range: spatial.range,
+        baseGain: acoustic.gain,
+      }),
+      acoustic,
+    };
   }
 
   /** Starts one note for a specific keyboard key id. */
@@ -312,52 +394,42 @@ export class PianoSynth {
     const decaySeconds = decayPercentToSeconds(decayPercent);
     const releaseSeconds = Math.max(0.02, releasePercentToSeconds(releasePercent) * (preset.releaseScale ?? 1));
 
-    const acousticGain = Math.max(0, Math.min(1, spatial.acousticGain ?? 1));
-    const spatialMix = acousticGain > 0 ? resolveSpatialMix({
-      dx: spatial.x,
-      dy: spatial.y,
-      range: spatial.range,
-      baseGain: acousticGain,
-    }) : null;
-    if (!spatialMix || spatialMix.gain <= 0) return;
+    const initialSpatial = this.resolveSpatialMix(spatial);
+    if (!initialSpatial.mix) return;
 
-    const voiceGain = context.audioCtx.createGain();
-    voiceGain.gain.setValueAtTime(0.0001, now);
-    const peakGain = Math.max(0.0001, preset.gain * spatialMix.gain);
+    const envelopeGain = context.audioCtx.createGain();
+    envelopeGain.gain.setValueAtTime(0.0001, now);
+    const spatialGain = context.audioCtx.createGain();
+    spatialGain.gain.setValueAtTime(initialSpatial.mix.gain, now);
+    const peakGain = Math.max(0.0001, preset.gain);
     const sustainGain = Math.max(0.0001, peakGain * (preset.sustainRatio ?? 0.55));
     const holdsSustain = preset.holdSustain !== false;
-    voiceGain.gain.exponentialRampToValueAtTime(peakGain, now + attackSeconds);
+    envelopeGain.gain.exponentialRampToValueAtTime(peakGain, now + attackSeconds);
     if (holdsSustain) {
-      voiceGain.gain.exponentialRampToValueAtTime(sustainGain, now + attackSeconds + decaySeconds * 0.6);
+      envelopeGain.gain.exponentialRampToValueAtTime(sustainGain, now + attackSeconds + decaySeconds * 0.6);
     } else {
       // Struck/plucked timbres naturally decay even if the key remains held.
       const heldDecaySeconds = Math.max(0.25, decaySeconds * (preset.heldDecayScale ?? 2.0));
-      voiceGain.gain.exponentialRampToValueAtTime(0.0001, now + attackSeconds + heldDecaySeconds);
+      envelopeGain.gain.exponentialRampToValueAtTime(0.0001, now + attackSeconds + heldDecaySeconds);
     }
 
-    let tailNode: AudioNode = voiceGain;
+    let tailNode: AudioNode = envelopeGain;
     if (preset.filter) {
       const filter = context.audioCtx.createBiquadFilter();
       filter.type = preset.filter.type;
       filter.frequency.setValueAtTime(preset.filter.frequency * brightnessPercentToMultiplier(brightnessPercent), now);
       filter.Q.setValueAtTime(preset.filter.q ?? 0.7, now);
-      voiceGain.connect(filter);
+      envelopeGain.connect(filter);
       tailNode = filter;
     }
     const occlusionFilter = context.audioCtx.createBiquadFilter();
     occlusionFilter.type = 'lowpass';
-    occlusionFilter.frequency.setValueAtTime(spatial.occlusionLowpassHz ?? 20_000, now);
+    occlusionFilter.frequency.setValueAtTime(initialSpatial.acoustic.lowpassHz, now);
     tailNode.connect(occlusionFilter);
-    tailNode = occlusionFilter;
-
-    let panner: StereoPannerNode | null = null;
-    if (typeof context.audioCtx.createStereoPanner === 'function') {
-      panner = context.audioCtx.createStereoPanner();
-      panner.pan.setValueAtTime(spatialMix.pan, now);
-      tailNode.connect(panner).connect(context.destination);
-    } else {
-      tailNode.connect(context.destination);
-    }
+    occlusionFilter.connect(spatialGain);
+    const panner = createSpatialPanner(context.audioCtx);
+    updateSpatialPanner(panner, initialSpatial.mix);
+    spatialGain.connect(panner).connect(context.destination);
 
     const frequency = midiToFrequency(midi);
     const oscillators: OscillatorNode[] = [];
@@ -369,7 +441,7 @@ export class PianoSynth {
       oscillator.detune.setValueAtTime(partial.detune ?? 0, now);
       const oscGain = context.audioCtx.createGain();
       oscGain.gain.setValueAtTime(partial.gain ?? 1, now);
-      oscillator.connect(oscGain).connect(voiceGain);
+      oscillator.connect(oscGain).connect(envelopeGain);
       oscillator.start(now);
       oscillators.push(oscillator);
       if (preset.vibrato) {
@@ -384,12 +456,15 @@ export class PianoSynth {
     }
 
     this.voices.set(keyId, {
-      gain: voiceGain,
+      envelopeGain,
+      spatialGain,
+      occlusionFilter,
       panner,
       oscillators,
       modulators,
       releaseSeconds,
       sourceGroupId,
+      spatialSource: spatial,
     });
     const groupKeys = this.activeVoiceKeysByGroup.get(sourceGroupId) ?? new Set<string>();
     groupKeys.add(keyId);
@@ -410,11 +485,12 @@ export class PianoSynth {
         this.activeVoiceKeysByGroup.set(voice.sourceGroupId, groupKeys);
       }
     }
-    const now = voice.gain.context.currentTime;
-    const currentGain = Math.max(0.0001, voice.gain.gain.value);
-    voice.gain.gain.cancelScheduledValues(now);
-    voice.gain.gain.setValueAtTime(currentGain, now);
-    voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + voice.releaseSeconds);
+    this.releasingVoices.add(voice);
+    const now = voice.envelopeGain.context.currentTime;
+    const currentGain = Math.max(0.0001, voice.envelopeGain.gain.value);
+    voice.envelopeGain.gain.cancelScheduledValues(now);
+    voice.envelopeGain.gain.setValueAtTime(currentGain, now);
+    voice.envelopeGain.gain.exponentialRampToValueAtTime(0.0001, now + voice.releaseSeconds);
     for (const oscillator of voice.oscillators) {
       safeStop(oscillator, now + voice.releaseSeconds + 0.02);
     }
@@ -423,17 +499,14 @@ export class PianoSynth {
     }
     window.setTimeout(() => {
       try {
-        voice.gain.disconnect();
+        voice.envelopeGain.disconnect();
+        voice.spatialGain.disconnect();
+        voice.occlusionFilter.disconnect();
       } catch {
         // Ignore stale disconnects.
       }
-      if (voice.panner) {
-        try {
-          voice.panner.disconnect();
-        } catch {
-          // Ignore stale disconnects.
-        }
-      }
+      disconnectSpatialPanner(voice.panner);
+      this.releasingVoices.delete(voice);
     }, Math.max(60, Math.round((voice.releaseSeconds + 0.04) * 1000)));
   }
 
@@ -448,14 +521,8 @@ export class PianoSynth {
     brightnessPercent: number,
   ): void {
     const now = context.audioCtx.currentTime;
-    const acousticGain = Math.max(0, Math.min(1, spatial.acousticGain ?? 1));
-    const spatialMix = acousticGain > 0 ? resolveSpatialMix({
-      dx: spatial.x,
-      dy: spatial.y,
-      range: spatial.range,
-      baseGain: acousticGain,
-    }) : null;
-    if (!spatialMix || spatialMix.gain <= 0) return;
+    const initialSpatial = this.resolveSpatialMix(spatial);
+    if (!initialSpatial.mix) return;
     const variant = drumVariantForMidi(midi);
     const midiOffset = (Math.round(midi) - 60) / 24;
     const decaySeconds = 0.03 + decayPercentToSeconds(decayPercent) * 0.5;
@@ -465,20 +532,37 @@ export class PianoSynth {
 
     const gain = context.audioCtx.createGain();
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.22 * spatialMix.gain, now + attackSeconds);
+    gain.gain.exponentialRampToValueAtTime(0.22, now + attackSeconds);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + decaySeconds);
+
+    const spatialGain = context.audioCtx.createGain();
+    spatialGain.gain.setValueAtTime(initialSpatial.mix.gain, now);
 
     const occlusionFilter = context.audioCtx.createBiquadFilter();
     occlusionFilter.type = 'lowpass';
-    occlusionFilter.frequency.setValueAtTime(spatial.occlusionLowpassHz ?? 20_000, now);
-
-    if (typeof context.audioCtx.createStereoPanner === 'function') {
-      const panner = context.audioCtx.createStereoPanner();
-      panner.pan.setValueAtTime(spatialMix.pan, now);
-      gain.connect(occlusionFilter).connect(panner).connect(context.destination);
-    } else {
-      gain.connect(occlusionFilter).connect(context.destination);
-    }
+    occlusionFilter.frequency.setValueAtTime(initialSpatial.acoustic.lowpassHz, now);
+    const panner = createSpatialPanner(context.audioCtx);
+    updateSpatialPanner(panner, initialSpatial.mix);
+    gain.connect(occlusionFilter).connect(spatialGain).connect(panner).connect(context.destination);
+    const transientVoice: SpatialVoiceRuntime = {
+      envelopeGain: gain,
+      spatialGain,
+      occlusionFilter,
+      panner,
+      spatialSource: spatial,
+    };
+    this.transientSpatialVoices.add(transientVoice);
+    window.setTimeout(() => {
+      try {
+        gain.disconnect();
+        spatialGain.disconnect();
+        occlusionFilter.disconnect();
+      } catch {
+        // Ignore stale disconnects.
+      }
+      disconnectSpatialPanner(panner);
+      this.transientSpatialVoices.delete(transientVoice);
+    }, Math.max(250, Math.round((decaySeconds * 1.4 + releaseSeconds + 0.2) * 1000)));
 
     if (variant === 'kick_sub') {
       this.playKick808(context, gain, now, (decaySeconds + releaseSeconds * 0.35) * 1.15, 145, 36);

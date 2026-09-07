@@ -3,7 +3,11 @@ import {
   PianoSynth,
   isPianoInstrumentId,
   type PianoInstrumentId,
+  type PianoSpatialSource,
 } from '../../../audio/pianoSynth';
+import { worldItemAcousticZoneId } from '../../../audio/acousticZones';
+import type { AcousticMix } from '../../../audio/acoustics';
+import type { SpatialAudioPosition } from '../../../audio/audioEngine';
 import { type CommandDescriptor, type ModeInput } from '../../../input/commandTypes';
 import { type OutgoingMessage } from '../../../network/protocol';
 import { type GameMode, type WorldItem } from '../../../state/gameState';
@@ -91,12 +95,14 @@ type PianoControllerDeps = {
   state: {
     mode: GameMode;
     items: Map<string, WorldItem>;
-    player: { id: string | null; x: number; y: number; z: number };
+    player: { id: string | null; x: number; y: number; z: number; acousticZoneId: string };
   };
   audio: {
     ensureContext: () => Promise<void>;
     context: AudioContext | null;
     getOutputDestinationNode: () => AudioNode | null;
+    registerSpatialUpdater: (update: () => void) => () => void;
+    resolveSpatialTransmission: (source: SpatialAudioPosition, listener: SpatialAudioPosition) => AcousticMix;
     sfxUiBlip: () => void;
     sfxUiCancel: () => void;
   };
@@ -131,6 +137,7 @@ export class PianoController {
 
   constructor(deps: PianoControllerDeps) {
     this.deps = deps;
+    this.deps.audio.registerSpatialUpdater(() => this.updateSpatialAudio());
   }
 
   /** Loads piano-mode help content and stores a flattened line view for `?` help while using piano. */
@@ -461,6 +468,92 @@ export class PianoController {
     this.playLocalNote(item, itemId, fallbackCode, fallbackMidi, config);
   }
 
+  /** Updates held piano voices as the listener, source item, or acoustic route moves. */
+  updateSpatialAudio(): void {
+    this.pianoSynth.updateSpatialAudio(
+      this.getListenerPosition(),
+      (source, listener) => this.deps.audio.resolveSpatialTransmission(source, listener),
+    );
+  }
+
+  private getListenerPosition(): SpatialAudioPosition {
+    return {
+      x: this.deps.state.player.x,
+      y: this.deps.state.player.y,
+      z: this.deps.state.player.z,
+      acousticZoneId: this.deps.state.player.acousticZoneId,
+    };
+  }
+
+  private getItemSourcePosition(item: WorldItem, listener: SpatialAudioPosition): SpatialAudioPosition {
+    if (item.carrierId && item.carrierId === this.deps.state.player.id) {
+      return {
+        x: this.deps.state.player.x,
+        y: this.deps.state.player.y,
+        z: this.deps.state.player.z,
+        acousticZoneId: listener.acousticZoneId,
+      };
+    }
+    return {
+      x: item.x,
+      y: item.y,
+      z: item.z,
+      acousticZoneId: worldItemAcousticZoneId(item, listener.acousticZoneId, this.deps.state.items),
+    };
+  }
+
+  private getLocalSpatialSource(
+    item: WorldItem,
+    range: number,
+    listener: SpatialAudioPosition,
+    useTransmission = true,
+  ): PianoSpatialSource {
+    const initial = this.getItemSourcePosition(item, listener);
+    const acoustic = useTransmission
+      ? this.deps.audio.resolveSpatialTransmission(initial, listener)
+      : { gain: 1, lowpassHz: 20_000 };
+    return {
+      x: initial.x - listener.x,
+      y: initial.y - listener.y,
+      z: initial.z - listener.z,
+      range,
+      acousticGain: acoustic.gain,
+      occlusionLowpassHz: acoustic.lowpassHz,
+      useTransmission,
+      getPosition: () => {
+        const currentItem = this.deps.state.items.get(item.id);
+        return currentItem ? this.getItemSourcePosition(currentItem, this.getListenerPosition()) : null;
+      },
+    };
+  }
+
+  private getRemoteSpatialSource(
+    note: { itemId: string; x: number; y: number; z: number; emitRange: number },
+    item: WorldItem,
+    listener: SpatialAudioPosition,
+  ): PianoSpatialSource {
+    const initial: SpatialAudioPosition = {
+      x: note.x,
+      y: note.y,
+      z: note.z,
+      acousticZoneId: worldItemAcousticZoneId(item, listener.acousticZoneId, this.deps.state.items),
+    };
+    const acoustic = this.deps.audio.resolveSpatialTransmission(initial, listener);
+    return {
+      x: initial.x - listener.x,
+      y: initial.y - listener.y,
+      z: initial.z - listener.z,
+      range: Math.max(1, Math.round(note.emitRange)),
+      acousticGain: acoustic.gain,
+      occlusionLowpassHz: acoustic.lowpassHz,
+      getPosition: () => {
+        const currentItem = this.deps.state.items.get(note.itemId);
+        if (!currentItem) return null;
+        return this.getItemSourcePosition(currentItem, this.getListenerPosition());
+      },
+    };
+  }
+
   /** Plays one inbound piano note from another user using item spatial position. */
   playRemoteNote(note: {
     itemId: string;
@@ -479,17 +572,19 @@ export class PianoController {
     z: number;
     emitRange: number;
   }): void {
-    if (note.z !== this.deps.state.player.z) return;
     const ctx = this.deps.audio.context;
     const destination = this.deps.audio.getOutputDestinationNode();
     if (!ctx || !destination) return;
+    const item = this.deps.state.items.get(note.itemId);
+    if (!item) return;
     const runtimeKey = `${note.senderId}:${note.itemId}:${note.keyId}`;
     if (this.activeRemotePianoKeys.has(runtimeKey)) return;
     if (note.voiceMode === 'mono') {
       this.stopRemoteNotesForSource(note.senderId, note.itemId);
     }
     this.activeRemotePianoKeys.add(runtimeKey);
-    const wallAcousticMix = this.deps.getWallAcousticMix(note.x, note.y, note.z);
+    const listener = this.getListenerPosition();
+    const spatial = this.getRemoteSpatialSource(note, item, listener);
     this.pianoSynth.noteOn(
       runtimeKey,
       `remote:${note.senderId}:${note.itemId}`,
@@ -501,13 +596,7 @@ export class PianoController {
       Math.max(0, Math.min(100, Math.round(note.release))),
       Math.max(0, Math.min(100, Math.round(note.brightness))),
       { audioCtx: ctx, destination },
-      {
-        x: note.x - this.deps.state.player.x,
-        y: note.y - this.deps.state.player.y,
-        range: Math.max(1, Math.round(note.emitRange)),
-        acousticGain: wallAcousticMix.gain,
-        occlusionLowpassHz: wallAcousticMix.lowpassHz,
-      },
+      spatial,
     );
   }
 
@@ -867,8 +956,7 @@ export class PianoController {
     const ctx = this.deps.audio.context;
     const destination = this.deps.audio.getOutputDestinationNode();
     if (!ctx || !destination) return;
-    const sourceX = item.carrierId === this.deps.state.player.id ? this.deps.state.player.x : item.x;
-    const sourceY = item.carrierId === this.deps.state.player.id ? this.deps.state.player.y : item.y;
+    const listener = this.getListenerPosition();
     this.pianoSynth.noteOn(
       keyId,
       sourceGroupId ?? `local:${itemId}`,
@@ -880,7 +968,7 @@ export class PianoController {
       config.release,
       config.brightness,
       { audioCtx: ctx, destination },
-      { x: sourceX - this.deps.state.player.x, y: sourceY - this.deps.state.player.y, range: config.emitRange },
+      this.getLocalSpatialSource(item, config.emitRange, listener),
     );
     this.deps.signalingSend({ type: 'item_piano_note', itemId, keyId, midi, on: true });
   }
@@ -968,10 +1056,9 @@ export class PianoController {
     const decay = Math.max(0, Math.min(100, Math.round(overrides.decay ?? current.decay)));
     const release = Math.max(0, Math.min(100, Math.round(overrides.release ?? current.release)));
     const brightness = Math.max(0, Math.min(100, Math.round(overrides.brightness ?? current.brightness)));
-    const sourceX = item.carrierId === this.deps.state.player.id ? this.deps.state.player.x : item.x;
-    const sourceY = item.carrierId === this.deps.state.player.id ? this.deps.state.player.y : item.y;
     const previewKeyId = '__piano_preview_c4__';
     this.pianoSynth.noteOff(previewKeyId);
+    const listener = this.getListenerPosition();
     this.pianoSynth.noteOn(
       previewKeyId,
       'preview',
@@ -983,7 +1070,7 @@ export class PianoController {
       release,
       brightness,
       { audioCtx: ctx, destination },
-      { x: sourceX - this.deps.state.player.x, y: sourceY - this.deps.state.player.y, range: current.emitRange },
+      this.getLocalSpatialSource(item, current.emitRange, listener, false),
     );
     if (this.pianoPreviewTimeoutId !== null) {
       window.clearTimeout(this.pianoPreviewTimeoutId);

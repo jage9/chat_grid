@@ -4,6 +4,13 @@ import { AudioEngine } from './audioEngine';
 class FakeAudioContext {
   state = 'running';
   destination = {};
+  currentTime = 0;
+  listener = {
+    forwardX: { setTargetAtTime: vi.fn() },
+    forwardY: { setTargetAtTime: vi.fn() },
+    forwardZ: { setTargetAtTime: vi.fn() },
+    upX: { value: 0 }, upY: { value: 1 }, upZ: { value: 0 },
+  };
   setSinkId = vi.fn(async (_id: string) => undefined);
   createGain() {
     return { gain: { value: 1 }, connect: vi.fn() };
@@ -61,5 +68,21 @@ describe('AudioEngine output device', () => {
     await audio.setOutputDevice('headset');
     await expect(audio.ensureContext()).resolves.toBeUndefined();
     await expect(audio.setOutputDevice('')).resolves.toBeUndefined();
+  });
+});
+
+describe('AudioEngine spatial preferences', () => {
+  it('applies settings chosen before context creation and retains HRTF through mono', async () => {
+    vi.stubGlobal('window', { AudioContext: FakeAudioContext });
+    const audio = new AudioEngine();
+    audio.setSpatialMode('hrtf');
+    audio.setListenerFacing(90);
+    audio.setOutputMode('mono');
+    expect(audio.context).toBeNull();
+    await audio.ensureContext();
+    const context = audio.context as unknown as FakeAudioContext;
+    expect(context.listener.forwardX.setTargetAtTime).toHaveBeenCalledWith(1, 0, expect.any(Number));
+    expect(audio.toggleOutputMode()).toBe('stereo');
+    expect(audio.getSpatialMode()).toBe('hrtf');
   });
 });

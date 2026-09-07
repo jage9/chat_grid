@@ -139,6 +139,149 @@ async def test_update_position_cannot_change_floor(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("x", "y", "expected_facing"),
+    [
+        (6, 6, 45),
+        (6, 5, 90),
+        (6, 4, 135),
+        (5, 4, 180),
+        (4, 4, 225),
+        (4, 5, 270),
+        (4, 6, 315),
+    ],
+)
+async def test_successful_movement_updates_facing(
+    make_world,
+    x: int,
+    y: int,
+    expected_facing: int,
+) -> None:
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    observer = world.join("observer", x=40, y=40)
+    client = world.join("tester", x=5, y=5, client_id="u1")
+
+    await server._handle_message(
+        client, json.dumps({"type": "update_position", "x": x, "y": y, "z": 0})
+    )
+
+    assert client.facing_deg == expected_facing
+    position = transport.last_packet_of_type(observer, BroadcastPositionPacket)
+    assert position.facingDeg == expected_facing
+
+
+@pytest.mark.asyncio
+async def test_blocked_movement_does_not_update_facing(make_world) -> None:
+    world = make_world(
+        structure_presets={
+            "solid": {
+                "title": "Wall",
+                "movementBlocked": True,
+                "soundTransmission": 0.0,
+                "height": 40,
+                "contactSound": "/sounds/wall.ogg",
+            }
+        }
+    )
+    server, transport = world.server, world.transport
+    client = world.join("tester", x=5, y=5, client_id="u1", facing_deg=270)
+    server.structure_service.add_wall(client, preset_id="solid", direction="east")
+
+    await server._handle_message(
+        client, json.dumps({"type": "update_position", "x": 6, "y": 5, "z": 0})
+    )
+
+    assert (client.x, client.y, client.facing_deg) == (5, 5, 270)
+    correction = transport.last_packet_of_type(client, BroadcastPositionPacket)
+    assert correction.facingDeg == 270
+
+
+@pytest.mark.asyncio
+async def test_update_facing_broadcasts_canonical_position(make_world) -> None:
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    observer = world.join("observer", x=40, y=40)
+    client = world.join("tester", x=5, y=5, client_id="u1")
+
+    await server._handle_message(
+        client, json.dumps({"type": "update_facing", "facingDeg": 135})
+    )
+
+    assert client.facing_deg == 135
+    self_packet = transport.last_packet_of_type(client, BroadcastPositionPacket)
+    observer_packet = transport.last_packet_of_type(observer, BroadcastPositionPacket)
+    assert self_packet.facingDeg == 135
+    assert observer_packet.facingDeg == 135
+
+
+@pytest.mark.asyncio
+async def test_update_facing_requires_authenticated_ready_client(make_world) -> None:
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    unauthenticated = world.connect("unauthenticated", client_id="u1")
+    pre_ready = world.connect("pre-ready", client_id="u2")
+    pre_ready.authenticated = True
+
+    await server._handle_message(
+        unauthenticated, json.dumps({"type": "update_facing", "facingDeg": 90})
+    )
+    await server._handle_message(
+        pre_ready, json.dumps({"type": "update_facing", "facingDeg": 180})
+    )
+
+    assert unauthenticated.facing_deg == 0
+    assert pre_ready.facing_deg == 0
+    auth_result = transport.last_packet_of_type(unauthenticated, AuthResultPacket)
+    assert auth_result.ok is False
+    assert transport.packets_to(pre_ready) == []
+
+
+@pytest.mark.asyncio
+async def test_update_facing_does_not_sync_carried_items(
+    make_world,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    observer = world.join("observer", x=40, y=40)
+    client = world.join("tester", x=5, y=5, client_id="u1")
+    item = server.item_service.default_item(client, "dice")
+    item.carrierId = client.id
+    server.item_service.add_item(item)
+    sync_calls: list[str] = []
+
+    async def record_sync(called_client: ClientConnection) -> None:
+        sync_calls.append(called_client.id)
+
+    monkeypatch.setattr(server.item_runtime, "sync_carried_items", record_sync)
+    transport.clear()
+
+    await server._handle_message(
+        client, json.dumps({"type": "update_facing", "facingDeg": 90})
+    )
+
+    assert sync_calls == []
+    assert (item.x, item.y, item.z) == (5, 5, 0)
+    assert transport.packets_of_type(observer, ItemUpsertPacket) == []
+
+
+@pytest.mark.asyncio
+async def test_welcome_presence_includes_facing(make_world) -> None:
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    observer = world.join("observer", x=40, y=40, facing_deg=315)
+    client = world.join("tester", x=5, y=5, client_id="u1", facing_deg=225)
+
+    await server._send_welcome(client)
+
+    welcome = transport.last_packet_of_type(client, WelcomePacket)
+    assert welcome.player.facingDeg == 225
+    assert welcome.users[0].id == observer.id
+    assert welcome.users[0].facingDeg == 315
+
+
+@pytest.mark.asyncio
 async def test_welcome_includes_livekit_token_when_configured(
     make_world,
 ) -> None:
@@ -1793,11 +1936,31 @@ async def test_teleport_complete_broadcasts_spatial_event(
     assert teleport_packets[0].id == "u1"
     assert teleport_packets[0].x == 12
     assert teleport_packets[0].y == 13
+    assert teleport_packets[0].facingDeg == client.facing_deg
     assert teleport_packets[0].acousticZoneId == "floor:0"
     assert (
         transport.packets_of_type(client, BroadcastPositionPacket) == position_packets
     )
     assert transport.packets_of_type(client, BroadcastTeleportCompletePacket) == []
+
+
+@pytest.mark.asyncio
+async def test_teleport_preserves_facing(make_world) -> None:
+    world = make_world(grid_size=41)
+    server, transport = world.server, world.transport
+    observer = world.join("observer", x=40, y=40)
+    client = world.join("tester", x=12, y=13, client_id="u1", facing_deg=225)
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "teleport_complete", "x": 20, "y": 21, "z": 0}),
+    )
+
+    assert client.facing_deg == 225
+    position = transport.last_packet_of_type(observer, BroadcastPositionPacket)
+    teleport = transport.last_packet_of_type(observer, BroadcastTeleportCompletePacket)
+    assert position.facingDeg == 225
+    assert teleport.facingDeg == 225
 
 
 @pytest.mark.asyncio

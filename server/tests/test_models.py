@@ -11,6 +11,21 @@ def test_update_position_validates() -> None:
     assert packet.type == "update_position"
 
 
+def test_update_facing_accepts_only_canonical_headings() -> None:
+    adapter: TypeAdapter[ClientPacket] = TypeAdapter(ClientPacket)
+
+    packet = adapter.validate_python({"type": "update_facing", "facingDeg": 315})
+
+    assert packet.type == "update_facing"
+    assert packet.facingDeg == 315
+    for value in (-1, 1, 90.5, 360):
+        try:
+            adapter.validate_python({"type": "update_facing", "facingDeg": value})
+        except ValidationError:
+            continue
+        assert False, f"heading {value!r} should fail validation"
+
+
 def test_unknown_type_rejected() -> None:
     adapter: TypeAdapter[ClientPacket] = TypeAdapter(ClientPacket)
     try:

@@ -74,6 +74,7 @@ from .models import (
     BroadcastTeleportCompletePacket,
     ChatMessagePacket,
     ClientPacket,
+    FacingDeg,
     LiveKitTokenPacket,
     LiveKitTokenRequestPacket,
     NicknameResultPacket,
@@ -90,6 +91,7 @@ from .models import (
     StructureUpdateWallPacket,
     StructureUpsertPacket,
     TeleportCompletePacket,
+    UpdateFacingPacket,
     UpdateNicknamePacket,
     UpdatePositionPacket,
     UserLeftPacket,
@@ -871,6 +873,26 @@ class SignalingServer:
         client.movement_window_steps_used += requested_delta
         return True
 
+    @staticmethod
+    def _facing_for_move(delta_x: int, delta_y: int) -> FacingDeg:
+        """Return the canonical clockwise heading for one movement delta."""
+
+        direction = (
+            0 if delta_x == 0 else 1 if delta_x > 0 else -1,
+            0 if delta_y == 0 else 1 if delta_y > 0 else -1,
+        )
+        headings: dict[tuple[int, int], FacingDeg] = {
+            (0, 1): 0,
+            (1, 1): 45,
+            (1, 0): 90,
+            (1, -1): 135,
+            (0, -1): 180,
+            (-1, -1): 225,
+            (-1, 0): 270,
+            (-1, 1): 315,
+        }
+        return headings.get(direction, 0)
+
     async def start(self) -> None:
         """Start websocket serving and run until cancelled."""
 
@@ -984,6 +1006,7 @@ class SignalingServer:
                 x=other.x,
                 y=other.y,
                 z=other.z,
+                facingDeg=other.facing_deg,
                 acousticZoneId=client_acoustic_zone_id(other),
             )
             for ws, other in self.clients.items()
@@ -999,6 +1022,7 @@ class SignalingServer:
                 x=client.x,
                 y=client.y,
                 z=client.z,
+                facingDeg=client.facing_deg,
                 acousticZoneId=client_acoustic_zone_id(client),
             ),
             users=users,
@@ -1951,6 +1975,13 @@ class SignalingServer:
             await self._send_livekit_token(client)
             return
 
+        if isinstance(packet, UpdateFacingPacket):
+            client.facing_deg = packet.facingDeg
+            position_packet = client_position_packet(client)
+            await self.delivery.send(client, position_packet)
+            await self.delivery.broadcast(position_packet, exclude=client)
+            return
+
         if await self._handle_admin_packet(client, packet):
             return
 
@@ -2025,8 +2056,12 @@ class SignalingServer:
                 )
                 await self.delivery.send(client, client_position_packet(client))
                 return
+            delta_x = packet.x - client.x
+            delta_y = packet.y - client.y
             client.x = packet.x
             client.y = packet.y
+            if delta_x != 0 or delta_y != 0:
+                client.facing_deg = self._facing_for_move(delta_x, delta_y)
             client.last_position_update_ms = now_ms
             self._persist_client_position(client)
             await self.delivery.send(
@@ -2089,6 +2124,7 @@ class SignalingServer:
                     x=client.x,
                     y=client.y,
                     z=client.z,
+                    facingDeg=client.facing_deg,
                     acousticZoneId=client_acoustic_zone_id(client),
                 ),
                 exclude=client,

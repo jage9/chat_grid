@@ -216,6 +216,7 @@
 - `brightness`: integer, range `0-100`, default `55`.
 - `emitRange`: integer, range `5-20`, default `15`.
 - `songId`: server-managed song reference used for piano demo/playback content.
+- Piano sound uses the live item coordinates and acoustic zone throughout notes and release tails. HRTF is a listener preference, not an item parameter.
 - Recorded/demo song payload is stored in server song registry (`runtime/piano_songs.json`) using compact format:
   - `meta`: shared synth parameters
   - `keys`: keyId dictionary
