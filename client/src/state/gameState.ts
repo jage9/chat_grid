@@ -45,7 +45,7 @@ export type StructurePreset = Omit<WallStructure, 'id' | 'floorZ' | 'startX' | '
   id: string;
 };
 
-export type SelectionContext = 'pickup' | 'drop' | 'delete' | 'edit' | 'use' | 'secondaryUse' | 'inspect' | 'manage' | null;
+export type SelectionContext = 'pickupDrop' | 'delete' | 'edit' | 'use' | 'secondaryUse' | 'inspect' | 'manage' | null;
 
 export type GameMode =
   | 'normal'
@@ -127,7 +127,6 @@ export type GameState = {
   peers: Map<string, PeerState>;
   items: Map<string, WorldItem>;
   structures: Map<string, WallStructure>;
-  carriedItemId: string | null;
   elevatorItemId: string | null;
 };
 
@@ -165,7 +164,6 @@ export function createInitialState(): GameState {
     peers: new Map(),
     items: new Map(),
     structures: new Map(),
-    carriedItemId: null,
     elevatorItemId: null,
   };
 }

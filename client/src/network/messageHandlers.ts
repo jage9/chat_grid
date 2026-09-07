@@ -26,7 +26,6 @@ type MessageHandlerDeps = {
     selectedItemId: string | null;
     itemPropertyKeys: string[];
     itemPropertyIndex: number;
-    carriedItemId: string | null;
     elevatorItemId: string | null;
   };
   dom: {
@@ -66,7 +65,6 @@ type MessageHandlerDeps = {
   audioUiBlip: () => void;
   audioUiConfirm: () => void;
   audioUiCancel: () => void;
-  getCarriedItemId: () => string | null;
   recomputeActiveItemPropertyKeys: (itemId: string) => void;
   itemPropertyLabel: (key: string) => string;
   getItemPropertyValue: (item: WorldItem, key: string) => string;
@@ -310,7 +308,6 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           carrierId: message.item.carrierId ?? null,
         });
         deps.refreshAcousticModel();
-        deps.state.carriedItemId = deps.getCarriedItemId();
         deps.recomputeActiveItemPropertyKeys(message.item.id);
         if (deps.state.mode === 'itemProperties' && deps.state.selectedItemId === message.item.id) {
           const key = deps.state.itemPropertyKeys[deps.state.itemPropertyIndex];
@@ -338,7 +335,6 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
       case 'item_remove': {
         deps.state.items.delete(message.itemId);
         deps.refreshAcousticModel();
-        deps.state.carriedItemId = deps.getCarriedItemId();
         deps.cleanupItemAudio(message.itemId);
         await deps.refreshAudioSubscriptions(true);
         break;

@@ -101,7 +101,6 @@ export function runDisconnectFlow(deps: ConnectFlowDeps): void {
   deps.state.keysPressed = {};
   deps.state.peers.clear();
   deps.state.items.clear();
-  deps.state.carriedItemId = null;
   deps.state.mode = 'normal';
   deps.state.sortedItemIds = [];
   deps.state.itemListIndex = 0;

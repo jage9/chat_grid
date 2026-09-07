@@ -101,9 +101,10 @@ Core incoming message effects:
 
 ## Carried Item Presentation
 
-- `H` announces the local player’s carried item or says they are holding nothing.
+- `H` announces all items held by the local player or says they are holding nothing.
 - `L` and `Shift+L` append carried item titles after the user’s location, only when carrying something. These descriptions use the current server-synchronized `carrierId` on items.
-- Carrying remains limited to one item. Disconnect drops it at the last tile (or the elevator’s last completed landing); reconnect does not restore carrying.
+- Pickup enforces `items.max_carried_items` from server config, default `2`. Every held item follows walking, teleport, and elevator travel. Disconnect drops all of them at the last tile (or the elevator’s last completed landing); reconnect does not restore carrying.
+- Item action menus combine held items with ground items on the current square. `D` selects a pickup or drop action by item; use, secondary use, edit, inspect, and management likewise select one target when there are several.
 
 ## Authorization Runtime
 

@@ -27,6 +27,7 @@ import {
 import { formatCommandMenuLabel, type CommandDescriptor, type ModeInput } from './input/commandTypes';
 import { getAvailableMainModeCommands } from './input/mainModeCommands';
 import { describeHeldItems, formatCarryingSuffix, getCarriedItems } from './items/carriedItems';
+import { getInteractionItems } from './items/itemTargets';
 import { resolveMainModeCommand, type MainModeCommand } from './input/mainCommandRouter';
 import { dispatchModeInput } from './input/modeDispatcher';
 import { handleListControlKey } from './input/listController';
@@ -652,6 +653,7 @@ const itemInteractionController = createItemInteractionController({
   getItemPropertyValue,
   itemPropertyLabel,
   useItem: (item) => useItem(item),
+  pickupDropItem,
   secondaryUseItem: (item) => secondaryUseItem(item),
   openConfirmation: (request) => confirmationController.open(request),
 });
@@ -1150,14 +1152,14 @@ function floorPositionPhrase(z: number): string {
   return `at height ${formatCoordinate(z)}`;
 }
 
-/** Returns the item currently carried by the local player, if any. */
-function getCarriedItem(): WorldItem | null {
-  return getCarriedItems(state.items.values(), state.player.id)[0] ?? null;
+/** Returns held items and items occupying the current square for action selection. */
+function getCurrentInteractionItems(): WorldItem[] {
+  return getInteractionItems(state.items.values(), state.player);
 }
 
 /** Opens the shared item-selection flow for the provided context and items. */
 function beginItemSelection(
-  context: 'pickup' | 'delete' | 'edit' | 'use' | 'secondaryUse' | 'inspect' | 'manage',
+  context: 'pickupDrop' | 'delete' | 'edit' | 'use' | 'secondaryUse' | 'inspect' | 'manage',
   items: WorldItem[],
 ): void {
   itemInteractionController.beginItemSelection(context, items);
@@ -1846,7 +1848,6 @@ const onAppMessage = createOnMessageHandler({
   audioUiBlip: () => audio.sfxUiBlip(),
   audioUiConfirm: () => audio.sfxUiConfirm(),
   audioUiCancel: () => audio.sfxUiCancel(),
-  getCarriedItemId: () => getCarriedItem()?.id ?? null,
   recomputeActiveItemPropertyKeys,
   itemPropertyLabel,
   getItemPropertyValue,
@@ -1968,16 +1969,16 @@ function getCurrentSquareItems(): WorldItem[] {
   return getItemsAtPosition(state.player.x, state.player.y);
 }
 
-function getUsableItemsOnCurrentSquare(): WorldItem[] {
-  return getCurrentSquareItems().filter((item) => item.capabilities.includes('usable'));
+function getUsableInteractionItems(): WorldItem[] {
+  return getCurrentInteractionItems().filter((item) => item.capabilities.includes('usable'));
 }
 
-function getManageableItemsOnCurrentSquare(): WorldItem[] {
-  return getCurrentSquareItems().filter((item) => itemManagementOptionsFor(item).length > 0);
+function getManageableInteractionItems(): WorldItem[] {
+  return getCurrentInteractionItems().filter((item) => itemManagementOptionsFor(item).length > 0);
 }
 
 function canEditCurrentItem(): boolean {
-  return getCurrentSquareItems().length > 0 || Boolean(getCarriedItem());
+  return getCurrentInteractionItems().length > 0;
 }
 
 function canInspectCurrentItem(): boolean {
@@ -2074,12 +2075,7 @@ function openWorldBuilderCommand(): void {
 }
 
 function useItemCommand(): void {
-  const carried = getCarriedItem();
-  if (carried) {
-    useItem(carried);
-    return;
-  }
-  const usable = getUsableItemsOnCurrentSquare();
+  const usable = getUsableInteractionItems();
   if (usable.length === 0) {
     updateStatus('No usable items here.');
     audio.sfxUiCancel();
@@ -2093,12 +2089,7 @@ function useItemCommand(): void {
 }
 
 function secondaryUseItemCommand(): void {
-  const carried = getCarriedItem();
-  if (carried) {
-    secondaryUseItem(carried);
-    return;
-  }
-  const usable = getUsableItemsOnCurrentSquare();
+  const usable = getUsableInteractionItems();
   if (usable.length === 0) {
     updateStatus('No usable items here.');
     audio.sfxUiCancel();
@@ -2175,33 +2166,33 @@ function locateNearestItemCommand(): void {
   updateStatus(`${itemLabel(item)}, ${distanceDirectionPhrase(state.player.x, state.player.y, position.x, position.y)}, ${locationPhrase(position.x, position.y, state.player.z)}`);
 }
 
-function pickupDropItemCommand(): void {
-  const carried = getCarriedItem();
-  if (carried) {
-    signaling.send({ type: 'item_drop', itemId: carried.id, x: state.player.x, y: state.player.y, z: state.player.z });
-    return;
+/** Sends pickup or drop intent for the selected item using its current server state. */
+function pickupDropItem(item: WorldItem): void {
+  if (state.player.id && item.carrierId === state.player.id) {
+    signaling.send({ type: 'item_drop', itemId: item.id, x: state.player.x, y: state.player.y, z: state.player.z });
+  } else {
+    signaling.send({ type: 'item_pickup', itemId: item.id });
   }
-  const squareItems = getCurrentSquareItems();
-  if (squareItems.length === 0) {
-    updateStatus('No items to pick up.');
+}
+
+function pickupDropItemCommand(): void {
+  const items = getCurrentInteractionItems().filter(
+    (item) => item.carrierId === state.player.id || item.capabilities.includes('carryable'),
+  );
+  if (items.length === 0) {
+    updateStatus('No items to pick up or drop.');
     audio.sfxUiCancel();
     return;
   }
-  if (squareItems.length === 1) {
-    signaling.send({ type: 'item_pickup', itemId: squareItems[0].id });
+  if (items.length === 1) {
+    pickupDropItem(items[0]);
     return;
   }
-  beginItemSelection('pickup', squareItems);
+  beginItemSelection('pickupDrop', items);
 }
 
 function openItemManagementCommand(): void {
-  const squareItems = getCurrentSquareItems();
-  if (squareItems.length === 0) {
-    updateStatus('No items to manage on this square.');
-    audio.sfxUiCancel();
-    return;
-  }
-  const manageable = squareItems.filter((item) => itemManagementOptionsFor(item).length > 0);
+  const manageable = getManageableInteractionItems();
   if (manageable.length === 0) {
     updateStatus('No permitted item management actions here.');
     audio.sfxUiCancel();
@@ -2215,41 +2206,31 @@ function openItemManagementCommand(): void {
 }
 
 function editItemCommand(): void {
-  const squareItems = getCurrentSquareItems();
-  const carried = getCarriedItem();
-  if (squareItems.length === 0) {
-    if (!carried) {
-      updateStatus('No editable item here.');
-      audio.sfxUiCancel();
-      return;
-    }
-    beginItemProperties(carried);
+  const items = getCurrentInteractionItems();
+  if (items.length === 0) {
+    updateStatus('No editable item here.');
+    audio.sfxUiCancel();
     return;
   }
-  if (squareItems.length === 1) {
-    beginItemProperties(squareItems[0]);
+  if (items.length === 1) {
+    beginItemProperties(items[0]);
     return;
   }
-  beginItemSelection('edit', squareItems);
+  beginItemSelection('edit', items);
 }
 
 function inspectItemCommand(): void {
-  const squareItems = getCurrentSquareItems();
-  const carried = getCarriedItem();
-  if (squareItems.length === 0) {
-    if (!carried) {
-      updateStatus('No item to inspect.');
-      audio.sfxUiCancel();
-      return;
-    }
-    beginItemProperties(carried, true);
+  const items = getCurrentInteractionItems();
+  if (items.length === 0) {
+    updateStatus('No item to inspect.');
+    audio.sfxUiCancel();
     return;
   }
-  if (squareItems.length === 1) {
-    beginItemProperties(squareItems[0], true);
+  if (items.length === 1) {
+    beginItemProperties(items[0], true);
     return;
   }
-  beginItemSelection('inspect', squareItems);
+  beginItemSelection('inspect', items);
 }
 
 function pingServerCommand(): void {
@@ -2371,10 +2352,10 @@ function getAvailableCommandPaletteEntriesForMode(mode: GameMode): Array<Command
       visibleItemCount: Array.from(state.items.values()).filter((item) => !item.carrierId).length,
       userCount: state.peers.size,
       chatMessageCount: messageBuffer.length,
-      hasCarriedItem: Boolean(getCarriedItem()),
+      hasCarriedItem: getCarriedItems(state.items.values(), state.player.id).length > 0,
       squareItemCount: getCurrentSquareItems().length,
-      usableItemCount: getUsableItemsOnCurrentSquare().length,
-      manageableItemCount: getManageableItemsOnCurrentSquare().length,
+      usableItemCount: getUsableInteractionItems().length,
+      manageableItemCount: getManageableInteractionItems().length,
       hasEditableItemTarget: canEditCurrentItem(),
       hasInspectableItemTarget: canInspectCurrentItem(),
     });

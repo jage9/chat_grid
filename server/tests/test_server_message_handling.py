@@ -755,6 +755,138 @@ async def test_item_drop_rejects_out_of_bounds(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("limit", [1, 2, 3])
+async def test_item_pickup_honors_configured_limit(
+    monkeypatch: pytest.MonkeyPatch, limit: int
+) -> None:
+    """Pickup should honor the configured carrying limit per client."""
+
+    server = SignalingServer(
+        "127.0.0.1", 8765, None, None, grid_size=41, max_carried_items=limit
+    )
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6),
+        permissions={"item.pickup_drop.any"},
+    )
+    server.clients[ws] = client
+    items = [server.item_service.default_item(client, "dice") for _ in range(limit + 1)]
+    for item in items:
+        server.item_service.add_item(item)
+
+    sent: list[object] = []
+
+    async def fake_send(_websocket: ServerConnection, packet: object) -> None:
+        sent.append(packet)
+
+    async def fake_broadcast(
+        _packet: object, exclude: ServerConnection | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+
+    for item in items[:limit]:
+        await server._handle_message(
+            client, json.dumps({"type": "item_pickup", "itemId": item.id})
+        )
+    await server._handle_message(
+        client, json.dumps({"type": "item_pickup", "itemId": items[0].id})
+    )
+    await server._handle_message(
+        client, json.dumps({"type": "item_pickup", "itemId": items[-1].id})
+    )
+
+    assert [item.carrierId for item in items] == ["u1"] * limit + [None]
+    results = _packets_of_type(sent, ItemActionResultPacket)
+    assert [result.ok for result in results] == [True] * (limit + 1) + [False]
+    assert f"at most {limit}" in results[-1].message
+
+    await server._handle_message(
+        client,
+        json.dumps(
+            {"type": "item_drop", "itemId": items[0].id, "x": 5, "y": 6, "z": 0}
+        ),
+    )
+    await server._handle_message(
+        client, json.dumps({"type": "item_pickup", "itemId": items[-1].id})
+    )
+    assert items[0].carrierId is None
+    assert [item.carrierId for item in items[1:]] == ["u1"] * limit
+
+
+@pytest.mark.asyncio
+async def test_all_carried_items_follow_movement_and_teleport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every carried item should track ordinary movement and teleport completion."""
+
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    ws = _fake_ws()
+    client = _activate_client(
+        ClientConnection(websocket=ws, id="u1", nickname="tester", x=5, y=6)
+    )
+    server.clients[ws] = client
+    items = [server.item_service.default_item(client, "dice") for _ in range(2)]
+    for item in items:
+        item.carrierId = client.id
+        server.item_service.add_item(item)
+
+    async def fake_send(_websocket: ServerConnection, _packet: object) -> None:
+        return None
+
+    async def fake_broadcast(
+        _packet: object, exclude: ServerConnection | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+
+    await server._handle_message(
+        client, json.dumps({"type": "update_position", "x": 6, "y": 7, "z": 0})
+    )
+    assert [(item.x, item.y, item.z) for item in items] == [(6, 7, 0), (6, 7, 0)]
+
+    await server._handle_message(
+        client,
+        json.dumps({"type": "teleport_complete", "x": 10, "y": 11, "z": 0}),
+    )
+    assert [(item.x, item.y, item.z) for item in items] == [(10, 11, 0), (10, 11, 0)]
+
+
+@pytest.mark.asyncio
+async def test_disconnect_drops_all_carried_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disconnect cleanup should drop every item carried by the client."""
+
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    client = ClientConnection(
+        websocket=_fake_ws(), id="u1", nickname="tester", x=8, y=9, z=40
+    )
+    items = [server.item_service.default_item(client, "dice") for _ in range(2)]
+    for item in items:
+        item.carrierId = client.id
+        server.item_service.add_item(item)
+
+    broadcasted: list[object] = []
+
+    async def fake_broadcast_item(item: object) -> None:
+        broadcasted.append(item)
+
+    monkeypatch.setattr(server.item_runtime, "broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server.item_runtime, "request_state_save", lambda: None)
+
+    await server.item_runtime.finish_client_disconnect(client)
+
+    assert [item.carrierId for item in items] == [None, None]
+    assert [(item.x, item.y, item.z) for item in items] == [(8, 9, 40), (8, 9, 40)]
+    assert broadcasted == items
+
+
+@pytest.mark.asyncio
 async def test_item_transfer_updates_item_owner(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -55,6 +55,7 @@ class ItemRuntimeHost(Protocol):
     auth_service: AuthService
     clients: dict[ServerConnection, ClientConnection]
     item_service: ItemService
+    max_carried_items: int
 
     def _client_has_permission(self, client: ClientConnection, key: str) -> bool: ...
 
@@ -98,7 +99,7 @@ class ItemRuntime:
                 persist_client_position=lambda client: (
                     self.host._persist_client_position(client, force=True)
                 ),
-                find_carried_item=self.item_service.find_carried_item,
+                find_carried_items=self.item_service.find_carried_items,
                 now_ms=self.item_service.now_ms,
                 floor_name=self.floor_name,
                 get_emit_range=self.get_emit_range,
@@ -156,20 +157,21 @@ class ItemRuntime:
             await self.broadcast_item(item)
         self.request_state_save()
 
-    async def sync_carried_item(self, client: ClientConnection) -> None:
-        """Move and broadcast the item carried by a moving client."""
+    async def sync_carried_items(self, client: ClientConnection) -> None:
+        """Move and broadcast every item carried by a moving client."""
 
-        carried = self.item_service.find_carried_item(client.id)
-        if carried is None:
+        carried_items = self.item_service.find_carried_items(client.id)
+        if not carried_items:
             return
         actor_id, actor_name = self._item_updated_actor(client)
-        carried.x = client.x
-        carried.y = client.y
-        carried.z = client.z
-        carried.updatedAt = self.item_service.now_ms()
-        carried.updatedBy = actor_id
-        carried.updatedByName = actor_name
-        await self.broadcast_item(carried)
+        for carried in carried_items:
+            carried.x = client.x
+            carried.y = client.y
+            carried.z = client.z
+            carried.updatedAt = self.item_service.now_ms()
+            carried.updatedBy = actor_id
+            carried.updatedByName = actor_name
+            await self.broadcast_item(carried)
 
     def client_has_permission(self, client: ClientConnection, key: str) -> bool:
         """Return whether a client has one item-related permission."""
@@ -329,13 +331,17 @@ class ItemRuntime:
                 pickup_item.id,
             )
             return
-        carried = self.item_service.find_carried_item(client.id)
-        if carried and carried.id != pickup_item.id:
+        carried_items = self.item_service.find_carried_items(client.id)
+        if (
+            pickup_item.carrierId != client.id
+            and len(carried_items) >= self.host.max_carried_items
+        ):
             await self.send_result(
                 client,
                 False,
                 "pickup",
-                "You are already carrying an item.",
+                f"You can carry at most {self.host.max_carried_items} "
+                f"{'item' if self.host.max_carried_items == 1 else 'items'}.",
                 pickup_item.id,
             )
             return

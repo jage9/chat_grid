@@ -79,23 +79,27 @@
         },
         {
           "keys": "O",
-          "description": "Edit item properties"
+          "description": "Edit a held item or an item on your square; choose from a list when needed"
         },
         {
           "keys": "Shift+O",
-          "description": "Read all item properties"
+          "description": "Inspect a held item or an item on your square; choose from a list when needed"
         },
         {
           "keys": "D",
-          "description": "Pick up/drop item"
+          "description": "Choose an item to pick up or drop; held items and items on your square are listed together"
         },
         {
           "keys": "Z",
-          "description": "Item management (delete/transfer when permitted)"
+          "description": "Manage held items or items on your square (delete/transfer when permitted; drop before transferring)"
         },
         {
           "keys": "Enter",
-          "description": "Use item"
+          "description": "Use a held item or an item on your square; choose from a list when needed"
+        },
+        {
+          "keys": "Shift+Enter",
+          "description": "Secondary action for a held item or an item on your square; choose from a list when needed"
         }
       ]
     },

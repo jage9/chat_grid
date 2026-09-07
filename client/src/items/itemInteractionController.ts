@@ -62,6 +62,7 @@ type ItemControllerDeps = {
   itemPropertyLabel: (key: string) => string;
   useItem: (item: WorldItem) => void;
   secondaryUseItem: (item: WorldItem) => void;
+  pickupDropItem: (item: WorldItem) => void;
   openConfirmation: (request: ConfirmationRequest) => void;
 };
 
@@ -70,7 +71,7 @@ type ItemControllerDeps = {
  */
 export function createItemInteractionController(deps: ItemControllerDeps): {
   reset: () => void;
-  beginItemSelection: (context: Exclude<SelectionContext, 'drop' | null>, items: WorldItem[]) => void;
+  beginItemSelection: (context: Exclude<SelectionContext, null>, items: WorldItem[]) => void;
   beginItemManagement: (item: WorldItem) => void;
   beginItemProperties: (item: WorldItem, showAll?: boolean) => void;
   recomputeActiveItemPropertyKeys: (itemId: string) => void;
@@ -94,6 +95,7 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
   }
 
   function canManageTransferItem(item: WorldItem): boolean {
+    if (item.carrierId !== undefined && item.carrierId !== null) return false;
     const metadata = deps.getItemManagementActionMetadata('transfer');
     if (metadata?.anyPermission && deps.hasPermission(metadata.anyPermission)) return true;
     return !!metadata?.ownPermission && deps.hasPermission(metadata.ownPermission) && deps.getAuthUserId().length > 0 && item.createdBy === deps.getAuthUserId();
@@ -155,7 +157,16 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     });
   }
 
-  function beginItemSelection(context: Exclude<SelectionContext, 'drop' | null>, items: WorldItem[]): void {
+  function selectionItemLabel(item: WorldItem, context: Exclude<SelectionContext, null>): string {
+    const baseLabel = deps.itemLabel(item);
+    const carriedByPlayer = deps.state.player.id !== null && item.carrierId === deps.state.player.id;
+    if (context === 'pickupDrop') {
+      return `${carriedByPlayer ? 'Drop' : 'Pick up'} ${baseLabel}`;
+    }
+    return carriedByPlayer ? `${baseLabel}, carried` : baseLabel;
+  }
+
+  function beginItemSelection(context: Exclude<SelectionContext, null>, items: WorldItem[]): void {
     if (items.length === 0) {
       deps.updateStatus('No items available.');
       deps.sfxUiCancel();
@@ -165,7 +176,7 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     deps.state.selectionContext = context;
     deps.state.selectedItemIds = items.map((item) => item.id);
     deps.state.selectedItemIndex = 0;
-    deps.announceMenuEntry('Select item', deps.itemLabel(items[0]));
+    deps.announceMenuEntry('Select item', selectionItemLabel(items[0], context));
   }
 
   function beginItemManagement(item: WorldItem): void {
@@ -253,8 +264,9 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     if (control.type === 'move') {
       deps.state.selectedItemIndex = control.index;
       const current = deps.state.items.get(deps.state.selectedItemIds[deps.state.selectedItemIndex]);
-      if (current) {
-        deps.updateStatus(deps.itemLabel(current));
+      const context = deps.state.selectionContext;
+      if (current && context) {
+        deps.updateStatus(selectionItemLabel(current, context));
         deps.sfxUiBlip();
       }
       return;
@@ -269,8 +281,8 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
       const context = deps.state.selectionContext;
       deps.state.mode = 'normal';
       deps.state.selectionContext = null;
-      if (context === 'pickup') {
-        deps.signalingSend({ type: 'item_pickup', itemId: selected.id });
+      if (context === 'pickupDrop') {
+        deps.pickupDropItem(selected);
         return;
       }
       if (context === 'delete') {

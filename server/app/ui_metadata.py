@@ -98,31 +98,31 @@ MAIN_MODE_SERVER_COMMAND_DEFINITIONS: tuple[MainModeServerCommandDefinition, ...
     {
         "id": "useItem",
         "label": "Use item",
-        "tooltip": "Use the carried item or a usable item on your current square.",
+        "tooltip": "Use a held item or an item on your square; choose from a list when needed.",
     },
     {
         "id": "secondaryUseItem",
         "label": "Secondary item action",
-        "tooltip": "Run the secondary action for the carried item or a usable item on your current square.",
+        "tooltip": "Run a secondary action on a held item or an item on your square; choose from a list when needed.",
     },
     {
         "id": "pickupDropItem",
         "label": "Pick up or drop item",
-        "tooltip": "Pick up an item or drop your carried item.",
+        "tooltip": "Choose an item to pick up from your square or drop from your hands.",
     },
     {
         "id": "openItemManagement",
         "label": "Item management",
-        "tooltip": "Open item management actions for items on your square.",
+        "tooltip": "Manage held items or items on your square; drop an item before transferring it.",
     },
     {
         "id": "editItem",
         "label": "Edit item properties",
-        "tooltip": "Edit the carried item or an item on your current square.",
+        "tooltip": "Edit a held item or an item on your square; choose from a list when needed.",
     },
     {
         "id": "inspectItem",
         "label": "Inspect item properties",
-        "tooltip": "Inspect all properties for the carried item or an item on your current square.",
+        "tooltip": "Inspect a held item or an item on your square; choose from a list when needed.",
     },
 )
