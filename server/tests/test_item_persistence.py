@@ -2,22 +2,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import cast
 
-from websockets.asyncio.server import ServerConnection
-
-from app.client import ClientConnection
 from app.item_service import ItemService
 
 
-def _fake_ws() -> ServerConnection:
-    return cast(ServerConnection, object())
-
-
-def test_item_persistence_omits_global_type_properties(tmp_path: Path) -> None:
+def test_item_persistence_omits_global_type_properties(tmp_path: Path, world) -> None:
     state_file = tmp_path / "items.json"
     service = ItemService(state_file=state_file)
-    client = ClientConnection(websocket=_fake_ws(), id="u1", x=3, y=4)
+    client = world.connect("user...", client_id="u1", x=3, y=4)
 
     item = service.default_item(client, "dice")
     service.add_item(item)
