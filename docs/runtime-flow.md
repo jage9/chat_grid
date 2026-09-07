@@ -106,7 +106,8 @@ Core incoming message effects:
 - Pickup enforces `items.max_carried_items` from server config, default `2`. Every held item follows walking, teleport, and elevator travel. Disconnect drops all of them at the last tile (or the elevator’s last completed landing); reconnect does not restore carrying.
 - Item action menus combine held items with ground items on the current square. `D` selects a pickup or drop action by item; use, secondary use, edit, inspect, and management likewise select one target when there are several.
 
-- Transferring a held item hands it to an online recipient with a free slot and changes ownership. The server rechecks capacity at confirmation; ground-item transfers remain ownership-only.
+- Selecting “Hand to user” requests eligible recipients from the server: online, on the same floor within five grid squares (Chebyshev distance), with pickup permission and a free carrying slot. Selecting a name sends the hand request; the server rechecks eligibility before moving the item into that user’s hands, leaving ownership unchanged.
+- “Transfer ownership” retains the ground-item ownership-only flow, including offline recipients and confirmation.
 
 ## Authorization Runtime
 

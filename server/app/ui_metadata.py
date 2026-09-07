@@ -74,10 +74,17 @@ ADMIN_MENU_ACTION_DEFINITIONS: tuple[AdminMenuActionDefinition, ...] = (
 ITEM_MANAGEMENT_ACTION_DEFINITIONS: tuple[ItemManagementActionDefinition, ...] = (
     {
         "id": "transfer",
-        "label": "Transfer item",
-        "tooltip": "Transfer this item to another user.",
+        "label": "Transfer ownership",
+        "tooltip": "Transfer ownership of this item to another user.",
         "anyPermission": "item.transfer.any",
         "ownPermission": "item.transfer.own",
+    },
+    {
+        "id": "hand",
+        "label": "Hand to user",
+        "tooltip": "Hand this item to a nearby user.",
+        "anyPermission": "item.pickup_drop.any",
+        "ownPermission": "item.pickup_drop.own",
     },
     {
         "id": "delete",

@@ -79,6 +79,7 @@ type MessageHandlerDeps = {
   handleAdminUsersList: (message: Extract<IncomingMessage, { type: 'admin_users_list' }>) => void;
   handleAdminActionResult: (message: Extract<IncomingMessage, { type: 'admin_action_result' }>) => void;
   handleItemTransferTargets: (message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>) => void;
+  handleItemHandTargets: (message: Extract<IncomingMessage, { type: 'item_hand_targets' }>) => void;
   handleStructureActionResult: (message: Extract<IncomingMessage, { type: 'structure_action_result' }>) => void;
   connectToLiveKit: (url: string, token: string) => void;
 };
@@ -110,6 +111,9 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         break;
       case 'item_transfer_targets':
         deps.handleItemTransferTargets(message);
+        break;
+      case 'item_hand_targets':
+        deps.handleItemHandTargets(message);
         break;
       case 'structure_action_result':
         deps.handleStructureActionResult(message);

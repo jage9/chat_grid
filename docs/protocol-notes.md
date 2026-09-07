@@ -29,8 +29,10 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `chat_message`: player chat.
 - `ping`: latency measurement.
 - `item_add`, `item_pickup`, `item_drop`, `item_delete`, `item_use`, `item_update`: item actions.
-- `item_transfer_targets`: request eligible transfer accounts, excluding the current owner. Ground items allow online/offline active accounts; held items list online active accounts with a free carrying slot.
-- `item_transfer`: transfer item ownership to another account (`targetUserId` required). A locally held item also moves into the recipient’s hands at their current position; the server rechecks availability and carrying capacity before changing state.
+- `item_transfer_targets`: request active ownership-transfer accounts, including offline accounts and excluding the current owner. The item must be on the ground at the sender’s square.
+- `item_transfer`: transfer ground-item ownership to another account (`targetUserId` required), without moving it.
+- `item_hand_targets`: request eligible recipients for an item held by the sender: online, another user on the same floor within five grid squares (Chebyshev distance), with pickup permission for the item and a free carrying slot. The sender also needs pickup/drop permission.
+- `item_hand`: hand the held item to `targetUserId`. Recheck the sender and recipient conditions before changing carrier and position; ownership stays unchanged.
 - `item_secondary_use`: trigger type-specific secondary action when implemented.
 - `item_piano_note`: realtime piano note on/off for active piano use mode.
 - `item_piano_recording`: piano record/playback control (`toggle_record`, `playback`, `stop_playback`).
@@ -66,6 +68,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_remove`: item deletion.
 - `item_action_result`: action success/failure and user-facing message.
 - `item_transfer_targets`: transfer target account list for one item.
+- `item_hand_targets`: eligible handoff target list for one item; each target has `userId`, `username`, and `online: true`.
 - `item_use_sound`: spatial one-shot sound on successful item use (if `useSound` configured), including source `acousticZoneId`.
 - `item_clock_announce`: ordered list of clock speech samples to play sequentially as spatial audio, including source `acousticZoneId`.
 - `item_piano_note`: broadcast piano note on/off with resolved instrument/envelope/spatial params.
@@ -81,9 +84,9 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_upsert` is full-state replacement for one item, not partial patch.
 - `item_upsert.item.display` is server-owned display text for readonly/system properties (for example: `createdBy`, `updatedBy`, `createdAt`, `updatedAt`, `capabilities`, `useSound`, `emitSound`).
 - `item_action_result` messages are intended for direct screen-reader/user status feedback.
-  - `action` includes: `add`, `pickup`, `drop`, `delete`, `transfer`, `use`, `secondary_use`, `update`
+  - `action` includes: `add`, `pickup`, `drop`, `delete`, `transfer`, `hand`, `use`, `secondary_use`, `update`
 - Successful `item_pickup` and `item_drop` also emit system chat lines to other users in the room.
-- Item transfer ownership is account-based. Ground-item recipients may be offline. Held-item recipients must be online with room; failed handoffs leave ownership, carrier, and position unchanged. Items held by someone other than the sender cannot be transferred.
+- Ownership transfer is account-based and ground-only; recipients may be offline. Handing an item changes only possession, requires the sender to hold it, and validates recipient eligibility again on execution. Failed handoffs leave ownership, carrier, position, and audit fields unchanged.
 - Piano runtime control no longer depends on parsing `item_action_result.message` text.
 - `item_piano_status` carries machine-readable piano events (`use_mode_entered`, record/playback transitions).
 - `item_use_sound` contains absolute item world coordinates (`x`, `y`, `z`), source `acousticZoneId`, and sound path.
@@ -142,7 +145,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - `itemTypes[].propertyMetadata`: property-level metadata (`valueType`, optional `label`, optional `range`, optional `tooltip`, optional `maxLength`, optional `options`, optional `visibleWhen`)
   - `itemTypes[].globalProperties`: non-editable global values (`useSound`, `emitSound`, `useCooldownMs`, `emitRange`, `directional`, `emitSoundSpeed`, `emitSoundTempo`, `emitInitialDelay`, `emitLoopDelay`)
   - `commandMetadata.mainModeActions`: server-authored labels/tooltips for server-backed main-mode commands used by the client command palette
-  - `itemManagement.actions`: server-authored labels/tooltips and permission-key metadata for item-management actions (`transfer`, `delete`)
+  - `itemManagement.actions`: server-authored labels/tooltips and permission-key metadata for item-management actions (`transfer`, `hand`, `delete`)
   - `adminMenu.actions`: server-authored admin root menu labels/tooltips/ordering for the authenticated user
 - Maintainer note: the current server-owned command/menu metadata definitions live in `server/app/ui_metadata.py`.
 - Client item UI requires this metadata from the server; there is no fallback item definition map.

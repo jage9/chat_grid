@@ -1692,6 +1692,11 @@ function handleItemTransferTargets(message: Extract<IncomingMessage, { type: 'it
   itemInteractionController.handleItemTransferTargets(message);
 }
 
+/** Handles server hand-target list response for item-management handoff flow. */
+function handleItemHandTargets(message: Extract<IncomingMessage, { type: 'item_hand_targets' }>): void {
+  itemInteractionController.handleItemHandTargets(message);
+}
+
 /** Handles structured admin action result packets. */
 function handleAdminActionResult(message: Extract<IncomingMessage, { type: 'admin_action_result' }>): void {
   adminController.handleAdminActionResult(message);
@@ -1862,6 +1867,7 @@ const onAppMessage = createOnMessageHandler({
   handleAdminUsersList,
   handleAdminActionResult,
   handleItemTransferTargets,
+  handleItemHandTargets,
   handleStructureActionResult: (message) => worldBuilderController.handleActionResult(message),
   connectToLiveKit: (url, token) => {
     void connectLiveKit(url, token);

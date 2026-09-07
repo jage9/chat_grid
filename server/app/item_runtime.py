@@ -30,6 +30,9 @@ from .models import (
     ItemAddPacket,
     ItemDeletePacket,
     ItemDropPacket,
+    ItemHandPacket,
+    ItemHandTargetsPacket,
+    ItemHandTargetsResultPacket,
     ItemPianoNotePacket,
     ItemPianoRecordingPacket,
     ItemPickupPacket,
@@ -230,6 +233,12 @@ class ItemRuntime:
             return True
         if isinstance(packet, ItemTransferPacket):
             await self._handle_transfer(client, packet)
+            return True
+        if isinstance(packet, ItemHandTargetsPacket):
+            await self._handle_hand_targets(client, packet)
+            return True
+        if isinstance(packet, ItemHandPacket):
+            await self._handle_hand(client, packet)
             return True
         if isinstance(packet, ItemUsePacket):
             await self._handle_use(client, packet)
@@ -559,19 +568,16 @@ class ItemRuntime:
         if not transfer_targets_item:
             await self.send_result(client, False, "transfer", "Item not found.")
             return
-        carried_by_client = transfer_targets_item.carrierId == client.id
-        if transfer_targets_item.carrierId is not None and not carried_by_client:
+        if transfer_targets_item.carrierId:
             await self.send_result(
                 client,
                 False,
                 "transfer",
-                "Item cannot be transferred while carried by another user.",
+                "Item cannot be transferred while carried.",
                 transfer_targets_item.id,
             )
             return
-        if not carried_by_client and not self.item_is_on_client_square(
-            transfer_targets_item, client
-        ):
+        if not self.item_is_on_client_square(transfer_targets_item, client):
             await self.send_result(
                 client,
                 False,
@@ -594,35 +600,21 @@ class ItemRuntime:
             )
             return
         users = self.auth_service.list_users_for_admin()
-        online_clients = {
-            other.user_id: other
+        connected_user_ids = {
+            other.user_id
             for other in self.clients.values()
             if other.authenticated and other.user_id
         }
-        targets = []
-        for entry in users:
-            user_id = str(entry["id"])
-            target = online_clients.get(user_id)
-            if (
-                str(entry.get("status")) != "active"
-                or user_id == transfer_targets_item.createdBy
-                or (carried_by_client and target is None)
-                or (
-                    carried_by_client
-                    and target is not None
-                    and not self._can_receive_carried_item(
-                        target, transfer_targets_item
-                    )
-                )
-            ):
-                continue
-            targets.append(
-                ItemTransferTargetSummary(
-                    userId=user_id,
-                    username=str(entry["username"]),
-                    online=target is not None,
-                )
+        targets = [
+            ItemTransferTargetSummary(
+                userId=str(entry["id"]),
+                username=str(entry["username"]),
+                online=str(entry["id"]) in connected_user_ids,
             )
+            for entry in users
+            if str(entry.get("status")) == "active"
+            and str(entry["id"]) != transfer_targets_item.createdBy
+        ]
         await self.send(
             client.websocket,
             ItemTransferTargetsResultPacket(
@@ -642,19 +634,16 @@ class ItemRuntime:
         if not transfer_item:
             await self.send_result(client, False, "transfer", "Item not found.")
             return
-        carried_by_client = transfer_item.carrierId == client.id
-        if transfer_item.carrierId is not None and not carried_by_client:
+        if transfer_item.carrierId:
             await self.send_result(
                 client,
                 False,
                 "transfer",
-                "Item cannot be transferred while carried by another user.",
+                "Item cannot be transferred while carried.",
                 transfer_item.id,
             )
             return
-        if not carried_by_client and not self.item_is_on_client_square(
-            transfer_item, client
-        ):
+        if not self.item_is_on_client_square(transfer_item, client):
             await self.send_result(
                 client,
                 False,
@@ -696,25 +685,6 @@ class ItemRuntime:
             )
             return
         target = self._authenticated_client_for_user(target_user_id)
-        if carried_by_client:
-            if target is None:
-                await self.send_result(
-                    client,
-                    False,
-                    "transfer",
-                    "The recipient must be online to receive a carried item.",
-                    transfer_item.id,
-                )
-                return
-            if not self._can_receive_carried_item(target, transfer_item):
-                await self.send_result(
-                    client,
-                    False,
-                    "transfer",
-                    "The recipient has no room to carry that item.",
-                    transfer_item.id,
-                )
-                return
         target_username = (
             target.username
             if target and target.username
@@ -722,12 +692,6 @@ class ItemRuntime:
             if target
             else self.auth_service.get_username_by_id(target_user_id) or target_user_id
         )
-        if carried_by_client:
-            assert target is not None
-            transfer_item.carrierId = target.id
-            transfer_item.x = target.x
-            transfer_item.y = target.y
-            transfer_item.z = target.z
         transfer_item.createdBy = target_user_id
         transfer_item.createdByName = target_username
         transfer_item.updatedAt = self.item_service.now_ms()
@@ -754,6 +718,158 @@ class ItemRuntime:
             transfer_item.id,
         )
         return
+
+    async def _handle_hand_targets(
+        self, client: ClientConnection, packet: ItemHandTargetsPacket
+    ) -> None:
+        """Return nearby authenticated users who can receive a carried item."""
+
+        hand_item = self.items.get(packet.itemId)
+        if not hand_item:
+            await self.send_result(client, False, "hand", "Item not found.")
+            return
+        source_error = self._hand_source_error(client, hand_item)
+        if source_error:
+            await self.send_result(client, False, "hand", source_error, hand_item.id)
+            return
+
+        active_user_names = {
+            str(entry["id"]): str(entry["username"])
+            for entry in self.auth_service.list_users_for_admin()
+            if str(entry.get("status")) == "active"
+        }
+        target_clients: dict[str, ClientConnection] = {}
+        for target in self.clients.values():
+            if target.user_id not in active_user_names:
+                continue
+            if not self._can_hand_to_target(client, target, hand_item):
+                continue
+            assert target.user_id is not None
+            target_clients.setdefault(target.user_id, target)
+        targets = [
+            ItemTransferTargetSummary(
+                userId=user_id,
+                username=target.username
+                or target.nickname
+                or active_user_names.get(user_id, user_id),
+                online=True,
+            )
+            for user_id, target in target_clients.items()
+        ]
+        await self.send(
+            client.websocket,
+            ItemHandTargetsResultPacket(
+                type="item_hand_targets", itemId=hand_item.id, targets=targets
+            ),
+        )
+
+    async def _handle_hand(
+        self, client: ClientConnection, packet: ItemHandPacket
+    ) -> None:
+        """Hand one carried item to a nearby user without changing ownership."""
+
+        hand_item = self.items.get(packet.itemId)
+        if not hand_item:
+            await self.send_result(client, False, "hand", "Item not found.")
+            return
+        source_error = self._hand_source_error(client, hand_item)
+        if source_error:
+            await self.send_result(client, False, "hand", source_error, hand_item.id)
+            return
+        target_user_id = str(packet.targetUserId).strip()
+        if not target_user_id:
+            await self.send_result(
+                client,
+                False,
+                "hand",
+                "Target user is not available.",
+                hand_item.id,
+            )
+            return
+        target = self._hand_target_for_user(client, hand_item, target_user_id)
+        if target is None:
+            await self.send_result(
+                client,
+                False,
+                "hand",
+                "That user is not nearby or cannot receive the item.",
+                hand_item.id,
+            )
+            return
+
+        target_username = target.username or target.nickname or target_user_id
+        hand_item.carrierId = target.id
+        hand_item.x = target.x
+        hand_item.y = target.y
+        hand_item.z = target.z
+        hand_item.updatedAt = self.item_service.now_ms()
+        actor_id, actor_name = self._item_updated_actor(client)
+        hand_item.updatedBy = actor_id
+        hand_item.updatedByName = actor_name
+        hand_item.version += 1
+        await self.broadcast_item(hand_item)
+        self.request_state_save()
+        item_text = f"{hand_item.title} ({self._item_type_label(hand_item)})"
+        await self.broadcast(
+            BroadcastChatMessagePacket(
+                type="chat_message",
+                message=f"{client.nickname} handed {item_text} to {target_username}.",
+                system=True,
+            ),
+            exclude=client.websocket,
+        )
+        await self.send_result(
+            client,
+            True,
+            "hand",
+            f"You handed {item_text} to {target_username}.",
+            hand_item.id,
+        )
+
+    def _can_hand_to_target(
+        self, client: ClientConnection, target: ClientConnection, item: WorldItem
+    ) -> bool:
+        """Return whether one nearby connection can receive a handoff."""
+
+        if not target.authenticated or not target.user_id:
+            return False
+        if target.id == client.id or target.user_id == client.user_id:
+            return False
+        if target.z != client.z:
+            return False
+        if max(abs(target.x - client.x), abs(target.y - client.y)) > 5:
+            return False
+        if not self._can_pickup_drop_item(target, item):
+            return False
+        return self._can_receive_carried_item(target, item)
+
+    def _hand_source_error(
+        self, client: ClientConnection, item: WorldItem
+    ) -> str | None:
+        """Return a concise validation error for a handoff source item."""
+
+        if item.carrierId != client.id:
+            return "You must be carrying that item to hand it to someone."
+        if "carryable" not in item.capabilities:
+            return "That item cannot be handed to someone."
+        if not self._can_pickup_drop_item(client, item):
+            return "Not authorized to hand this item."
+        return None
+
+    def _hand_target_for_user(
+        self, client: ClientConnection, item: WorldItem, target_user_id: str
+    ) -> ClientConnection | None:
+        """Resolve a currently eligible handoff target for final validation."""
+
+        return next(
+            (
+                target
+                for target in self.clients.values()
+                if target.user_id == target_user_id
+                and self._can_hand_to_target(client, target, item)
+            ),
+            None,
+        )
 
     async def _handle_use(
         self, client: ClientConnection, packet: ItemUsePacket
@@ -1169,6 +1285,14 @@ class ItemRuntime:
             None,
         )
 
+    def _can_pickup_drop_item(self, client: ClientConnection, item: WorldItem) -> bool:
+        """Return whether a client may receive or hand one item."""
+
+        return self.client_has_permission(client, "item.pickup_drop.any") or (
+            self.client_has_permission(client, "item.pickup_drop.own")
+            and self._owns_item(client, item)
+        )
+
     def _can_receive_carried_item(
         self, client: ClientConnection, item: WorldItem
     ) -> bool:
@@ -1258,6 +1382,7 @@ class ItemRuntime:
             "drop",
             "delete",
             "transfer",
+            "hand",
             "use",
             "secondary_use",
             "update",

@@ -5,7 +5,7 @@ import { createItemInteractionController } from './itemInteractionController';
 const PLAYER_ID = 'player-1';
 const ITEM_TITLE = 'Test item (test)';
 
-function item(id: string, carrierId: string | null = null): WorldItem {
+function item(id: string, carrierId: string | null = null, capabilities = ['carryable']): WorldItem {
   return {
     id,
     type: 'test-item',
@@ -18,7 +18,7 @@ function item(id: string, carrierId: string | null = null): WorldItem {
     createdAt: 1,
     updatedAt: 1,
     version: 1,
-    capabilities: [],
+    capabilities,
     params: { title: 'Test item' },
     carrierId,
     occupiedOffsets: [{ x: 0, y: 0 }],
@@ -54,10 +54,10 @@ function createFixture() {
     sfxUiCancel: vi.fn(),
     hasPermission: vi.fn(() => true),
     getAuthUserId: vi.fn(() => PLAYER_ID),
-    getItemManagementActionMetadata: vi.fn((action: 'delete' | 'transfer') => ({
-      label: action === 'delete' ? 'Delete item' : 'Transfer item',
-      anyPermission: undefined,
-      ownPermission: `item.${action}.own`,
+    getItemManagementActionMetadata: vi.fn((action: 'delete' | 'transfer' | 'hand') => ({
+      label: action === 'delete' ? 'Delete item' : action === 'transfer' ? 'Transfer ownership' : 'Hand to user',
+      anyPermission: action === 'hand' ? 'item.pickup_drop.any' : undefined,
+      ownPermission: action === 'hand' ? 'item.pickup_drop.own' : `item.${action}.own`,
     })),
     itemLabel: vi.fn(() => ITEM_TITLE),
     getEditableItemPropertyKeys: vi.fn(() => ['title']),
@@ -137,18 +137,97 @@ describe('item interaction controller', () => {
     expect(fixture.deps.state.selectedItemId).toBe(secondHeld.id);
   });
 
-  it('allows transfer of locally held items but not another user’s held item', () => {
+  it('offers ownership transfer for ground items and handoff for locally held items', () => {
     const fixture = createFixture();
 
     expect(fixture.controller.getManagementOptions(fixture.held)).toEqual([
-      { action: 'transfer', label: 'Transfer item', tooltip: undefined },
+      { action: 'hand', label: 'Hand to user', tooltip: undefined },
       { action: 'delete', label: 'Delete item', tooltip: undefined },
     ]);
     const otherHeld = item('other-held', 'other-player');
-    expect(fixture.controller.getManagementOptions(otherHeld).map((option) => option.action)).not.toContain('transfer');
+    expect(fixture.controller.getManagementOptions(otherHeld).map((option) => option.action)).not.toContain('hand');
     expect(fixture.controller.getManagementOptions(fixture.ground)).toEqual([
-      { action: 'transfer', label: 'Transfer item', tooltip: undefined },
+      { action: 'transfer', label: 'Transfer ownership', tooltip: undefined },
       { action: 'delete', label: 'Delete item', tooltip: undefined },
     ]);
+  });
+
+  it('allows handoff based on pickup permission even when the holder is not the owner', () => {
+    const fixture = createFixture();
+    fixture.held.createdBy = 'another-owner';
+
+    expect(fixture.controller.getManagementOptions(fixture.held).map((option) => option.action)).toContain('hand');
+  });
+
+  it('does not offer handoff for held items without the carryable capability', () => {
+    const fixture = createFixture();
+    const nonCarryable = item('non-carryable', PLAYER_ID, []);
+
+    expect(fixture.controller.getManagementOptions(nonCarryable).map((option) => option.action)).not.toContain('hand');
+  });
+
+  it('routes ownership transfer through confirmation and handoff directly after target selection', () => {
+    const fixture = createFixture();
+
+    fixture.controller.beginItemManagement(fixture.ground);
+    fixture.controller.handleItemManageOptionsModeInput('Enter', 'Enter');
+    expect(fixture.deps.signalingSend).toHaveBeenLastCalledWith({ type: 'item_transfer_targets', itemId: fixture.ground.id });
+    fixture.controller.handleItemTransferTargets({
+      type: 'item_transfer_targets',
+      itemId: fixture.ground.id,
+      targets: [{ userId: 'target', username: 'Target', online: false }],
+    });
+    fixture.controller.handleItemManageTransferUserModeInput('Enter', 'Enter');
+    expect(fixture.deps.openConfirmation).toHaveBeenCalledOnce();
+    const transferConfirmation = fixture.deps.openConfirmation.mock.calls[0][0];
+    transferConfirmation.onConfirm();
+    expect(fixture.deps.signalingSend).toHaveBeenLastCalledWith({
+      type: 'item_transfer',
+      itemId: fixture.ground.id,
+      targetUserId: 'target',
+    });
+
+    fixture.controller.beginItemManagement(fixture.held);
+    fixture.controller.handleItemManageOptionsModeInput('Enter', 'Enter');
+    expect(fixture.deps.signalingSend).toHaveBeenLastCalledWith({ type: 'item_hand_targets', itemId: fixture.held.id });
+    fixture.controller.handleItemHandTargets({
+      type: 'item_hand_targets',
+      itemId: fixture.held.id,
+      targets: [{ userId: 'nearby', username: 'Nearby', online: true }],
+    });
+    fixture.controller.handleItemManageTransferUserModeInput('Enter', 'Enter');
+    expect(fixture.deps.openConfirmation).toHaveBeenCalledOnce();
+    expect(fixture.deps.signalingSend).toHaveBeenLastCalledWith({
+      type: 'item_hand',
+      itemId: fixture.held.id,
+      targetUserId: 'nearby',
+    });
+  });
+
+  it('ignores stale target replies and clears a cancelled target selection', () => {
+    const fixture = createFixture();
+    fixture.controller.beginItemManagement(fixture.held);
+    fixture.controller.handleItemManageOptionsModeInput('Enter', 'Enter');
+    fixture.controller.handleItemTransferTargets({
+      type: 'item_transfer_targets',
+      itemId: fixture.held.id,
+      targets: [{ userId: 'wrong', username: 'Wrong', online: true }],
+    });
+    expect(fixture.deps.state.mode).toBe('itemManageOptions');
+
+    fixture.controller.handleItemHandTargets({
+      type: 'item_hand_targets',
+      itemId: fixture.held.id,
+      targets: [{ userId: 'nearby', username: 'Nearby', online: true }],
+    });
+    expect(fixture.deps.state.mode).toBe('itemManageTransferUser');
+    fixture.controller.handleItemManageTransferUserModeInput('Escape', 'Escape');
+    expect(fixture.deps.state.mode).toBe('itemManageOptions');
+    fixture.controller.handleItemHandTargets({
+      type: 'item_hand_targets',
+      itemId: fixture.held.id,
+      targets: [{ userId: 'late', username: 'Late', online: true }],
+    });
+    expect(fixture.deps.state.mode).toBe('itemManageOptions');
   });
 });
