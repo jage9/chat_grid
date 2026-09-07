@@ -140,7 +140,9 @@ export function setupKeyboardInputHandlers(deps: KeyboardControllerDeps): void {
       }
     }
 
-    if (isTypingKey(code) && deps.state.keysPressed[code]) return;
+    const isAudioToggle = deps.state.mode === 'normal' && /^Digit[1-4]$/.test(code);
+    if (isAudioToggle && event.repeat) return;
+    if ((isTypingKey(code) || isAudioToggle) && deps.state.keysPressed[code]) return;
 
     const opensCommandPalette =
       deps.canOpenCommandPaletteInMode(deps.state.mode) &&
