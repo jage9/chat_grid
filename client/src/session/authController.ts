@@ -383,8 +383,8 @@ export function createAuthController(deps: AuthControllerDeps): {
     deps.onServerAdminMenuActions([]);
     if (deps.isRunning()) {
       deps.signalingSend({ type: 'auth_logout' });
-      deps.disconnect();
     }
+    deps.disconnect();
     setAuthMode('login');
     deps.updateStatus('Logged out.');
     updateConnectAvailability();

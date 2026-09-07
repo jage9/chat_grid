@@ -88,6 +88,7 @@ import { ItemBehaviorRegistry } from './items/types/behaviorRegistry';
 import { SettingsStore } from './settings/settingsStore';
 import { createAuthController } from './session/authController';
 import { runConnectFlow, runDisconnectFlow, type ConnectFlowDeps } from './session/connectionFlow';
+import { runReconnectAttempts } from './session/reconnect';
 import { MediaSession } from './session/mediaSession';
 import { type AudioLayerState } from './types/audio';
 import { setupUiHandlers as setupDomUiHandlers } from './ui/domBindings';
@@ -104,8 +105,6 @@ const MIC_CALIBRATION_ACTIVE_RMS_THRESHOLD = 0.003;
 const MIC_INPUT_GAIN_SCALE_MULTIPLIER = 2;
 const MIC_INPUT_GAIN_STEP = 0.05;
 const HEARTBEAT_INTERVAL_MS = 10_000;
-const RECONNECT_DELAY_MS = 5_000;
-const RECONNECT_MAX_ATTEMPTS = 3;
 const AUDIO_SUBSCRIPTION_REFRESH_MS = 500;
 const TELEPORT_SQUARES_PER_SECOND = 20;
 const AUTH_POLICY_STORAGE_KEY = 'chgridAuthPolicy';
@@ -441,6 +440,8 @@ let heartbeatTimerId: number | null = null;
 let heartbeatNextPingId = -1;
 let heartbeatAwaitingPong = false;
 let reconnectInFlight = false;
+let reconnectAbort: AbortController | null = null;
+let connectionAbort: AbortController | null = null;
 let activeServerInstanceId: string | null = null;
 let reloadScheduledForVersionMismatch = false;
 let peerListenGainByNickname = settings.loadPeerListenGains();
@@ -1605,30 +1606,30 @@ async function reconnectAfterSocketClose(): Promise<void> {
 /** Reconnects after disconnect with delay and bounded retry attempts. */
 async function reconnectWithRetry(reason: 'heartbeat' | 'socketClose'): Promise<void> {
   if (reconnectInFlight || !state.running) return;
+  // Tear down the interrupted session before starting a cancellable retry sequence.
+  disconnect();
+  const controller = new AbortController();
+  reconnectAbort = controller;
   reconnectInFlight = true;
-  stopHeartbeat();
   if (reason === 'heartbeat') {
     pushChatMessage('Connection stale. Reconnecting...');
   }
-  disconnect();
-  for (let attempt = 1; attempt <= RECONNECT_MAX_ATTEMPTS; attempt += 1) {
-    await new Promise((resolve) => window.setTimeout(resolve, RECONNECT_DELAY_MS));
-    await connect();
-    const waitStartedAt = Date.now();
-    while (!state.running && Date.now() - waitStartedAt < 4_000) {
-      await new Promise((resolve) => window.setTimeout(resolve, 100));
+  try {
+    const connected = await runReconnectAttempts({
+      signal: controller.signal,
+      connect: () => connectAttempt(controller),
+      onRetry: (attempt) => pushChatMessage(`Reconnect attempt ${attempt} failed. Retrying in 5 seconds...`),
+    });
+    if (!connected && !controller.signal.aborted) {
+      pushChatMessage('Reconnect failed after 3 attempts. Press Connect to retry.');
+      audio.sfxUiCancel();
     }
-    if (state.running) {
+  } finally {
+    if (reconnectAbort === controller) {
+      reconnectAbort = null;
       reconnectInFlight = false;
-      return;
-    }
-    if (attempt < RECONNECT_MAX_ATTEMPTS) {
-      pushChatMessage(`Reconnect attempt ${attempt} failed. Retrying in 5 seconds...`);
     }
   }
-  pushChatMessage('Reconnect failed after 3 attempts. Press Connect to retry.');
-  audio.sfxUiCancel();
-  reconnectInFlight = false;
 }
 
 /** Sends current auth request over signaling websocket after socket open. */
@@ -1721,10 +1722,10 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
     mediaIsConnecting: () => mediaSession.isConnecting(),
     mediaSetConnecting: (value) => mediaSession.setConnecting(value),
     mediaStopLocalMedia: () => stopLocalMedia(),
-    signalingConnect: (handler) => signaling.connect(handler as (message: IncomingMessage) => Promise<void>),
+    signalingConnect: (handler, onDisconnected) => signaling.connect(handler as (message: IncomingMessage) => Promise<void>, onDisconnected),
     signalingSendAuth: () => sendAuthRequest(),
     signalingDisconnect: () => signaling.disconnect(),
-    onMessage: (message) => onSignalingMessage(message as IncomingMessage),
+    onMessage: (message, onWelcome) => onSignalingMessage(message as IncomingMessage, onWelcome),
     peerManagerCleanupAll: () => peerManager.cleanupAll(),
     radioCleanupAll: () => radioRuntime.cleanupAll(),
     emitCleanupAll: () => {
@@ -1739,12 +1740,31 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
 
 /** Performs end-to-end connect flow: validation, media setup, then signaling connection. */
 async function connect(): Promise<void> {
+  if (state.running) return;
+  cancelReconnect();
+  connectionAbort?.abort();
+  await connectAttempt(new AbortController());
+}
+
+/** Waits for one complete signaling/authentication attempt. */
+async function connectAttempt(controller: AbortController): Promise<boolean> {
+  connectionAbort = controller;
   setConnectionStatus('Connecting...');
-  await runConnectFlow(getConnectionFlowDeps());
+  return runConnectFlow(getConnectionFlowDeps(), controller.signal);
+}
+
+/** Cancels automatic retries, including any pending connection attempt. */
+function cancelReconnect(): void {
+  reconnectAbort?.abort();
+  reconnectAbort = null;
+  reconnectInFlight = false;
 }
 
 /** Tears down active session state, media, peers, and UI back to pre-connect mode. */
 function disconnect(): void {
+  cancelReconnect();
+  connectionAbort?.abort();
+  connectionAbort = null;
   stopHeartbeat();
   runDisconnectFlow(getConnectionFlowDeps());
   setConnectionStatus('Disconnected.');
@@ -1849,7 +1869,7 @@ const onAppMessage = createOnMessageHandler({
 });
 
 /** Handles signaling packets with heartbeat/restart metadata before app-level dispatch. */
-async function onSignalingMessage(message: IncomingMessage): Promise<void> {
+async function onSignalingMessage(message: IncomingMessage, onWelcome?: () => void): Promise<void> {
   if (message.type === 'pong' && message.clientSentAt < 0) {
     heartbeatAwaitingPong = false;
     return;
@@ -1890,6 +1910,7 @@ async function onSignalingMessage(message: IncomingMessage): Promise<void> {
   }
   await onAppMessage(message);
   if (message.type === 'welcome') {
+    onWelcome?.();
     signaling.send({ type: 'welcome_ready' });
     await setupMediaAfterAuth();
     if (playSelfLoginSound) {

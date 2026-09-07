@@ -20,10 +20,10 @@ export type ConnectFlowDeps = {
   mediaIsConnecting: () => boolean;
   mediaSetConnecting: (value: boolean) => void;
   mediaStopLocalMedia: () => void;
-  signalingConnect: (onMessage: (message: unknown) => Promise<void>) => Promise<void>;
+  signalingConnect: (onMessage: (message: unknown) => Promise<void>, onDisconnected: () => void) => Promise<void>;
   signalingSendAuth: () => void;
   signalingDisconnect: () => void;
-  onMessage: (message: unknown) => Promise<void>;
+  onMessage: (message: unknown, onWelcome: () => void) => Promise<void>;
   peerManagerCleanupAll: () => void;
   radioCleanupAll: () => void;
   emitCleanupAll: () => void;
@@ -33,35 +33,56 @@ export type ConnectFlowDeps = {
 /**
  * Runs connect flow: signaling connect/auth first, media setup after auth/welcome.
  */
-export async function runConnectFlow(deps: ConnectFlowDeps): Promise<void> {
-  if (deps.mediaIsConnecting() || deps.state.running) {
-    return;
+export async function runConnectFlow(deps: ConnectFlowDeps, signal: AbortSignal): Promise<boolean> {
+  if (signal.aborted || deps.mediaIsConnecting() || deps.state.running) {
+    return false;
   }
   const nickname = deps.sanitizeName(deps.state.player.nickname);
   deps.state.player.nickname = nickname || deps.state.player.nickname;
   deps.mediaSetConnecting(true);
   deps.updateConnectAvailability();
 
-  try {
-    await deps.signalingConnect(deps.onMessage);
-    deps.signalingSendAuth();
-    window.setTimeout(() => {
-      if (deps.state.running || !deps.mediaIsConnecting()) {
-        return;
+  let timeoutId: number | undefined;
+  let settled = false;
+  let accepted = false;
+  let finish!: (connected: boolean, message?: string) => void;
+  const result = new Promise<boolean>((resolve) => {
+    finish = (connected, message) => {
+      if (settled) return;
+      settled = true;
+      accepted = connected;
+      window.clearTimeout(timeoutId);
+      signal.removeEventListener('abort', cancel);
+      if (!connected) {
+        deps.signalingDisconnect();
+        deps.mediaStopLocalMedia();
+        deps.mediaSetConnecting(false);
+        deps.updateConnectAvailability();
+        if (message) deps.updateStatus(message);
       }
-      deps.mediaStopLocalMedia();
-      deps.signalingDisconnect();
-      deps.mediaSetConnecting(false);
-      deps.updateConnectAvailability();
-      deps.updateStatus('Connect failed. Timed out waiting for server welcome.');
+      resolve(connected);
+    };
+  });
+  const cancel = () => finish(false);
+  signal.addEventListener('abort', cancel, { once: true });
+  void deps.signalingConnect(
+    async (message) => {
+      if (signal.aborted || (settled && !accepted)) return;
+      await deps.onMessage(message, () => {
+        if (!signal.aborted) finish(true);
+      });
+    },
+    () => finish(false, 'Connect failed. Disconnected before server welcome.'),
+  ).then(() => {
+    if (settled) return;
+    timeoutId = window.setTimeout(() => {
+      finish(false, 'Connect failed. Timed out waiting for server welcome.');
     }, WELCOME_TIMEOUT_MS);
-  } catch (error) {
-    console.error(error);
-    deps.mediaStopLocalMedia();
-    deps.updateStatus('Connect failed. Signaling server may be offline or unreachable.');
-    deps.mediaSetConnecting(false);
-    deps.updateConnectAvailability();
-  }
+    deps.signalingSendAuth();
+  }).catch(() => {
+    finish(false, 'Connect failed. Signaling server may be offline or unreachable.');
+  });
+  return result;
 }
 
 /**
