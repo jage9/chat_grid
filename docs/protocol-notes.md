@@ -29,8 +29,8 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `chat_message`: player chat.
 - `ping`: latency measurement.
 - `item_add`, `item_pickup`, `item_drop`, `item_delete`, `item_use`, `item_update`: item actions.
-- `item_transfer_targets`: request transfer target accounts for one item (includes online + offline active users, excluding current owner).
-- `item_transfer`: transfer item ownership to another account (`targetUserId` required).
+- `item_transfer_targets`: request eligible transfer accounts, excluding the current owner. Ground items allow online/offline active accounts; held items list online active accounts with a free carrying slot.
+- `item_transfer`: transfer item ownership to another account (`targetUserId` required). A locally held item also moves into the recipient’s hands at their current position; the server rechecks availability and carrying capacity before changing state.
 - `item_secondary_use`: trigger type-specific secondary action when implemented.
 - `item_piano_note`: realtime piano note on/off for active piano use mode.
 - `item_piano_recording`: piano record/playback control (`toggle_record`, `playback`, `stop_playback`).
@@ -83,7 +83,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_action_result` messages are intended for direct screen-reader/user status feedback.
   - `action` includes: `add`, `pickup`, `drop`, `delete`, `transfer`, `use`, `secondary_use`, `update`
 - Successful `item_pickup` and `item_drop` also emit system chat lines to other users in the room.
-- Item transfer ownership is account-based; target accounts do not need to be currently connected.
+- Item transfer ownership is account-based. Ground-item recipients may be offline. Held-item recipients must be online with room; failed handoffs leave ownership, carrier, and position unchanged. Items held by someone other than the sender cannot be transferred.
 - Piano runtime control no longer depends on parsing `item_action_result.message` text.
 - `item_piano_status` carries machine-readable piano events (`use_mode_entered`, record/playback transitions).
 - `item_use_sound` contains absolute item world coordinates (`x`, `y`, `z`), source `acousticZoneId`, and sound path.

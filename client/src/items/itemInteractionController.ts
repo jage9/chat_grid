@@ -95,7 +95,7 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
   }
 
   function canManageTransferItem(item: WorldItem): boolean {
-    if (item.carrierId !== undefined && item.carrierId !== null) return false;
+    if (item.carrierId && item.carrierId !== deps.state.player.id) return false;
     const metadata = deps.getItemManagementActionMetadata('transfer');
     if (metadata?.anyPermission && deps.hasPermission(metadata.anyPermission)) return true;
     return !!metadata?.ownPermission && deps.hasPermission(metadata.ownPermission) && deps.getAuthUserId().length > 0 && item.createdBy === deps.getAuthUserId();

@@ -20,10 +20,6 @@
           "description": "Change nickname"
         },
         {
-          "keys": "W",
-          "description": "World Builder"
-        },
-        {
           "keys": "Escape",
           "description": "Disconnect/cancel"
         }
@@ -63,7 +59,7 @@
       ]
     },
     {
-      "title": "Items",
+      "title": "Items and World",
       "items": [
         {
           "keys": "H",
@@ -104,6 +100,10 @@
         {
           "keys": "Shift+Enter",
           "description": "Secondary item action"
+        },
+        {
+          "keys": "W",
+          "description": "World Builder"
         }
       ]
     },

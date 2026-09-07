@@ -559,16 +559,19 @@ class ItemRuntime:
         if not transfer_targets_item:
             await self.send_result(client, False, "transfer", "Item not found.")
             return
-        if transfer_targets_item.carrierId:
+        carried_by_client = transfer_targets_item.carrierId == client.id
+        if transfer_targets_item.carrierId is not None and not carried_by_client:
             await self.send_result(
                 client,
                 False,
                 "transfer",
-                "Item cannot be transferred while carried.",
+                "Item cannot be transferred while carried by another user.",
                 transfer_targets_item.id,
             )
             return
-        if not self.item_is_on_client_square(transfer_targets_item, client):
+        if not carried_by_client and not self.item_is_on_client_square(
+            transfer_targets_item, client
+        ):
             await self.send_result(
                 client,
                 False,
@@ -591,21 +594,35 @@ class ItemRuntime:
             )
             return
         users = self.auth_service.list_users_for_admin()
-        connected_user_ids = {
-            other.user_id
+        online_clients = {
+            other.user_id: other
             for other in self.clients.values()
             if other.authenticated and other.user_id
         }
-        targets = [
-            ItemTransferTargetSummary(
-                userId=str(entry["id"]),
-                username=str(entry["username"]),
-                online=str(entry.get("id")) in connected_user_ids,
+        targets = []
+        for entry in users:
+            user_id = str(entry["id"])
+            target = online_clients.get(user_id)
+            if (
+                str(entry.get("status")) != "active"
+                or user_id == transfer_targets_item.createdBy
+                or (carried_by_client and target is None)
+                or (
+                    carried_by_client
+                    and target is not None
+                    and not self._can_receive_carried_item(
+                        target, transfer_targets_item
+                    )
+                )
+            ):
+                continue
+            targets.append(
+                ItemTransferTargetSummary(
+                    userId=user_id,
+                    username=str(entry["username"]),
+                    online=target is not None,
+                )
             )
-            for entry in users
-            if str(entry.get("status")) == "active"
-            and str(entry["id"]) != transfer_targets_item.createdBy
-        ]
         await self.send(
             client.websocket,
             ItemTransferTargetsResultPacket(
@@ -625,16 +642,19 @@ class ItemRuntime:
         if not transfer_item:
             await self.send_result(client, False, "transfer", "Item not found.")
             return
-        if transfer_item.carrierId:
+        carried_by_client = transfer_item.carrierId == client.id
+        if transfer_item.carrierId is not None and not carried_by_client:
             await self.send_result(
                 client,
                 False,
                 "transfer",
-                "Item cannot be transferred while carried.",
+                "Item cannot be transferred while carried by another user.",
                 transfer_item.id,
             )
             return
-        if not self.item_is_on_client_square(transfer_item, client):
+        if not carried_by_client and not self.item_is_on_client_square(
+            transfer_item, client
+        ):
             await self.send_result(
                 client,
                 False,
@@ -675,14 +695,26 @@ class ItemRuntime:
                 transfer_item.id,
             )
             return
-        target = next(
-            (
-                other
-                for other in self.clients.values()
-                if other.authenticated and other.user_id == target_user_id
-            ),
-            None,
-        )
+        target = self._authenticated_client_for_user(target_user_id)
+        if carried_by_client:
+            if target is None:
+                await self.send_result(
+                    client,
+                    False,
+                    "transfer",
+                    "The recipient must be online to receive a carried item.",
+                    transfer_item.id,
+                )
+                return
+            if not self._can_receive_carried_item(target, transfer_item):
+                await self.send_result(
+                    client,
+                    False,
+                    "transfer",
+                    "The recipient has no room to carry that item.",
+                    transfer_item.id,
+                )
+                return
         target_username = (
             target.username
             if target and target.username
@@ -690,6 +722,12 @@ class ItemRuntime:
             if target
             else self.auth_service.get_username_by_id(target_user_id) or target_user_id
         )
+        if carried_by_client:
+            assert target is not None
+            transfer_item.carrierId = target.id
+            transfer_item.x = target.x
+            transfer_item.y = target.y
+            transfer_item.z = target.z
         transfer_item.createdBy = target_user_id
         transfer_item.createdByName = target_username
         transfer_item.updatedAt = self.item_service.now_ms()
@@ -1118,6 +1156,29 @@ class ItemRuntime:
         if not client.user_id:
             return False
         return item.createdBy == client.user_id
+
+    def _authenticated_client_for_user(self, user_id: str) -> ClientConnection | None:
+        """Return the active authenticated connection for one account id."""
+
+        return next(
+            (
+                client
+                for client in self.clients.values()
+                if client.authenticated and client.user_id == user_id
+            ),
+            None,
+        )
+
+    def _can_receive_carried_item(
+        self, client: ClientConnection, item: WorldItem
+    ) -> bool:
+        """Return whether a client has a carrying slot for one transferred item."""
+
+        carried_items = self.item_service.find_carried_items(client.id)
+        carried_count = sum(
+            carried_item.id != item.id for carried_item in carried_items
+        )
+        return carried_count < self.host.max_carried_items
 
     def get_emit_range(self, item: WorldItem) -> int:
         """Return effective emit range for one item with sane bounds."""

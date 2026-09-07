@@ -106,6 +106,8 @@ Core incoming message effects:
 - Pickup enforces `items.max_carried_items` from server config, default `2`. Every held item follows walking, teleport, and elevator travel. Disconnect drops all of them at the last tile (or the elevator’s last completed landing); reconnect does not restore carrying.
 - Item action menus combine held items with ground items on the current square. `D` selects a pickup or drop action by item; use, secondary use, edit, inspect, and management likewise select one target when there are several.
 
+- Transferring a held item hands it to an online recipient with a free slot and changes ownership. The server rechecks capacity at confirmation; ground-item transfers remain ownership-only.
+
 ## Authorization Runtime
 
 - Server enforces item/chat/nickname/voice/admin/World Builder permissions for each packet.

@@ -7,7 +7,7 @@ This is behavior-focused documentation for item types and their defaults.
 - Items are server-authoritative.
 - A user may carry up to `items.max_carried_items` items (default `2`, positive integer in server config). Pickup permissions still apply; reaching the limit rejects further pickups without changing held items.
 - All held items follow movement, teleport, and elevator travel, and drop at the final tile on disconnect. Ownership is unchanged.
-- Use, secondary use, edit, inspect, and management offer held items alongside items on the current square. Transfer still requires the item to be dropped first.
+- Use, secondary use, edit, inspect, and management offer held items alongside items on the current square. A held item can be transferred directly to an online recipient with a free carrying slot. Ground-item transfers change ownership without moving the item.
 - Global per-type fields are injected by the server and are not persisted per-instance:
   - `capabilities`
   - `useSound`

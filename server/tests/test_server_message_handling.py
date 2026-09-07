@@ -1302,6 +1302,307 @@ async def test_item_transfer_rejects_when_not_authorized(
 
 
 @pytest.mark.asyncio
+async def test_held_item_transfer_moves_item_to_recipient_hands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A carried item transfer moves ownership and carrier state together."""
+
+    server = SignalingServer(
+        "127.0.0.1", 8765, None, None, grid_size=41, max_carried_items=2
+    )
+    owner_ws = _fake_ws()
+    target_ws = _fake_ws()
+    owner = ClientConnection(
+        websocket=owner_ws,
+        id="u1",
+        nickname="owner",
+        authenticated=True,
+        user_id="1",
+        username="owner_user",
+        permissions={"item.transfer.own"},
+        x=5,
+        y=6,
+        z=0,
+    )
+    target = ClientConnection(
+        websocket=target_ws,
+        id="u2",
+        nickname="target",
+        authenticated=True,
+        user_id="2",
+        username="target_user",
+        permissions=set(),
+        x=10,
+        y=11,
+        z=40,
+    )
+    _activate_client(owner)
+    _activate_client(target)
+    server.clients[owner_ws] = owner
+    server.clients[target_ws] = target
+    item = server.item_service.default_item(owner, "dice")
+    item.carrierId = owner.id
+    item.x = owner.x
+    item.y = owner.y
+    item.z = owner.z
+    server.item_service.add_item(item)
+    existing_item = server.item_service.default_item(target, "dice")
+    existing_item.carrierId = target.id
+    server.item_service.add_item(existing_item)
+    original_version = item.version
+
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    async def fake_broadcast_item(broadcast_item: object) -> None:
+        return None
+
+    async def fake_broadcast(
+        packet: object, exclude: ServerConnection | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(server.item_runtime, "broadcast_item", fake_broadcast_item)
+    monkeypatch.setattr(server, "_broadcast", fake_broadcast)
+
+    await server._handle_message(
+        owner,
+        json.dumps({"type": "item_transfer", "itemId": item.id, "targetUserId": "2"}),
+    )
+
+    assert item.carrierId == target.id
+    assert (item.x, item.y, item.z) == (target.x, target.y, target.z)
+    assert item.createdBy == target.user_id
+    assert item.createdByName == target.username
+    assert item.version == original_version + 1
+    assert server.item_service.find_carried_items(owner.id) == []
+    assert {held.id for held in server.item_service.find_carried_items(target.id)} == {
+        item.id,
+        existing_item.id,
+    }
+    result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert result.ok is True
+
+
+@pytest.mark.asyncio
+async def test_held_item_transfer_rejects_full_recipient_without_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A full recipient rejects a held transfer before changing the item."""
+
+    server = SignalingServer(
+        "127.0.0.1", 8765, None, None, grid_size=41, max_carried_items=2
+    )
+    owner_ws = _fake_ws()
+    target_ws = _fake_ws()
+    owner = _activate_client(
+        ClientConnection(
+            websocket=owner_ws,
+            id="u1",
+            nickname="owner",
+            authenticated=True,
+            user_id="1",
+            username="owner_user",
+            permissions={"item.transfer.own"},
+            x=5,
+            y=6,
+            z=0,
+        )
+    )
+    target = _activate_client(
+        ClientConnection(
+            websocket=target_ws,
+            id="u2",
+            nickname="target",
+            authenticated=True,
+            user_id="2",
+            username="target_user",
+            permissions=set(),
+            x=10,
+            y=11,
+            z=40,
+        )
+    )
+    server.clients[owner_ws] = owner
+    server.clients[target_ws] = target
+    item = server.item_service.default_item(owner, "dice")
+    item.carrierId = owner.id
+    item.x = owner.x
+    item.y = owner.y
+    item.z = owner.z
+    server.item_service.add_item(item)
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+    monkeypatch.setattr(
+        server.auth_service,
+        "list_users_for_admin",
+        lambda: [
+            {"id": "1", "username": "owner_user", "status": "active"},
+            {"id": "2", "username": "target_user", "status": "active"},
+            {"id": "3", "username": "offline_user", "status": "active"},
+        ],
+    )
+    await server._handle_message(
+        owner,
+        json.dumps({"type": "item_transfer_targets", "itemId": item.id}),
+    )
+    targets_result = _last_packet_of_type(
+        send_payloads, ItemTransferTargetsResultPacket
+    )
+    assert [entry.userId for entry in targets_result.targets] == [target.user_id]
+    target_items = [server.item_service.default_item(target, "dice") for _ in range(2)]
+    for target_item in target_items:
+        target_item.carrierId = target.id
+        server.item_service.add_item(target_item)
+    await server._handle_message(
+        owner, json.dumps({"type": "item_transfer_targets", "itemId": item.id})
+    )
+    assert (
+        _last_packet_of_type(send_payloads, ItemTransferTargetsResultPacket).targets
+        == []
+    )
+    original_state = (
+        item.carrierId,
+        item.x,
+        item.y,
+        item.z,
+        item.createdBy,
+        item.version,
+    )
+
+    await server._handle_message(
+        owner,
+        json.dumps({"type": "item_transfer", "itemId": item.id, "targetUserId": "2"}),
+    )
+
+    assert (
+        item.carrierId,
+        item.x,
+        item.y,
+        item.z,
+        item.createdBy,
+        item.version,
+    ) == original_state
+    result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert result.ok is False
+    assert "room" in result.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_held_item_transfer_rejects_offline_recipient_without_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A carried item cannot be transferred to an offline account."""
+
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    owner_ws = _fake_ws()
+    owner = _activate_client(
+        ClientConnection(
+            websocket=owner_ws,
+            id="u1",
+            nickname="owner",
+            authenticated=True,
+            user_id="1",
+            username="owner_user",
+            permissions={"item.transfer.own"},
+            x=5,
+            y=6,
+            z=1,
+        )
+    )
+    server.clients[owner_ws] = owner
+    item = server.item_service.default_item(owner, "dice")
+    item.carrierId = owner.id
+    item.x = owner.x
+    item.y = owner.y
+    item.z = owner.z
+    server.item_service.add_item(item)
+    original_state = (item.carrierId, item.createdBy, item.version)
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+
+    await server._handle_message(
+        owner,
+        json.dumps({"type": "item_transfer", "itemId": item.id, "targetUserId": "2"}),
+    )
+
+    assert (item.carrierId, item.createdBy, item.version) == original_state
+    result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert result.ok is False
+    assert "online" in result.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_held_item_transfer_rejects_item_carried_by_someone_else(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Transfer-any permission cannot take an item from another carrier."""
+
+    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    actor_ws = _fake_ws()
+    carrier_ws = _fake_ws()
+    actor = _activate_client(
+        ClientConnection(
+            websocket=actor_ws,
+            id="u1",
+            nickname="actor",
+            authenticated=True,
+            user_id="1",
+            username="actor_user",
+            permissions={"item.transfer.any"},
+            x=5,
+            y=6,
+        )
+    )
+    carrier = _activate_client(
+        ClientConnection(
+            websocket=carrier_ws,
+            id="u2",
+            nickname="carrier",
+            authenticated=True,
+            user_id="2",
+            username="carrier_user",
+            permissions=set(),
+            x=5,
+            y=6,
+        )
+    )
+    server.clients[actor_ws] = actor
+    server.clients[carrier_ws] = carrier
+    item = server.item_service.default_item(carrier, "dice")
+    item.carrierId = carrier.id
+    server.item_service.add_item(item)
+    original_state = (item.carrierId, item.createdBy, item.version)
+    send_payloads: list[object] = []
+
+    async def fake_send(websocket: ServerConnection, packet: object) -> None:
+        send_payloads.append(packet)
+
+    monkeypatch.setattr(server, "_send", fake_send)
+
+    await server._handle_message(
+        actor,
+        json.dumps({"type": "item_transfer", "itemId": item.id, "targetUserId": "1"}),
+    )
+
+    assert (item.carrierId, item.createdBy, item.version) == original_state
+    result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
+    assert result.ok is False
+    assert "another user" in result.message.lower()
+
+
+@pytest.mark.asyncio
 async def test_admin_user_delete_requires_permission(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

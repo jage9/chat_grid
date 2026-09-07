@@ -137,12 +137,15 @@ describe('item interaction controller', () => {
     expect(fixture.deps.state.selectedItemId).toBe(secondHeld.id);
   });
 
-  it('hides transfer for carried items while retaining permitted deletion', () => {
+  it('allows transfer of locally held items but not another user’s held item', () => {
     const fixture = createFixture();
 
     expect(fixture.controller.getManagementOptions(fixture.held)).toEqual([
+      { action: 'transfer', label: 'Transfer item', tooltip: undefined },
       { action: 'delete', label: 'Delete item', tooltip: undefined },
     ]);
+    const otherHeld = item('other-held', 'other-player');
+    expect(fixture.controller.getManagementOptions(otherHeld).map((option) => option.action)).not.toContain('transfer');
     expect(fixture.controller.getManagementOptions(fixture.ground)).toEqual([
       { action: 'transfer', label: 'Transfer item', tooltip: undefined },
       { action: 'delete', label: 'Delete item', tooltip: undefined },

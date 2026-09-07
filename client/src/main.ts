@@ -2194,7 +2194,7 @@ function pickupDropItemCommand(): void {
 function openItemManagementCommand(): void {
   const manageable = getManageableInteractionItems();
   if (manageable.length === 0) {
-    updateStatus('No permitted item management actions here.');
+    updateStatus('No items.');
     audio.sfxUiCancel();
     return;
   }
