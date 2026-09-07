@@ -55,6 +55,7 @@ import {
   MOVE_COOLDOWN_MS,
   createInitialState,
   getDirection,
+  getFacingDirection,
   getNearestItem,
   getNearestItemPosition,
   getNearestPeer,
@@ -2036,6 +2037,11 @@ function adjustEffectValueCommand(step: number): void {
   updateStatus(`${adjusted.label} ${adjusted.value}`);
 }
 
+function speakFacingCommand(): void {
+  updateStatus(`Facing ${getFacingDirection(state.player.facingDeg)}.`);
+  audio.sfxUiBlip();
+}
+
 function speakCoordinatesCommand(): void {
   const adjacentWalls = adjacentWallDescriptions(
     state.structures.values(),
@@ -2321,6 +2327,7 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   effectValueUp: () => adjustEffectValueCommand(5),
   effectValueDown: () => adjustEffectValueCommand(-5),
   speakCoordinates: speakCoordinatesCommand,
+  speakFacing: speakFacingCommand,
   openMicGainEdit: openMicGainEditCommand,
   calibrateMicrophone: calibrateMicrophoneCommand,
   useItem: useItemCommand,

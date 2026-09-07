@@ -185,6 +185,12 @@ export function getNearestPeer(state: GameState): { peerId: string | null; dista
   return { peerId: nearest, distance: minDist };
 }
 
+/** Names a server-owned compass heading for spoken orientation. */
+export function getFacingDirection(facingDeg: number): string {
+  const directions = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
+  return directions[facingDeg / 45] ?? 'unknown';
+}
+
 export function getDirection(px: number, py: number, tx: number, ty: number): string {
   const dx = tx - px;
   const dy = ty - py;

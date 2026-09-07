@@ -17,6 +17,7 @@ export type MainModeCommand =
   | 'effectValueUp'
   | 'effectValueDown'
   | 'speakCoordinates'
+  | 'speakFacing'
   | 'openMicGainEdit'
   | 'calibrateMicrophone'
   | 'useItem'
@@ -58,6 +59,7 @@ export function resolveMainModeCommand(code: string, shiftKey: boolean): MainMod
   if (code === 'Minus') return shiftKey ? 'effectValueDown' : 'masterVolumeDown';
   if (code === 'NumpadAdd') return 'masterVolumeUp';
   if (code === 'NumpadSubtract') return 'masterVolumeDown';
+  if (code === 'KeyF') return shiftKey ? null : 'speakFacing';
   if (code === 'KeyC') return shiftKey ? null : 'speakCoordinates';
   if (code === 'KeyV') return shiftKey ? 'calibrateMicrophone' : 'openMicGainEdit';
   if (code === 'Enter') return shiftKey ? 'secondaryUseItem' : 'useItem';

@@ -16,10 +16,11 @@ This document is the authoritative keymap for the client.
 ## Normal Mode
 
 ### Movement
-- `Arrow Keys`: Move
+- `Arrow Keys`: Move using compass directions
 - `Shift+K`, `Applications`, or `Shift+F10`: Open the command palette in supported modes
 - `?`: Open help viewer
 - `C`: Speak coordinates and any walls bordering the current square
+- `F`: Announce your facing direction, one of eight compass directions
 - `Escape`: Press once for disconnect prompt, press again to disconnect
 
 ### Users, Nickname, Chat
