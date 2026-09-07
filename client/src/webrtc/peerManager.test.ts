@@ -57,7 +57,7 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); });
 
 describe('LiveKit voice recovery', () => {
-  it('requests fresh credentials with capped backoff without reusing the old token', async () => {
+  it('requests at most three fresh credentials when no token response arrives', async () => {
     const { manager, status, requestToken } = setup();
     await manager.connectToRoom('wss://voice.test', 'old-token');
     const room = latestRoom();
@@ -65,12 +65,18 @@ describe('LiveKit voice recovery', () => {
     room.emit(RoomEvent.Disconnected);
     expect(status).toHaveBeenCalledWith('Voice reconnecting...');
     expect(requestToken).not.toHaveBeenCalled();
-    for (const [index, delay] of [2000, 4000, 8000, 16000, 30000, 30000].entries()) {
+    for (const [index, delay] of [2000, 4000, 8000].entries()) {
       await vi.advanceTimersByTimeAsync(delay - 1);
       expect(requestToken).toHaveBeenCalledTimes(index);
       await vi.advanceTimersByTimeAsync(1);
       expect(requestToken).toHaveBeenCalledTimes(index + 1);
     }
+    await vi.advanceTimersByTimeAsync(8000 - 1);
+    expect(status).not.toHaveBeenCalledWith('Voice unavailable. Disconnect and connect to retry.');
+    await vi.advanceTimersByTimeAsync(1);
+    expect(status).toHaveBeenLastCalledWith('Voice unavailable. Disconnect and connect to retry.');
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(requestToken).toHaveBeenCalledTimes(3);
     expect(room.connect).toHaveBeenCalledTimes(1);
     expect(livekit.MockRoom.instances).toHaveLength(1);
     manager.cleanupAll();
@@ -120,21 +126,39 @@ describe('LiveKit voice recovery', () => {
     manager.cleanupAll();
   });
 
-  it('requests another fresh token if the join fails', async () => {
+  it('caps fresh-token retries when every join fails', async () => {
     const { manager, status, requestToken } = setup();
     await manager.connectToRoom('wss://voice.test', 'old-token');
     latestRoom().emit(RoomEvent.Disconnected);
-    await vi.advanceTimersByTimeAsync(2000);
     const originalConnect = livekit.MockRoom.prototype.on;
     const on = vi.spyOn(livekit.MockRoom.prototype, 'on').mockImplementation(function (this: InstanceType<typeof livekit.MockRoom>, event, handler) {
       this.connect.mockRejectedValue(new Error('voice unavailable'));
       return originalConnect.call(this, event, handler);
     });
-    await expect(manager.connectToRoom('wss://voice.test', 'fresh-token')).rejects.toThrow('voice unavailable');
+    for (const [index, delay] of [2000, 4000, 8000].entries()) {
+      await vi.advanceTimersByTimeAsync(delay);
+      expect(requestToken).toHaveBeenCalledTimes(index + 1);
+      await expect(manager.connectToRoom('wss://voice.test', `fresh-token-${index + 1}`)).rejects.toThrow('voice unavailable');
+    }
     on.mockRestore();
-    await vi.advanceTimersByTimeAsync(4000);
-    expect(requestToken).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(requestToken).toHaveBeenCalledTimes(3);
+    expect(status).toHaveBeenLastCalledWith('Voice unavailable. Disconnect and connect to retry.');
     expect(status).not.toHaveBeenCalledWith('Voice reconnected.');
+    manager.cleanupAll();
+  });
+
+  it('resets the recovery budget after a successful rejoin', async () => {
+    const { manager, requestToken } = setup();
+    await manager.connectToRoom('wss://voice.test', 'old-token');
+    latestRoom().emit(RoomEvent.Disconnected);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(requestToken).toHaveBeenCalledTimes(1);
+    await manager.connectToRoom('wss://voice.test', 'fresh-token');
+
+    latestRoom().emit(RoomEvent.Disconnected);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(requestToken).toHaveBeenCalledTimes(2);
     manager.cleanupAll();
   });
 

@@ -61,7 +61,7 @@ Radio metadata polling is limited to stations near a listener, deduplicated by s
 
 Core incoming message effects:
 
-- `livekit_token`: cancels pending voice token requests and joins the LiveKit audio room with fresh credentials. Rejoining republishes the existing processed microphone track and re-ensures grid peers.
+- `livekit_token`: connects the authenticated browser to the LiveKit audio room.
 - `auth_required`: prompt client to authenticate before gameplay messages.
 - `auth_result`: auth success/failure with optional session token + account metadata + `authPolicy`.
 - `auth_permissions`: live permission refresh (role + permission set) after role/permission admin changes.
@@ -88,26 +88,39 @@ Core incoming message effects:
 
 ## Stale Connection Recovery
 
-- Voice recovers independently when LiveKit emits `Disconnected` while the grid session is running. `PeerManager` announces "Voice reconnecting..." and asks `main.ts` to send `livekit_token_request` after 2 seconds, then 4, 8, 16, and at most 30 seconds between requests. It never rejoins with a cached token.
-- A fresh `livekit_token` stops the request timer. If joining or publishing fails, requests resume with the backoff; a successful join announces "Voice reconnected." and resets the delay.
-- Intentional room replacement and grid cleanup suppress voice recovery. Cleanup cancels pending requests and prevents an unfinished join from reviving the voice session.
+- Voice recovers independently when LiveKit disconnects while the grid session is running. It requests fresh credentials for up to three recovery attempts, with waits of 2, 4, and 8 seconds. It never rejoins with a cached token. After the final request it allows eight seconds for credentials to arrive; a received token cancels that timer while joining. Exhaustion reports failure and asks the user to disconnect and connect to retry.
+- Successful voice recovery announces “Voice reconnected.” and resets the attempt limit. Intentional cleanup cancels pending requests and prevents an unfinished join from reviving the voice session. The existing processed microphone track and peer subscription rules are retained during recovery.
+- Speaker selection applies to the Web Audio context that outputs voice, item, and effect sounds. The selector is disabled when the browser lacks Web Audio output-device selection.
+- An unplugged microphone is announced and capture falls back once to the default input. Replacement preserves user mute and voice permissions; failed fallback reports the unavailable microphone. Late captures after cleanup or a newer device selection are discarded. Device lists refresh on device changes while Settings is open.
 
 - If websocket closes unexpectedly, client starts reconnect flow immediately.
 - While running, client also sends heartbeat `ping` every 10 seconds (fallback for silent half-open cases).
-- Two consecutive heartbeat intervals without a `pong` start reconnect flow; one missed interval is tolerated. Any received pong resets the miss counter.
-- Reconnect attempts wait 2, 4, 8, 16, 32, then 60 seconds, with up to +/-15% jitter. The base delay stays at 60 seconds for subsequent attempts.
-- Retries continue indefinitely until the grid connects, the user presses Connect or Disconnect, or the page unloads. Manual actions cancel the pending retry timer and take priority over that recovery cycle.
-- The first reconnect attempt is announced. Later attempts are announced only when their scheduled base delay is at least 16 seconds, so short-delay retries stay quiet.
-- Returning to a visible tab while a retry is waiting triggers that retry immediately. It does not start another attempt while one is already connecting.
+- Two consecutive heartbeat intervals without a `pong` start reconnect flow; one missed interval is tolerated. A received pong resets the miss counter.
+- Reconnect flow waits 5 seconds before each attempt and retries up to 3 times, then asks the user to press Connect.
+- Returning to a visible tab brings a waiting retry forward without exceeding the three-attempt limit.
+- Each attempt waits for a complete server welcome: socket opening has a 10-second timeout, followed by an 8-second welcome timeout. Saved-session authentication uses the same welcome deadline.
+- Disconnect, logout, and a new manual connection cancel pending retries and connection attempts. Closed, failed, and replaced sockets cannot affect a newer attempt; welcome timers are cleared when their attempt finishes.
+- Receiving welcome completes reconnection before microphone setup, so a microphone permission prompt does not consume another retry.
 - If reconnect lands on a different `welcome.serverInfo.instanceId`, client announces server restart.
 - Connect/reconnect status message is emitted from `welcome` and includes server version.
 - Server-only deploys no longer force browser reloads unless `expectedClientRevision` changes.
+
+## Carried Item Presentation
+
+- `H` announces all items held by the local player or says they are holding nothing.
+- `L` and `Shift+L` append carried item titles after the user’s location, only when carrying something. These descriptions use the current server-synchronized `carrierId` on items.
+- Pickup enforces `items.max_carried_items` from server config, default `2`. Every held item follows walking, teleport, and elevator travel. Disconnect drops all of them at the last tile (or the elevator’s last completed landing); reconnect does not restore carrying.
+- Item action menus combine held items with ground items on the current square. `D` selects a pickup or drop action by item; use, secondary use, edit, inspect, and management likewise select one target when there are several.
+
+- Selecting “Hand to user” requests eligible recipients from the server: online, on the same floor within five grid squares (Chebyshev distance), with pickup permission and a free carrying slot. Selecting a name sends the hand request; the server rechecks eligibility before moving the item into that user’s hands, leaving ownership unchanged.
+- “Transfer ownership” works for items on your square or in your hands, including offline recipients and confirmation. Only ownership changes; carrier and position stay unchanged, with no recipient range or capacity requirement.
 
 ## Authorization Runtime
 
 - Server enforces item/chat/nickname/voice/admin/World Builder permissions for each packet.
 - Role and permission changes apply live to connected users without reconnect.
-- `voice.send` revocation is pushed immediately via `auth_permissions`; client mutes outbound voice track.
+- `voice.send` revocation is pushed immediately via `auth_permissions`; client mutes outbound voice track. Current permissions and the user’s mute setting are reapplied after microphone setup or replacement.
+- Successful role creation/deletion triggers a fresh `admin_roles_list` request so menus reflect the server’s current roles.
 
 ## Floors And Elevators
 

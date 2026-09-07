@@ -59,8 +59,12 @@
       ]
     },
     {
-      "title": "Items",
+      "title": "Items and World",
       "items": [
+        {
+          "keys": "H",
+          "description": "What are you holding?"
+        },
         {
           "keys": "I",
           "description": "Locate nearest item"
@@ -83,15 +87,23 @@
         },
         {
           "keys": "D",
-          "description": "Pick up/drop item"
+          "description": "Pick up or drop item"
         },
         {
           "keys": "Z",
-          "description": "Item management (delete/transfer when permitted)"
+          "description": "Manage items"
         },
         {
           "keys": "Enter",
           "description": "Use item"
+        },
+        {
+          "keys": "Shift+Enter",
+          "description": "Secondary item action"
+        },
+        {
+          "keys": "W",
+          "description": "World Builder"
         }
       ]
     },

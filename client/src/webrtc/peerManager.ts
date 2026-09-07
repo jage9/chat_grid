@@ -19,6 +19,9 @@ export type PeerRuntime = SpatialPeerRuntime & {
 
 type StatusHandler = (message: string) => void;
 
+const RECOVERY_DELAYS_MS = [2_000, 4_000, 8_000] as const;
+const RECOVERY_FAILURE_STATUS = 'Voice unavailable. Disconnect and connect to retry.';
+
 /** Owns the LiveKit room and maps its audio tracks to grid participants. */
 export class PeerManager {
   private readonly peers = new Map<string, PeerRuntime>();
@@ -28,7 +31,8 @@ export class PeerManager {
   private localTrack: LocalAudioTrack | null = null;
   private outboundTrack: MediaStreamTrack | null = null;
   private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
-  private recoveryDelayMs = 2_000;
+  private recoveryAttempts = 0;
+  private recoveryFailureReported = false;
   private recovering = false;
   private listenerZ = 0;
   private subscriptionResolver: (peer: PeerRuntime) => boolean = (peer) => peer.z === this.listenerZ;
@@ -109,7 +113,8 @@ export class PeerManager {
       if (this.room !== room) return false;
       if (this.recovering) this.status('Voice reconnected.');
       this.recovering = false;
-      this.recoveryDelayMs = 2_000;
+      this.recoveryAttempts = 0;
+      this.recoveryFailureReported = false;
       return true;
     } catch (error) {
       if (this.room !== room) return false;
@@ -163,7 +168,8 @@ export class PeerManager {
   cleanupAll(): void {
     this.clearRecoveryTimer();
     this.recovering = false;
-    this.recoveryDelayMs = 2_000;
+    this.recoveryAttempts = 0;
+    this.recoveryFailureReported = false;
     this.releaseRoom();
     for (const id of Array.from(this.peers.keys())) this.removePeer(id);
     this.pendingRemoteStreams.clear();
@@ -176,16 +182,41 @@ export class PeerManager {
   }
 
   private scheduleRecovery(): void {
-    if (!this.recovery.isSessionRunning() || this.recoveryTimer !== null) return;
-    if (!this.recovering) this.status('Voice reconnecting...');
-    this.recovering = true;
+    if (!this.recovery.isSessionRunning()) return;
+    if (!this.recovering) {
+      this.status('Voice reconnecting...');
+      this.recovering = true;
+      this.recoveryAttempts = 0;
+      this.recoveryFailureReported = false;
+    }
+    if (this.recoveryTimer !== null || this.recoveryFailureReported) return;
+    if (this.recoveryAttempts >= RECOVERY_DELAYS_MS.length) {
+      this.reportRecoveryFailure();
+      return;
+    }
+
+    const delayMs = RECOVERY_DELAYS_MS[this.recoveryAttempts];
     this.recoveryTimer = setTimeout(() => {
       this.recoveryTimer = null;
       if (!this.recovery.isSessionRunning()) return;
-      this.recoveryDelayMs = Math.min(this.recoveryDelayMs * 2, 30_000);
-      this.scheduleRecovery();
+      if (!this.recovering || this.recoveryAttempts >= RECOVERY_DELAYS_MS.length) return;
+      this.recoveryAttempts += 1;
+      if (this.recoveryAttempts < RECOVERY_DELAYS_MS.length) {
+        this.scheduleRecovery();
+      } else {
+        this.recoveryTimer = setTimeout(() => {
+          this.recoveryTimer = null;
+          if (this.recovery.isSessionRunning() && this.recovering) this.reportRecoveryFailure();
+        }, RECOVERY_DELAYS_MS[RECOVERY_DELAYS_MS.length - 1]);
+      }
       this.recovery.requestToken();
-    }, this.recoveryDelayMs);
+    }, delayMs);
+  }
+
+  private reportRecoveryFailure(): void {
+    if (this.recoveryFailureReported || !this.recovering) return;
+    this.recoveryFailureReported = true;
+    this.status(RECOVERY_FAILURE_STATUS);
   }
 
   /** Detach the room while keeping the processed microphone track available for rejoin. */

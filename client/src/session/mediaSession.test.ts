@@ -38,7 +38,10 @@ function setup() {
   vi.spyOn(audio, 'configureOutboundStream').mockImplementation(async (stream) => stream);
   const setOutputDevice = vi.spyOn(audio, 'setOutputDevice').mockResolvedValue();
   const updateStatus = vi.fn();
-  const peerManager = new PeerManager(audio, updateStatus);
+  const peerManager = new PeerManager(audio, updateStatus, {
+    isSessionRunning: () => state.running,
+    requestToken: vi.fn(),
+  });
   const replaceOutgoingTrack = vi.spyOn(peerManager, 'replaceOutgoingTrack').mockResolvedValue();
   const dom = {
     settingsModal: document.createElement('div'),
@@ -49,8 +52,10 @@ function setup() {
   };
   dom.settingsModal.classList.add('hidden');
   const settings = new SettingsStore();
+  let microphoneEnabled = true;
   const session = new MediaSession({
     state, audio, peerManager, settings, dom, updateStatus,
+    isVoiceSendAllowed: () => microphoneEnabled,
     micCalibrationDurationMs: 5000,
     micCalibrationSampleIntervalMs: 50,
     micCalibrationMinGain: 0.1,
@@ -60,7 +65,20 @@ function setup() {
     micInputGainScaleMultiplier: 1,
     micInputGainStep: 0.1,
   });
-  return { session, state, first, replacement, mediaDevices, replaceOutgoingTrack, updateStatus, dom, setOutputDevice };
+  return {
+    session,
+    state,
+    first,
+    replacement,
+    mediaDevices,
+    replaceOutgoingTrack,
+    updateStatus,
+    dom,
+    setOutputDevice,
+    setVoiceSendAllowed: (enabled: boolean) => {
+      microphoneEnabled = enabled;
+    },
+  };
 }
 
 beforeEach(() => {
@@ -76,6 +94,19 @@ afterEach(() => {
 });
 
 describe('microphone loss', () => {
+  it('keeps fallback capture disabled when voice sending is not permitted', async () => {
+    const test = setup();
+    expect(test.state.isMuted).toBe(false);
+    await test.session.setupLocalMedia('headset');
+
+    test.setVoiceSendAllowed(false);
+    test.first.track.dispatchEvent(new Event('ended'));
+    await vi.waitFor(() => expect(test.replaceOutgoingTrack).toHaveBeenCalledTimes(2));
+
+    expect(test.replacement.track.enabled).toBe(false);
+    expect(test.replaceOutgoingTrack).toHaveBeenLastCalledWith(test.replacement.stream);
+  });
+
   it('recaptures the default microphone once, preserves mute, and publishes the replacement', async () => {
     const test = setup();
     test.state.isMuted = true;

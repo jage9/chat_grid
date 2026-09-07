@@ -1,7 +1,7 @@
+import { incomingMessageSchema } from './protocol';
 import { describe, expect, it, vi } from 'vitest';
 import { createInitialState } from '../state/gameState';
 import { createOnMessageHandler } from './messageHandlers';
-import { incomingMessageSchema } from './protocol';
 
 function setupRemoteMovement() {
   const state = createInitialState();
@@ -59,6 +59,33 @@ describe('remote movement audio', () => {
       acousticZoneId: 'floor:0',
       gain: 0.7,
     });
+  });
+});
+
+describe('item target message routing', () => {
+  it('routes hand target responses separately from ownership transfer targets', async () => {
+    const handleItemTransferTargets = vi.fn();
+    const handleItemHandTargets = vi.fn();
+    const provided = {
+      state: createInitialState(),
+      handleItemTransferTargets,
+      handleItemHandTargets,
+    };
+    const deps = new Proxy(provided, {
+      get(target, property, receiver) {
+        return Reflect.has(target, property) ? Reflect.get(target, property, receiver) : vi.fn();
+      },
+    }) as unknown as Parameters<typeof createOnMessageHandler>[0];
+    const handler = createOnMessageHandler(deps);
+
+    await handler({
+      type: 'item_hand_targets',
+      itemId: 'held-item',
+      targets: [{ userId: 'nearby-user', username: 'Nearby user', online: true }],
+    });
+
+    expect(handleItemHandTargets).toHaveBeenCalledOnce();
+    expect(handleItemTransferTargets).not.toHaveBeenCalled();
   });
 });
 

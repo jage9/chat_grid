@@ -154,6 +154,21 @@ class ItemTransferTargetsPacket(BasePacket):
     itemId: str
 
 
+class ItemHandPacket(BasePacket):
+    """Hand a carried item to an eligible user without changing ownership."""
+
+    type: Literal["item_hand"]
+    itemId: str
+    targetUserId: str
+
+
+class ItemHandTargetsPacket(BasePacket):
+    """Request currently eligible recipients for a carried item."""
+
+    type: Literal["item_hand_targets"]
+    itemId: str
+
+
 class ItemUsePacket(BasePacket):
     type: Literal["item_use"]
     itemId: str
@@ -263,6 +278,8 @@ ClientPacket = (
     | ItemDeletePacket
     | ItemTransferPacket
     | ItemTransferTargetsPacket
+    | ItemHandPacket
+    | ItemHandTargetsPacket
     | ItemUsePacket
     | ItemSecondaryUsePacket
     | ItemPianoNotePacket
@@ -490,7 +507,15 @@ class ItemActionResultPacket(BasePacket):
     type: Literal["item_action_result"]
     ok: bool
     action: Literal[
-        "add", "pickup", "drop", "delete", "transfer", "use", "secondary_use", "update"
+        "add",
+        "pickup",
+        "drop",
+        "delete",
+        "transfer",
+        "hand",
+        "use",
+        "secondary_use",
+        "update",
     ]
     message: str
     itemId: str | None = None
@@ -504,6 +529,14 @@ class ItemTransferTargetSummary(BaseModel):
 
 class ItemTransferTargetsResultPacket(BasePacket):
     type: Literal["item_transfer_targets"]
+    itemId: str
+    targets: list[ItemTransferTargetSummary]
+
+
+class ItemHandTargetsResultPacket(BasePacket):
+    """List online users who can currently receive the carried item."""
+
+    type: Literal["item_hand_targets"]
     itemId: str
     targets: list[ItemTransferTargetSummary]
 

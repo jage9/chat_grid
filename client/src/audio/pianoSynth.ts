@@ -241,11 +241,11 @@ function midiToFrequency(midi: number): number {
 }
 
 /** Small helper to safely stop audio nodes. */
-function safeStop(oscillator: OscillatorNode, when: number): void {
+function safeStop(source: AudioScheduledSourceNode, when: number): void {
   try {
-    oscillator.stop(when);
+    source.stop(when);
   } catch {
-    // Ignore already-stopped oscillators.
+    // Ignore already-stopped sources.
   }
 }
 

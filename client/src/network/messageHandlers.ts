@@ -26,7 +26,6 @@ type MessageHandlerDeps = {
     selectedItemId: string | null;
     itemPropertyKeys: string[];
     itemPropertyIndex: number;
-    carriedItemId: string | null;
     elevatorItemId: string | null;
   };
   dom: {
@@ -66,7 +65,6 @@ type MessageHandlerDeps = {
   audioUiBlip: () => void;
   audioUiConfirm: () => void;
   audioUiCancel: () => void;
-  getCarriedItemId: () => string | null;
   recomputeActiveItemPropertyKeys: (itemId: string) => void;
   itemPropertyLabel: (key: string) => string;
   getItemPropertyValue: (item: WorldItem, key: string) => string;
@@ -81,6 +79,7 @@ type MessageHandlerDeps = {
   handleAdminUsersList: (message: Extract<IncomingMessage, { type: 'admin_users_list' }>) => void;
   handleAdminActionResult: (message: Extract<IncomingMessage, { type: 'admin_action_result' }>) => void;
   handleItemTransferTargets: (message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>) => void;
+  handleItemHandTargets: (message: Extract<IncomingMessage, { type: 'item_hand_targets' }>) => void;
   handleStructureActionResult: (message: Extract<IncomingMessage, { type: 'structure_action_result' }>) => void;
   connectToLiveKit: (url: string, token: string) => void;
 };
@@ -112,6 +111,9 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         break;
       case 'item_transfer_targets':
         deps.handleItemTransferTargets(message);
+        break;
+      case 'item_hand_targets':
+        deps.handleItemHandTargets(message);
         break;
       case 'structure_action_result':
         deps.handleStructureActionResult(message);
@@ -310,7 +312,6 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           carrierId: message.item.carrierId ?? null,
         });
         deps.refreshAcousticModel();
-        deps.state.carriedItemId = deps.getCarriedItemId();
         deps.recomputeActiveItemPropertyKeys(message.item.id);
         if (deps.state.mode === 'itemProperties' && deps.state.selectedItemId === message.item.id) {
           const key = deps.state.itemPropertyKeys[deps.state.itemPropertyIndex];
@@ -338,7 +339,6 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
       case 'item_remove': {
         deps.state.items.delete(message.itemId);
         deps.refreshAcousticModel();
-        deps.state.carriedItemId = deps.getCarriedItemId();
         deps.cleanupItemAudio(message.itemId);
         await deps.refreshAudioSubscriptions(true);
         break;

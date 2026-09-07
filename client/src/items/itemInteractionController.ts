@@ -3,7 +3,8 @@ import type { ConfirmationRequest } from '../input/confirmationController';
 import type { IncomingMessage, OutgoingMessage } from '../network/protocol';
 import type { GameMode, SelectionContext, WorldItem } from '../state/gameState';
 
-type ItemManagementAction = 'delete' | 'transfer';
+type ItemManagementAction = 'delete' | 'transfer' | 'hand';
+type ItemManagementTargetAction = Exclude<ItemManagementAction, 'delete'>;
 
 export type ItemManagementOption = {
   action: ItemManagementAction;
@@ -13,7 +14,7 @@ export type ItemManagementOption = {
 
 type ItemManagementConfirmContext = {
   itemId: string;
-  action: ItemManagementAction;
+  action: 'delete' | 'transfer';
   prompt: string;
   targetUserId?: string;
 };
@@ -23,6 +24,10 @@ export type ItemTransferTarget = {
   username: string;
   online: boolean;
 };
+
+type ItemTargetResponse =
+  | Extract<IncomingMessage, { type: 'item_transfer_targets' }>
+  | Extract<IncomingMessage, { type: 'item_hand_targets' }>;
 
 type ItemControllerDeps = {
   state: {
@@ -62,6 +67,7 @@ type ItemControllerDeps = {
   itemPropertyLabel: (key: string) => string;
   useItem: (item: WorldItem) => void;
   secondaryUseItem: (item: WorldItem) => void;
+  pickupDropItem: (item: WorldItem) => void;
   openConfirmation: (request: ConfirmationRequest) => void;
 };
 
@@ -70,12 +76,13 @@ type ItemControllerDeps = {
  */
 export function createItemInteractionController(deps: ItemControllerDeps): {
   reset: () => void;
-  beginItemSelection: (context: Exclude<SelectionContext, 'drop' | null>, items: WorldItem[]) => void;
+  beginItemSelection: (context: Exclude<SelectionContext, null>, items: WorldItem[]) => void;
   beginItemManagement: (item: WorldItem) => void;
   beginItemProperties: (item: WorldItem, showAll?: boolean) => void;
   recomputeActiveItemPropertyKeys: (itemId: string) => void;
   getManagementOptions: (item: WorldItem) => ItemManagementOption[];
   handleItemTransferTargets: (message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>) => void;
+  handleItemHandTargets: (message: Extract<IncomingMessage, { type: 'item_hand_targets' }>) => void;
   handleSelectItemModeInput: (code: string, key: string) => void;
   handleItemManageOptionsModeInput: (code: string, key: string) => void;
   handleItemManageTransferUserModeInput: (code: string, key: string) => void;
@@ -85,18 +92,28 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
   let itemManagementOptionIndex = 0;
   let itemManagementTargetUserIndex = 0;
   let itemManagementTransferTargets: ItemTransferTarget[] = [];
+  let itemManagementTargetAction: ItemManagementTargetAction | null = null;
   let itemPropertiesShowAll = false;
 
   function canManageDeleteItem(item: WorldItem): boolean {
     const metadata = deps.getItemManagementActionMetadata('delete');
     if (metadata?.anyPermission && deps.hasPermission(metadata.anyPermission)) return true;
-    return Boolean(metadata?.ownPermission) && deps.hasPermission(metadata.ownPermission) && deps.getAuthUserId().length > 0 && item.createdBy === deps.getAuthUserId();
+    return !!metadata?.ownPermission && deps.hasPermission(metadata.ownPermission) && deps.getAuthUserId().length > 0 && item.createdBy === deps.getAuthUserId();
   }
 
   function canManageTransferItem(item: WorldItem): boolean {
+    if (item.carrierId && item.carrierId !== deps.state.player.id) return false;
     const metadata = deps.getItemManagementActionMetadata('transfer');
     if (metadata?.anyPermission && deps.hasPermission(metadata.anyPermission)) return true;
-    return Boolean(metadata?.ownPermission) && deps.hasPermission(metadata.ownPermission) && deps.getAuthUserId().length > 0 && item.createdBy === deps.getAuthUserId();
+    return !!metadata?.ownPermission && deps.hasPermission(metadata.ownPermission) && deps.getAuthUserId().length > 0 && item.createdBy === deps.getAuthUserId();
+  }
+
+  function canManageHandItem(item: WorldItem): boolean {
+    if (deps.state.player.id === null || item.carrierId !== deps.state.player.id) return false;
+    if (!item.capabilities.includes('carryable')) return false;
+    const metadata = deps.getItemManagementActionMetadata('hand');
+    if (metadata?.anyPermission && deps.hasPermission(metadata.anyPermission)) return true;
+    return !!metadata?.ownPermission && deps.hasPermission(metadata.ownPermission) && deps.getAuthUserId().length > 0 && item.createdBy === deps.getAuthUserId();
   }
 
   function getManagementOptions(item: WorldItem): ItemManagementOption[] {
@@ -105,8 +122,16 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     if (canManageTransferItem(item) && (deps.state.player.id !== null || deps.state.peers.size > 0)) {
       options.push({
         action: 'transfer',
-        label: transferMetadata?.label ?? 'Transfer item',
+        label: transferMetadata?.label ?? 'Transfer ownership',
         tooltip: transferMetadata?.tooltip,
+      });
+    }
+    const handMetadata = deps.getItemManagementActionMetadata('hand');
+    if (canManageHandItem(item)) {
+      options.push({
+        action: 'hand',
+        label: handMetadata?.label ?? 'Hand to user',
+        tooltip: handMetadata?.tooltip,
       });
     }
     const deleteMetadata = deps.getItemManagementActionMetadata('delete');
@@ -128,8 +153,13 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     itemManagementSelectedItemId = null;
     itemManagementOptions = [];
     itemManagementOptionIndex = 0;
+    resetItemManagementTargetSelection();
+  }
+
+  function resetItemManagementTargetSelection(): void {
     itemManagementTransferTargets = [];
     itemManagementTargetUserIndex = 0;
+    itemManagementTargetAction = null;
   }
 
   function openItemManagementConfirm(context: ItemManagementConfirmContext): void {
@@ -149,13 +179,24 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
         resetItemManagementState();
       },
       onCancel: () => {
+        resetItemManagementTargetSelection();
         deps.state.mode = 'itemManageOptions';
         deps.updateStatus(itemManagementOptions[itemManagementOptionIndex]?.label ?? 'Item management.');
       },
     });
   }
 
-  function beginItemSelection(context: Exclude<SelectionContext, 'drop' | null>, items: WorldItem[]): void {
+  function selectionItemLabel(item: WorldItem, context: Exclude<SelectionContext, null>): string {
+    const baseLabel = deps.itemLabel(item);
+    const carriedByPlayer = deps.state.player.id !== null && item.carrierId === deps.state.player.id;
+    const label = carriedByPlayer ? `${baseLabel}, held` : baseLabel;
+    if (context === 'pickupDrop') {
+      return `${carriedByPlayer ? 'Drop' : 'Pick up'} ${label}`;
+    }
+    return label;
+  }
+
+  function beginItemSelection(context: Exclude<SelectionContext, null>, items: WorldItem[]): void {
     if (items.length === 0) {
       deps.updateStatus('No items available.');
       deps.sfxUiCancel();
@@ -165,7 +206,7 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     deps.state.selectionContext = context;
     deps.state.selectedItemIds = items.map((item) => item.id);
     deps.state.selectedItemIndex = 0;
-    deps.announceMenuEntry('Select item', deps.itemLabel(items[0]));
+    deps.announceMenuEntry('Select item', selectionItemLabel(items[0], context));
   }
 
   function beginItemManagement(item: WorldItem): void {
@@ -178,6 +219,7 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     itemManagementSelectedItemId = item.id;
     itemManagementOptions = options;
     itemManagementOptionIndex = 0;
+    resetItemManagementTargetSelection();
     deps.state.mode = 'itemManageOptions';
     deps.announceMenuEntry('Items', itemManagementOptions[0].label);
   }
@@ -224,20 +266,36 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     deps.state.itemPropertyIndex = Math.max(0, Math.min(deps.state.itemPropertyIndex, nextKeys.length - 1));
   }
 
-  function handleItemTransferTargets(message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>): void {
-    if (itemManagementSelectedItemId !== message.itemId) return;
-    itemManagementTransferTargets = [...message.targets].sort((a, b) =>
+  function handleItemTargets(action: ItemManagementTargetAction, message: ItemTargetResponse): void {
+    if (
+      deps.state.mode !== 'itemManageOptions' ||
+      itemManagementSelectedItemId !== message.itemId ||
+      itemManagementTargetAction !== action
+    ) {
+      return;
+    }
+    const targets = action === 'hand' ? message.targets.filter((target) => target.online) : message.targets;
+    itemManagementTransferTargets = [...targets].sort((a, b) =>
       a.username.localeCompare(b.username, undefined, { sensitivity: 'base' }),
     );
     if (itemManagementTransferTargets.length === 0) {
+      resetItemManagementTargetSelection();
       deps.state.mode = 'itemManageOptions';
-      deps.updateStatus('No users available to transfer to.');
+      deps.updateStatus(action === 'hand' ? 'No nearby users available to hand item to.' : 'No users available to transfer ownership to.');
       deps.sfxUiCancel();
       return;
     }
     itemManagementTargetUserIndex = 0;
     deps.state.mode = 'itemManageTransferUser';
     deps.announceMenuEntry('Users', transferTargetLabel(itemManagementTransferTargets[0]));
+  }
+
+  function handleItemTransferTargets(message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>): void {
+    handleItemTargets('transfer', message);
+  }
+
+  function handleItemHandTargets(message: Extract<IncomingMessage, { type: 'item_hand_targets' }>): void {
+    handleItemTargets('hand', message);
   }
 
   function handleSelectItemModeInput(code: string, key: string): void {
@@ -253,8 +311,9 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     if (control.type === 'move') {
       deps.state.selectedItemIndex = control.index;
       const current = deps.state.items.get(deps.state.selectedItemIds[deps.state.selectedItemIndex]);
-      if (current) {
-        deps.updateStatus(deps.itemLabel(current));
+      const context = deps.state.selectionContext;
+      if (current && context) {
+        deps.updateStatus(selectionItemLabel(current, context));
         deps.sfxUiBlip();
       }
       return;
@@ -269,8 +328,8 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
       const context = deps.state.selectionContext;
       deps.state.mode = 'normal';
       deps.state.selectionContext = null;
-      if (context === 'pickup') {
-        deps.signalingSend({ type: 'item_pickup', itemId: selected.id });
+      if (context === 'pickupDrop') {
+        deps.pickupDropItem(selected);
         return;
       }
       if (context === 'delete') {
@@ -344,6 +403,7 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     if (control.type === 'select') {
       const option = itemManagementOptions[itemManagementOptionIndex];
       if (option.action === 'delete') {
+        resetItemManagementTargetSelection();
         openItemManagementConfirm({
           itemId: item.id,
           action: 'delete',
@@ -351,9 +411,14 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
         });
         return;
       }
-      itemManagementTransferTargets = [];
-      itemManagementTargetUserIndex = 0;
-      deps.signalingSend({ type: 'item_transfer_targets', itemId: item.id });
+      if (option.action !== 'transfer' && option.action !== 'hand') return;
+      resetItemManagementTargetSelection();
+      itemManagementTargetAction = option.action;
+      deps.signalingSend(
+        option.action === 'hand'
+          ? { type: 'item_hand_targets', itemId: item.id }
+          : { type: 'item_transfer_targets', itemId: item.id },
+      );
       deps.updateStatus('Loading users...');
       deps.sfxUiBlip();
       return;
@@ -367,7 +432,13 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
   }
 
   function handleItemManageTransferUserModeInput(code: string, key: string): void {
-    if (!itemManagementSelectedItemId || itemManagementTransferTargets.length === 0) {
+    if (
+      deps.state.mode !== 'itemManageTransferUser' ||
+      !itemManagementSelectedItemId ||
+      !itemManagementTargetAction ||
+      itemManagementTransferTargets.length === 0
+    ) {
+      resetItemManagementTargetSelection();
       deps.state.mode = 'itemManageOptions';
       return;
     }
@@ -389,10 +460,23 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
       const item = deps.state.items.get(itemManagementSelectedItemId);
       const target = itemManagementTransferTargets[itemManagementTargetUserIndex];
       if (!item || !target) {
+        resetItemManagementTargetSelection();
         deps.state.mode = 'itemManageOptions';
         deps.sfxUiCancel();
         return;
       }
+      const targetAction = itemManagementTargetAction;
+      if (targetAction === 'hand') {
+        deps.state.mode = 'normal';
+        deps.signalingSend({
+          type: 'item_hand',
+          itemId: item.id,
+          targetUserId: target.userId,
+        });
+        resetItemManagementState();
+        return;
+      }
+      resetItemManagementTargetSelection();
       openItemManagementConfirm({
         itemId: item.id,
         action: 'transfer',
@@ -402,6 +486,7 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
       return;
     }
     if (control.type === 'cancel') {
+      resetItemManagementTargetSelection();
       deps.state.mode = 'itemManageOptions';
       deps.updateStatus(itemManagementOptions[itemManagementOptionIndex]?.label ?? 'Item management.');
       deps.sfxUiCancel();
@@ -416,6 +501,7 @@ export function createItemInteractionController(deps: ItemControllerDeps): {
     recomputeActiveItemPropertyKeys,
     getManagementOptions,
     handleItemTransferTargets,
+    handleItemHandTargets,
     handleSelectItemModeInput,
     handleItemManageOptionsModeInput,
     handleItemManageTransferUserModeInput,

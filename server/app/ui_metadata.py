@@ -74,10 +74,17 @@ ADMIN_MENU_ACTION_DEFINITIONS: tuple[AdminMenuActionDefinition, ...] = (
 ITEM_MANAGEMENT_ACTION_DEFINITIONS: tuple[ItemManagementActionDefinition, ...] = (
     {
         "id": "transfer",
-        "label": "Transfer item",
-        "tooltip": "Transfer this item to another user.",
+        "label": "Transfer ownership",
+        "tooltip": "Transfer ownership of this item to another user.",
         "anyPermission": "item.transfer.any",
         "ownPermission": "item.transfer.own",
+    },
+    {
+        "id": "hand",
+        "label": "Hand to user",
+        "tooltip": "Hand this item to a nearby user.",
+        "anyPermission": "item.pickup_drop.any",
+        "ownPermission": "item.pickup_drop.own",
     },
     {
         "id": "delete",
@@ -98,31 +105,31 @@ MAIN_MODE_SERVER_COMMAND_DEFINITIONS: tuple[MainModeServerCommandDefinition, ...
     {
         "id": "useItem",
         "label": "Use item",
-        "tooltip": "Use the carried item or a usable item on your current square.",
+        "tooltip": "Use item.",
     },
     {
         "id": "secondaryUseItem",
         "label": "Secondary item action",
-        "tooltip": "Run the secondary action for the carried item or a usable item on your current square.",
+        "tooltip": "Secondary item action.",
     },
     {
         "id": "pickupDropItem",
         "label": "Pick up or drop item",
-        "tooltip": "Pick up an item or drop your carried item.",
+        "tooltip": "Pick up or drop item.",
     },
     {
         "id": "openItemManagement",
-        "label": "Item management",
-        "tooltip": "Open item management actions for items on your square.",
+        "label": "Manage items",
+        "tooltip": "Manage items.",
     },
     {
         "id": "editItem",
         "label": "Edit item properties",
-        "tooltip": "Edit the carried item or an item on your current square.",
+        "tooltip": "Edit item properties.",
     },
     {
         "id": "inspectItem",
         "label": "Inspect item properties",
-        "tooltip": "Inspect all properties for the carried item or an item on your current square.",
+        "tooltip": "Read all item properties.",
     },
 )

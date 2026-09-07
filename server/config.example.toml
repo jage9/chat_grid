@@ -85,3 +85,7 @@ username_max_length = 32
 [livekit]
 # Room name shared by Chat Grid participants.
 room_name = "chatgrid"
+
+[items]
+# Maximum number of items one user can carry at once.
+max_carried_items = 2
