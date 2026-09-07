@@ -1,4 +1,5 @@
 import './styles.css';
+import { resolveArrowMovement } from './input/movement';
 import { AudioEngine, type SpatialAudioPosition } from './audio/audioEngine';
 import { resolveWorldItemSourcePosition } from './audio/worldItemPosition';
 import {
@@ -1431,12 +1432,11 @@ function handleMovement(): void {
   const now = Date.now();
   if (now - state.player.lastMoveTime < movementTickMs) return;
 
-  let dx = 0;
-  let dy = 0;
-  if (state.keysPressed.ArrowUp) dy = 1;
-  if (state.keysPressed.ArrowDown) dy = -1;
-  if (state.keysPressed.ArrowLeft) dx = -1;
-  if (state.keysPressed.ArrowRight) dx = 1;
+  const { dx, dy } = resolveArrowMovement(
+    state.keysPressed,
+    state.player.facingDeg,
+    audio.getSpatialMode() === 'hrtf',
+  );
 
   if (dx === 0 && dy === 0) {
     lastWallCollisionDirection = null;
@@ -2000,6 +2000,11 @@ function toggleOutputModeCommand(): void {
   audio.sfxUiBlip();
 }
 
+function turnCommand(direction: 'left' | 'right'): void {
+  if (audio.getSpatialMode() !== 'hrtf') return;
+  signaling.send({ type: 'turn', direction });
+}
+
 function toggleHrtfCommand(): void {
   const mode = audio.getSpatialMode() === 'hrtf' ? 'standard' : 'hrtf';
   audio.setSpatialMode(mode);
@@ -2316,6 +2321,8 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   toggleMute,
   toggleOutputMode: toggleOutputModeCommand,
   toggleHrtf: toggleHrtfCommand,
+  turnLeft: () => turnCommand('left'),
+  turnRight: () => turnCommand('right'),
   toggleLoopback: toggleLoopbackCommand,
   toggleVoiceLayer: () => toggleAudioLayer('voice'),
   toggleItemLayer: () => toggleAudioLayer('item'),
@@ -2359,6 +2366,7 @@ function getAvailableCommandPaletteEntriesForMode(mode: GameMode): Array<Command
   if (mode === 'normal') {
     const descriptors = getAvailableMainModeCommands({
       voiceSendAllowed: authController.getVoiceSendAllowed(),
+      hrtfEnabled: audio.getSpatialMode() === 'hrtf',
       mainHelpAvailable: mainHelpViewerLines.length > 0,
       hasAdminActions: getAvailableAdminActions().length > 0,
       hasWorldBuilder: authController.hasPermission('world.structure.edit'),
@@ -2425,7 +2433,7 @@ function handleNormalModeInput(code: string, shiftKey: boolean): void {
   if (code !== 'Escape' && pendingEscapeDisconnect) {
     pendingEscapeDisconnect = false;
   }
-  const command = resolveMainModeCommand(code, shiftKey);
+  const command = resolveMainModeCommand(code, shiftKey, audio.getSpatialMode() === 'hrtf');
   if (!command) return;
   mainModeCommandHandlers[command]();
 }
