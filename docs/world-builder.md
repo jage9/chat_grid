@@ -21,7 +21,7 @@ Wall presets are configured under `world.structure_presets` in `server/config.to
 
 Preset values are copied into each wall when it is created. Later preset edits therefore do not silently rewrite existing structures. Height is stored for future geometry but does not change ordinary floor movement while jumping and flying are deferred.
 
-For same-floor positional audio, the client traces the center-to-center listener/source ray and multiplies every crossed wall's sound transmission into distance gain. This covers voice, radios, item emitters, elevator landing audio, footsteps, teleports, clocks, piano, and positional item-use sounds. Floor/acoustic-zone connectivity remains the LiveKit subscription gate; wall changes affect local gain without restarting or resubscribing continuous audio.
+For same-floor positional audio, the client traces the center-to-center listener/source ray and multiplies every crossed wall's sound transmission into distance gain. This covers voice, radios, item emitters, elevator landing audio, footsteps, teleports, clocks, piano, and positional item-use sounds. Standard and HRTF modes use the same wall gain and low-pass filtering; turning does not change which walls the source-to-listener ray crosses. Exact diagonal corner checks consider walls on both sides of the corner, without counting a continuous wall twice. Floor/acoustic-zone connectivity remains the LiveKit subscription gate; wall changes affect local gain without restarting or resubscribing continuous audio.
 
 ## Persistence And Authorization
 

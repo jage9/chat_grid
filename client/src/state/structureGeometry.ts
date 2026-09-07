@@ -90,54 +90,62 @@ export function wallAcousticMixBetween(
   let nextTY = deltaTY / 2;
   let cellX = listenerX;
   let cellY = listenerY;
-  let transmission = 1;
-  let lowpassHz = OPEN_AIR_LOWPASS_HZ;
+  const mix = { gain: 1, lowpassHz: OPEN_AIR_LOWPASS_HZ };
 
-  const applyWall = (wall: WallStructure | null, strength = 1): void => {
+  const applyWall = (target: WallAcousticMix, wall: WallStructure | null, strength = 1): void => {
     if (!wall) return;
     const clampedStrength = Math.max(0, Math.min(1, strength));
     const wallTransmission = Math.max(0, Math.min(1, wall.soundTransmission));
-    transmission *= 1 - clampedStrength * (1 - wallTransmission);
+    target.gain *= 1 - clampedStrength * (1 - wallTransmission);
     const cutoff = Number.isFinite(wall.occlusionLowpassHz) ? wall.occlusionLowpassHz : OPEN_AIR_LOWPASS_HZ;
     const clampedCutoff = Math.max(20, Math.min(OPEN_AIR_LOWPASS_HZ, cutoff));
     const effectiveCutoff = OPEN_AIR_LOWPASS_HZ
       * ((clampedCutoff / OPEN_AIR_LOWPASS_HZ) ** clampedStrength);
-    lowpassHz = Math.min(lowpassHz, effectiveCutoff);
+    target.lowpassHz = Math.min(target.lowpassHz, effectiveCutoff);
+  };
+
+  const cornerSideMix = (
+    vertical: WallStructure | null,
+    horizontal: WallStructure | null,
+    otherVertical: WallStructure | null,
+    otherHorizontal: WallStructure | null,
+  ): WallAcousticMix => {
+    const side = { gain: 1, lowpassHz: OPEN_AIR_LOWPASS_HZ };
+    const closed = !!vertical && !!horizontal;
+    applyWall(side, vertical, closed || otherVertical ? 1 : ENDPOINT_GRAZE_STRENGTH);
+    applyWall(side, horizontal, closed || otherHorizontal ? 1 : ENDPOINT_GRAZE_STRENGTH);
+    return side;
   };
 
   while (cellX !== sourceX || cellY !== sourceY) {
     const crossesCorner = Math.abs(nextTX - nextTY) < 1e-10;
     if (!crossesCorner && nextTX < nextTY) {
-      applyWall(wallAt(index, listener.z, 'vertical', cellX + (stepX > 0 ? 1 : 0), cellY));
+      applyWall(mix, wallAt(index, listener.z, 'vertical', cellX + (stepX > 0 ? 1 : 0), cellY));
       cellX += stepX;
       nextTX += deltaTX;
     } else if (!crossesCorner && nextTY < nextTX) {
-      applyWall(wallAt(index, listener.z, 'horizontal', cellX, cellY + (stepY > 0 ? 1 : 0)));
+      applyWall(mix, wallAt(index, listener.z, 'horizontal', cellX, cellY + (stepY > 0 ? 1 : 0)));
       cellY += stepY;
       nextTY += deltaTY;
     } else {
       const vertical = wallAt(index, listener.z, 'vertical', cellX + (stepX > 0 ? 1 : 0), cellY);
       const horizontal = wallAt(index, listener.z, 'horizontal', cellX, cellY + (stepY > 0 ? 1 : 0));
-      if (vertical && horizontal) {
-        applyWall(vertical);
-        applyWall(horizontal);
-      } else if (vertical) {
-        const lineX = cellX + (stepX > 0 ? 1 : 0);
-        const continues = wallAt(index, listener.z, 'vertical', lineX, cellY + stepY);
-        applyWall(vertical, continues ? 1 : ENDPOINT_GRAZE_STRENGTH);
-      } else if (horizontal) {
-        const lineY = cellY + (stepY > 0 ? 1 : 0);
-        const continues = wallAt(index, listener.z, 'horizontal', cellX + stepX, lineY);
-        applyWall(horizontal, continues ? 1 : ENDPOINT_GRAZE_STRENGTH);
-      }
+      const oppositeVertical = wallAt(index, listener.z, 'vertical', cellX + (stepX > 0 ? 1 : 0), cellY + stepY);
+      const oppositeHorizontal = wallAt(index, listener.z, 'horizontal', cellX + stepX, cellY + (stepY > 0 ? 1 : 0));
+      const near = cornerSideMix(vertical, horizontal, oppositeVertical, oppositeHorizontal);
+      const far = cornerSideMix(oppositeVertical, oppositeHorizontal, vertical, horizontal);
+      // Inspect both sides of the vertex so exchanging source and listener gives
+      // the same obstruction. Use the stronger mix without counting a crossing twice.
+      mix.gain *= Math.min(near.gain, far.gain);
+      mix.lowpassHz = Math.min(mix.lowpassHz, near.lowpassHz, far.lowpassHz);
       cellX += stepX;
       cellY += stepY;
       nextTX += deltaTX;
       nextTY += deltaTY;
     }
-    if (transmission <= 0) return { gain: 0, lowpassHz };
+    if (mix.gain <= 0) return mix;
   }
-  return { gain: transmission, lowpassHz };
+  return mix;
 }
 
 /** Return only wall gain for callers that do not render filtering. */

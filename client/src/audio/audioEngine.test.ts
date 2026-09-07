@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AudioEngine } from './audioEngine';
+import { AudioEngine, type SpatialPeerRuntime } from './audioEngine';
 import { createSpatialPanner, resolveSpatialMix, updateSpatialPanner } from './spatial';
 
 class FakeAudioContext {
@@ -18,7 +18,12 @@ class FakeAudioContext {
   }
   setSinkId = vi.fn(async (_id: string) => undefined);
   createGain() {
-    return { gain: { value: 1 }, connect: vi.fn() };
+    const param = () => ({
+      value: 1,
+      setTargetAtTime: vi.fn(function (this: { value: number }, value: number) { this.value = value; }),
+      setValueAtTime: vi.fn(function (this: { value: number }, value: number) { this.value = value; }),
+    });
+    return { gain: param(), connect: vi.fn() };
   }
 }
 
@@ -135,5 +140,60 @@ describe('AudioEngine spatial preferences', () => {
     expect(context.listener.forwardX.setTargetAtTime).not.toHaveBeenCalled();
     expect(audio.toggleOutputMode()).toBe('stereo');
     expect(audio.getSpatialMode()).toBe('hrtf');
+  });
+
+  it('keeps wall gain and filtering consistent across standard and HRTF voice updates', async () => {
+    vi.stubGlobal('window', { AudioContext: FakeAudioContext });
+    const audio = new AudioEngine();
+    await audio.ensureContext();
+
+    const gainTarget = vi.fn(function (this: { value: number }, value: number) {
+      this.value = value;
+    });
+    const filterTarget = vi.fn(function (this: { value: number }, value: number) {
+      this.value = value;
+    });
+    const peer = {
+      nickname: 'behind-wall',
+      x: 4,
+      y: 0,
+      z: 0,
+      acousticGain: 0.35,
+      occlusionLowpassHz: 900,
+      gain: { gain: { value: 1, setTargetAtTime: gainTarget } },
+      occlusionFilter: { frequency: { value: 20_000, setTargetAtTime: filterTarget } },
+      panner: createSpatialPanner(audio.context!),
+    } as unknown as SpatialPeerRuntime;
+    const listener = { x: 0, y: 0, z: 0 };
+
+    audio.setSpatialMode('standard');
+    audio.setListenerFacing(90);
+    audio.updateSpatialAudio([peer], listener);
+    const standardGain = gainTarget.mock.calls[gainTarget.mock.calls.length - 1]?.[0];
+    const standardFilter = filterTarget.mock.calls[filterTarget.mock.calls.length - 1]?.[0];
+    expect(standardGain).toBeGreaterThan(0);
+    expect(standardFilter).toBe(900);
+    expect(peer.panner?.panningModel).toBe('equalpower');
+    expect(peer.panner?.positionX.value).toBeCloseTo(4);
+
+    audio.setSpatialMode('hrtf');
+    audio.setListenerFacing(90);
+    audio.updateSpatialAudio([peer], listener);
+    expect(gainTarget.mock.calls[gainTarget.mock.calls.length - 1]?.[0]).toBeCloseTo(standardGain as number);
+    expect(filterTarget.mock.calls[filterTarget.mock.calls.length - 1]?.[0]).toBe(standardFilter);
+    expect(peer.panner?.panningModel).toBe('HRTF');
+    expect(peer.panner?.positionX.value).toBeCloseTo(0);
+    expect(peer.panner?.positionZ.value).toBeCloseTo(-4);
+
+    peer.acousticGain = 0;
+    peer.occlusionLowpassHz = 120;
+    audio.updateSpatialAudio([peer], listener);
+    expect(gainTarget.mock.calls[gainTarget.mock.calls.length - 1]?.[0]).toBe(0);
+    expect(filterTarget.mock.calls[filterTarget.mock.calls.length - 1]?.[0]).toBe(120);
+
+    audio.setSpatialMode('standard');
+    audio.updateSpatialAudio([peer], listener);
+    expect(gainTarget.mock.calls[gainTarget.mock.calls.length - 1]?.[0]).toBe(0);
+    expect(filterTarget.mock.calls[filterTarget.mock.calls.length - 1]?.[0]).toBe(120);
   });
 });

@@ -90,6 +90,43 @@ describe('wall structure geometry', () => {
     expect(wallTransmissionBetween([north, east], listener, source)).toBe(0);
   });
 
+  it('applies endpoint muffling and closed-corner blocking in both directions', () => {
+    const north = wall({ id: 'north', startX: 4, startY: 5, length: 1 });
+    const east = wall({ id: 'east', startX: 5, startY: 4, orientation: 'vertical', length: 1 });
+    const listener = { x: 4, y: 4, z: 0 };
+    const source = { x: 5, y: 5, z: 0 };
+    expect(wallAcousticMixBetween([north], source, listener))
+      .toEqual(wallAcousticMixBetween([north], listener, source));
+    expect(wallAcousticMixBetween([north, east], source, listener))
+      .toEqual({ gain: 0, lowpassHz: 800 });
+  });
+
+  it('keeps transmission reciprocal for all corner edge combinations and both diagonals', () => {
+    const edges = [
+      wall({ id: 'west', startX: 4, startY: 5, length: 1, soundTransmission: 0.2 }),
+      wall({ id: 'east', startX: 5, startY: 5, length: 1, soundTransmission: 0.4 }),
+      wall({ id: 'south', startX: 5, startY: 4, orientation: 'vertical', length: 1, soundTransmission: 0.6 }),
+      wall({ id: 'north', startX: 5, startY: 5, orientation: 'vertical', length: 1, soundTransmission: 0.8 }),
+    ];
+    for (let mask = 0; mask < 16; mask += 1) {
+      const walls = edges.filter((_, index) => mask & (1 << index));
+      for (const [a, b] of [
+        [{ x: 4, y: 4, z: 0 }, { x: 5, y: 5, z: 0 }],
+        [{ x: 4, y: 5, z: 0 }, { x: 5, y: 4, z: 0 }],
+      ]) {
+        expect(wallAcousticMixBetween(walls, a, b)).toEqual(wallAcousticMixBetween(walls, b, a));
+      }
+    }
+  });
+
+  it('does not count a continuous wall twice at a corner', () => {
+    const run = wall({ startX: 4, startY: 5, length: 2, soundTransmission: 0.5 });
+    const a = { x: 4, y: 4, z: 0 };
+    const b = { x: 5, y: 5, z: 0 };
+    expect(wallAcousticMixBetween([run], a, b)).toEqual({ gain: 0.5, lowpassHz: 800 });
+    expect(wallAcousticMixBetween([run], b, a)).toEqual({ gain: 0.5, lowpassHz: 800 });
+  });
+
   it('fully occludes an exact corner where the wall continues', () => {
     const run = wall({ startX: 4, startY: 5, length: 2, soundTransmission: 0 });
     expect(wallTransmissionBetween([run], { x: 4, y: 4, z: 0 }, { x: 5, y: 5, z: 0 })).toBe(0);

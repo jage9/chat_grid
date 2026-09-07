@@ -52,7 +52,7 @@ Each frame:
 - Update spatial item emit audio.
 - Trace intervening wall edges for positional audio, multiply their transmission gains, and apply the lowest crossed low-pass cutoff.
 - Recompute active sampled world sounds through the shared world-audio router using source/listener acoustic zones, wall transmission, range, distance, and 3D source direction.
-- A ray grazing the actual endpoint of a wall run applies half-strength occlusion; exact corners inside a continuing run or formed by two walls remain fully occluded.
+- A ray grazing the actual endpoint of a wall run applies half-strength occlusion; exact corners inside a continuing run or formed by two walls remain fully occluded. Corner checks inspect edges on both sides of the vertex so attenuation and muffling are consistent when source and listener are exchanged.
 - Draw canvas scene.
 
 Radio metadata polling is limited to stations near a listener, deduplicated by stream URL, and uses bounded concurrent fetches so slow stations do not hold up the others. Failed fetches preserve the last known title. Requesting now-playing triggers one immediate fetch when no metadata has been collected yet.
@@ -66,7 +66,7 @@ Radio metadata polling is limited to stations near a listener, deduplicated by s
 - `Shift+E` opens effect selection in both standard and HRTF modes.
 - Sustained piano notes and release tails update their source position and transmission as the listener or item moves. The shared world transmission resolver also serves voice, sampled world sounds, radio, and emit audio.
 - Co-located held sounds and interior elevator ambience stay centered. Multi-floor item sounds use the appropriate landing height. Elevator landing cues retain their floor source ownership and door transmission rules; HRTF does not connect otherwise isolated floors or cabins.
-- UI cues, local footsteps, and microphone monitoring remain non-positional.
+- Locate tones provide directional navigation feedback and bypass wall and acoustic-zone attenuation in both modes. UI cues, local footsteps, and microphone monitoring remain non-positional.
 
 ## Message Handling
 
