@@ -5,7 +5,7 @@
       "items": [
         {
           "keys": "Arrow Keys",
-          "description": "Move on the grid"
+          "description": "Move on the grid using compass directions"
         },
         {
           "keys": "Shift+K / Applications / Shift+F10",
@@ -14,6 +14,10 @@
         {
           "keys": "C",
           "description": "Speak your coordinates"
+        },
+        {
+          "keys": "F",
+          "description": "Announce facing direction"
         },
         {
           "keys": "N",

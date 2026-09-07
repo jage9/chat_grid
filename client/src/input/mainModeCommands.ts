@@ -136,6 +136,14 @@ const MAIN_MODE_COMMANDS: MainModeCommandDescriptor[] = [
     isAvailable: () => true,
   },
   {
+    id: 'speakFacing',
+    label: 'Announce facing direction',
+    shortcut: 'F',
+    tooltip: 'Announce the direction you are facing.',
+    section: 'Navigation',
+    isAvailable: () => true,
+  },
+  {
     id: 'speakCoordinates',
     label: 'Speak coordinates',
     shortcut: 'C',
