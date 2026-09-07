@@ -88,10 +88,16 @@ Core incoming message effects:
 
 ## Stale Connection Recovery
 
+- Voice recovers independently when LiveKit disconnects while the grid session is running. It requests fresh credentials for up to three recovery attempts, with waits of 2, 4, and 8 seconds. It never rejoins with a cached token. After the final request it allows eight seconds for credentials to arrive; a received token cancels that timer while joining. Exhaustion reports failure and asks the user to disconnect and connect to retry.
+- Successful voice recovery announces “Voice reconnected.” and resets the attempt limit. Intentional cleanup cancels pending requests and prevents an unfinished join from reviving the voice session. The existing processed microphone track and peer subscription rules are retained during recovery.
+- Speaker selection applies to the Web Audio context that outputs voice, item, and effect sounds. The selector is disabled when the browser lacks Web Audio output-device selection.
+- An unplugged microphone is announced and capture falls back once to the default input. Replacement preserves user mute and voice permissions; failed fallback reports the unavailable microphone. Late captures after cleanup or a newer device selection are discarded. Device lists refresh on device changes while Settings is open.
+
 - If websocket closes unexpectedly, client starts reconnect flow immediately.
 - While running, client also sends heartbeat `ping` every 10 seconds (fallback for silent half-open cases).
-- If one heartbeat `pong` is missed (10-second interval), client starts reconnect flow.
+- Two consecutive heartbeat intervals without a `pong` start reconnect flow; one missed interval is tolerated. A received pong resets the miss counter.
 - Reconnect flow waits 5 seconds before each attempt and retries up to 3 times, then asks the user to press Connect.
+- Returning to a visible tab brings a waiting retry forward without exceeding the three-attempt limit.
 - Each attempt waits for a complete server welcome: socket opening has a 10-second timeout, followed by an 8-second welcome timeout. Saved-session authentication uses the same welcome deadline.
 - Disconnect, logout, and a new manual connection cancel pending retries and connection attempts. Closed, failed, and replaced sockets cannot affect a newer attempt; welcome timers are cleared when their attempt finishes.
 - Receiving welcome completes reconnection before microphone setup, so a microphone permission prompt does not consume another retry.

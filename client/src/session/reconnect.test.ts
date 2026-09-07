@@ -13,6 +13,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -101,4 +102,23 @@ describe('runReconnectAttempts', () => {
     expect(connect).toHaveBeenCalledOnce();
     expect(onRetry).not.toHaveBeenCalled();
   });
+});
+
+it('wakes a waiting retry on visibility and removes the listener after cancellation', async () => {
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+  const controller = new AbortController();
+  const connect = vi.fn(async () => false);
+  const result = runReconnectAttempts({ signal: controller.signal, connect, onRetry: vi.fn() });
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(connect).not.toHaveBeenCalled();
+  visibility.mockReturnValue('visible');
+  document.dispatchEvent(new Event('visibilitychange'));
+  await flushMicrotasks();
+  expect(connect).toHaveBeenCalledOnce();
+  controller.abort();
+  await expect(result).resolves.toBe(false);
+  document.dispatchEvent(new Event('visibilitychange'));
+  await vi.advanceTimersByTimeAsync(20_000);
+  expect(connect).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(0);
 });

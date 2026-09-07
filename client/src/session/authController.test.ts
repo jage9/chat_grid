@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it, vi } from 'vitest';
 import { createAuthController } from './authController';
 
@@ -38,4 +40,45 @@ describe('microphone permission reapplication', () => {
     expect(applyMuteToTrack).toHaveBeenCalledOnce();
     expect(applyMuteToTrack).toHaveBeenCalledWith(expectedMuted);
   });
+});
+
+it.each([false, true])('logs out and cancels recovery while disconnected, connecting=%s', (connecting) => {
+  const controller = new AbortController();
+  const disconnect = vi.fn(() => controller.abort());
+  const signalingSend = vi.fn();
+  const dom = Object.fromEntries([
+    'loginView', 'registerView', 'authUsername', 'authPassword', 'registerUsername',
+    'registerPassword', 'registerPasswordConfirm', 'registerEmail', 'authPolicyHintRegister',
+    'authSessionView', 'authSessionText', 'authModeSeparator', 'showRegisterButton',
+    'connectButton', 'logoutButton',
+  ].map((key) => [key, document.createElement('input')])) as unknown as Parameters<typeof createAuthController>[0]['dom'];
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true })));
+  try {
+    const auth = createAuthController({
+      dom,
+      authPolicyStorageKey: 'test',
+      authSessionCookieSetUrl: '/session',
+      authSessionCookieClearUrl: '/session',
+      authSessionCookieClientHeader: 'test',
+      initialAuthUsername: 'user',
+      isRunning: () => false,
+      isMuted: () => false,
+      isConnecting: () => connecting,
+      setConnecting: vi.fn(),
+      applyMuteToTrack: vi.fn(),
+      signalingSend,
+      disconnect,
+      saveAuthUsername: vi.fn(),
+      setConnectionStatus: vi.fn(),
+      updateStatus: vi.fn(),
+      pushChatMessage: vi.fn(),
+      onServerAdminMenuActions: vi.fn(),
+    });
+    auth.logOutAccount();
+    expect(disconnect).toHaveBeenCalledOnce();
+    expect(controller.signal.aborted).toBe(true);
+    expect(signalingSend).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

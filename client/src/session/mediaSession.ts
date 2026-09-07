@@ -5,6 +5,7 @@ import { SettingsStore } from '../settings/settingsStore';
 import { formatSteppedNumber, snapNumberToStep } from '../input/numeric';
 
 type DeviceDom = {
+  settingsModal: HTMLDivElement;
   audioInputSelect: HTMLSelectElement;
   audioOutputSelect: HTMLSelectElement;
   audioInputCurrent: HTMLParagraphElement;
@@ -18,6 +19,8 @@ type SessionOptions = {
   settings: SettingsStore;
   dom: DeviceDom;
   updateStatus: (message: string) => void;
+  /** Returns whether the current account may send microphone audio. */
+  isVoiceSendAllowed: () => boolean;
   micCalibrationDurationMs: number;
   micCalibrationSampleIntervalMs: number;
   micCalibrationMinGain: number;
@@ -34,6 +37,7 @@ type SessionOptions = {
 export class MediaSession {
   private localStream: MediaStream | null = null;
   private outboundStream: MediaStream | null = null;
+  private localMediaGeneration = 0;
   private connecting = false;
   private calibratingMicInput = false;
   private preferredInputDeviceId: string;
@@ -47,6 +51,11 @@ export class MediaSession {
     this.preferredOutputDeviceId = prefs.output.id;
     this.preferredInputDeviceName = prefs.input.name;
     this.preferredOutputDeviceName = prefs.output.name;
+    navigator.mediaDevices?.addEventListener('devicechange', () => {
+      if (!this.options.dom.settingsModal.classList.contains('hidden')) {
+        void this.populateAudioDevices();
+      }
+    });
   }
 
   /** Returns the current outbound stream used for peer send tracks. */
@@ -151,7 +160,7 @@ export class MediaSession {
         void this.options.peerManager.setOutputDevice(this.preferredOutputDeviceId);
       }
 
-      const sinkCapable = typeof (HTMLMediaElement.prototype as HTMLMediaElement & { setSinkId?: unknown }).setSinkId === 'function';
+      const sinkCapable = typeof (window.AudioContext?.prototype as { setSinkId?: unknown } | undefined)?.setSinkId === 'function';
       dom.audioOutputSelect.disabled = !sinkCapable;
       this.updateDeviceSummary();
     } catch {
@@ -188,7 +197,9 @@ export class MediaSession {
   /** Starts local capture and replaces outbound peer tracks. */
   async setupLocalMedia(audioDeviceId = ''): Promise<void> {
     this.stopLocalMedia();
+    const generation = this.localMediaGeneration;
     await this.options.audio.ensureContext();
+    if (generation !== this.localMediaGeneration) return;
 
     const constraints: MediaStreamConstraints = {
       audio: {
@@ -202,18 +213,50 @@ export class MediaSession {
       video: false,
     };
 
-    this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (generation !== this.localMediaGeneration) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    this.localStream = stream;
     const audioTrack = this.localStream.getAudioTracks()[0];
     if (audioTrack) {
-      audioTrack.enabled = !this.options.state.isMuted;
+      audioTrack.enabled = this.isMicrophoneEnabled();
+      audioTrack.addEventListener('ended', this.onLocalTrackEnded, { once: true });
     }
-    this.outboundStream = await this.options.audio.configureOutboundStream(this.localStream);
+    const outboundStream = await this.options.audio.configureOutboundStream(this.localStream);
+    if (generation !== this.localMediaGeneration) return;
+    // Reapply the policy after async setup so a fallback cannot publish an
+    // enabled track when authorization or mute state changed during capture.
+    if (audioTrack) {
+      audioTrack.enabled = this.isMicrophoneEnabled();
+    }
+    this.outboundStream = outboundStream;
     await this.options.peerManager.replaceOutgoingTrack(this.outboundStream);
   }
 
+  private isMicrophoneEnabled(): boolean {
+    return this.options.isVoiceSendAllowed() && !this.options.state.isMuted;
+  }
+
+  private onLocalTrackEnded = (): void => {
+    if (!this.options.state.running) return;
+    this.options.updateStatus('Microphone disconnected. Switching to default microphone.');
+    const recovery = this.setupLocalMedia('');
+    const generation = this.localMediaGeneration;
+    void recovery.catch(() => {
+      if (generation !== this.localMediaGeneration || !this.options.state.running) return;
+      this.stopLocalMedia();
+      this.options.updateStatus('Microphone unavailable. Check your input device.');
+    });
+  };
+
   /** Stops local media tracks and clears outbound references. */
   stopLocalMedia(): void {
+    // Invalidate pending capture so a late result cannot restart stopped media.
+    this.localMediaGeneration += 1;
     if (this.localStream) {
+      this.localStream.getAudioTracks().forEach((track) => track.removeEventListener('ended', this.onLocalTrackEnded));
       this.localStream.getTracks().forEach((track) => track.stop());
       this.localStream = null;
     }

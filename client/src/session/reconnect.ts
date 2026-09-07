@@ -11,9 +11,14 @@ function waitForRetry(signal: AbortSignal): Promise<boolean> {
     const finish = () => {
       window.clearTimeout(timer);
       signal.removeEventListener('abort', finish);
+      document.removeEventListener('visibilitychange', retryWhenVisible);
       resolve(!signal.aborted);
     };
+    const retryWhenVisible = () => {
+      if (document.visibilityState === 'visible') finish();
+    };
     const timer = window.setTimeout(finish, 5_000);
+    document.addEventListener('visibilitychange', retryWhenVisible);
     signal.addEventListener('abort', finish, { once: true });
   });
 }

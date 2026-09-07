@@ -1,4 +1,5 @@
 import {
+  ConnectionState,
   LocalAudioTrack,
   type RemoteParticipant,
   type RemoteTrack,
@@ -18,6 +19,9 @@ export type PeerRuntime = SpatialPeerRuntime & {
 
 type StatusHandler = (message: string) => void;
 
+const RECOVERY_DELAYS_MS = [2_000, 4_000, 8_000] as const;
+const RECOVERY_FAILURE_STATUS = 'Voice unavailable. Disconnect and connect to retry.';
+
 /** Owns the LiveKit room and maps its audio tracks to grid participants. */
 export class PeerManager {
   private readonly peers = new Map<string, PeerRuntime>();
@@ -26,12 +30,20 @@ export class PeerManager {
   private room: Room | null = null;
   private localTrack: LocalAudioTrack | null = null;
   private outboundTrack: MediaStreamTrack | null = null;
+  private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+  private recoveryAttempts = 0;
+  private recoveryFailureReported = false;
+  private recovering = false;
   private listenerZ = 0;
   private subscriptionResolver: (peer: PeerRuntime) => boolean = (peer) => peer.z === this.listenerZ;
 
   constructor(
     private readonly audio: AudioEngine,
     private readonly status: StatusHandler,
+    private readonly recovery: {
+      isSessionRunning: () => boolean;
+      requestToken: () => void;
+    },
   ) {}
 
   getPeer(id: string): PeerRuntime | undefined {
@@ -42,10 +54,11 @@ export class PeerManager {
     return this.peers.values();
   }
 
-  /** Connect to the authenticated LiveKit room. */
-  async connectToRoom(url: string, token: string): Promise<void> {
-    this.room?.disconnect();
-    this.localTrack = null;
+  /** Join with fresh credentials; return false if cleanup or another join supersedes it. */
+  async connectToRoom(url: string, token: string): Promise<boolean> {
+    this.clearRecoveryTimer();
+    if (!this.recovery.isSessionRunning()) return false;
+    this.releaseRoom();
 
     const room = new Room({
       audioOutput: { deviceId: this.outputDeviceId || undefined },
@@ -82,12 +95,33 @@ export class PeerManager {
     });
     room.on(RoomEvent.Reconnecting, () => this.status('Voice reconnecting...'));
     room.on(RoomEvent.Reconnected, () => this.status('Voice reconnected.'));
-    room.on(RoomEvent.Disconnected, () => this.status('Voice disconnected.'));
+    room.on(RoomEvent.Disconnected, () => {
+      if (this.room !== room) return;
+      this.releaseRoom();
+      this.scheduleRecovery();
+    });
 
-    await room.connect(url, token);
     this.room = room;
-    this.syncFloorSubscriptions();
-    await this.publishOutboundTrack();
+    try {
+      await room.connect(url, token);
+      if (this.room !== room) {
+        void room.disconnect(false);
+        return false;
+      }
+      this.syncFloorSubscriptions();
+      await this.publishOutboundTrack();
+      if (this.room !== room) return false;
+      if (this.recovering) this.status('Voice reconnected.');
+      this.recovering = false;
+      this.recoveryAttempts = 0;
+      this.recoveryFailureReported = false;
+      return true;
+    } catch (error) {
+      if (this.room !== room) return false;
+      this.releaseRoom();
+      this.scheduleRecovery();
+      throw error;
+    }
   }
 
   /** Ensure a grid participant exists before attaching their LiveKit track. */
@@ -132,12 +166,68 @@ export class PeerManager {
   }
 
   cleanupAll(): void {
+    this.clearRecoveryTimer();
+    this.recovering = false;
+    this.recoveryAttempts = 0;
+    this.recoveryFailureReported = false;
+    this.releaseRoom();
     for (const id of Array.from(this.peers.keys())) this.removePeer(id);
     this.pendingRemoteStreams.clear();
-    this.room?.disconnect();
+    this.outboundTrack = null;
+  }
+
+  private clearRecoveryTimer(): void {
+    if (this.recoveryTimer !== null) clearTimeout(this.recoveryTimer);
+    this.recoveryTimer = null;
+  }
+
+  private scheduleRecovery(): void {
+    if (!this.recovery.isSessionRunning()) return;
+    if (!this.recovering) {
+      this.status('Voice reconnecting...');
+      this.recovering = true;
+      this.recoveryAttempts = 0;
+      this.recoveryFailureReported = false;
+    }
+    if (this.recoveryTimer !== null || this.recoveryFailureReported) return;
+    if (this.recoveryAttempts >= RECOVERY_DELAYS_MS.length) {
+      this.reportRecoveryFailure();
+      return;
+    }
+
+    const delayMs = RECOVERY_DELAYS_MS[this.recoveryAttempts];
+    this.recoveryTimer = setTimeout(() => {
+      this.recoveryTimer = null;
+      if (!this.recovery.isSessionRunning()) return;
+      if (!this.recovering || this.recoveryAttempts >= RECOVERY_DELAYS_MS.length) return;
+      this.recoveryAttempts += 1;
+      if (this.recoveryAttempts < RECOVERY_DELAYS_MS.length) {
+        this.scheduleRecovery();
+      } else {
+        this.recoveryTimer = setTimeout(() => {
+          this.recoveryTimer = null;
+          if (this.recovery.isSessionRunning() && this.recovering) this.reportRecoveryFailure();
+        }, RECOVERY_DELAYS_MS[RECOVERY_DELAYS_MS.length - 1]);
+      }
+      this.recovery.requestToken();
+    }, delayMs);
+  }
+
+  private reportRecoveryFailure(): void {
+    if (this.recoveryFailureReported || !this.recovering) return;
+    this.recoveryFailureReported = true;
+    this.status(RECOVERY_FAILURE_STATUS);
+  }
+
+  /** Detach the room while keeping the processed microphone track available for rejoin. */
+  private releaseRoom(): void {
+    const room = this.room;
     this.room = null;
     this.localTrack = null;
-    this.outboundTrack = null;
+    room?.removeAllListeners();
+    void room?.disconnect(false);
+    this.pendingRemoteStreams.clear();
+    for (const id of this.peers.keys()) this.clearRemoteStream(id);
   }
 
   setPeerPosition(id: string, x: number, y: number, z: number, acousticZoneId: string): void {
@@ -193,11 +283,10 @@ export class PeerManager {
 
   async setOutputDevice(deviceId: string): Promise<void> {
     this.outputDeviceId = deviceId;
+    await this.audio.setOutputDevice(deviceId).catch(() => {
+      this.status('Could not switch audio output. Check your output device.');
+    });
     await this.room?.switchActiveDevice('audiooutput', deviceId).catch(() => undefined);
-    for (const peer of this.peers.values()) {
-      const sinkTarget = peer.audioElement as (HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> }) | undefined;
-      await sinkTarget?.setSinkId?.(deviceId).catch(() => undefined);
-    }
   }
 
   suspendRemoteAudio(): void {
@@ -206,12 +295,12 @@ export class PeerManager {
 
   async resumeRemoteAudio(): Promise<void> {
     for (const peer of this.peers.values()) {
-      if (peer.remoteStream) await this.audio.attachRemoteStream(peer, peer.remoteStream, this.outputDeviceId);
+      if (peer.remoteStream) await this.audio.attachRemoteStream(peer, peer.remoteStream);
     }
   }
 
   private async publishOutboundTrack(): Promise<void> {
-    if (!this.room || !this.outboundTrack) return;
+    if (this.room?.state !== ConnectionState.Connected || !this.outboundTrack) return;
     if (this.localTrack) {
       await this.localTrack.replaceTrack(this.outboundTrack, true);
       return;
@@ -234,7 +323,7 @@ export class PeerManager {
     this.audio.cleanupPeerAudio(peer);
     peer.remoteStream = stream;
     if (this.audio.isVoiceLayerEnabled()) {
-      void this.audio.attachRemoteStream(peer, stream, this.outputDeviceId);
+      void this.audio.attachRemoteStream(peer, stream);
     }
   }
 

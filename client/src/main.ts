@@ -47,6 +47,7 @@ import { formatSteppedNumber, snapNumberToStep } from './input/numeric';
 import { type IncomingMessage, type OutgoingMessage } from './network/protocol';
 import { createOnMessageHandler } from './network/messageHandlers';
 import { SignalingClient } from './network/signalingClient';
+import { nextHeartbeatState } from './network/reconnectPolicy';
 import { CanvasRenderer } from './render/canvasRenderer';
 import {
   GRID_SIZE,
@@ -441,6 +442,7 @@ let commandPaletteReturnMode: GameMode = 'normal';
 let heartbeatTimerId: number | null = null;
 let heartbeatNextPingId = -1;
 let heartbeatAwaitingPong = false;
+let heartbeatMissedPongs = 0;
 let reconnectInFlight = false;
 let reconnectAbort: AbortController | null = null;
 let connectionAbort: AbortController | null = null;
@@ -476,7 +478,10 @@ const signalingProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
 const signalingUrl = `${signalingProtocol}://${window.location.host}${withBase('ws')}`;
 const signaling = new SignalingClient(signalingUrl, handleSignalingStatus);
 
-const peerManager = new PeerManager(audio, updateStatus);
+const peerManager = new PeerManager(audio, updateStatus, {
+  isSessionRunning: () => state.running,
+  requestToken: () => signaling.send({ type: 'livekit_token_request' }),
+});
 
 /** Synchronizes voice subscriptions with the server-authoritative acoustic zones. */
 function refreshAcousticModel(): void {
@@ -488,6 +493,7 @@ function refreshAcousticModel(): void {
   ));
 }
 const mediaSession = new MediaSession({
+  isVoiceSendAllowed: () => authController.getVoiceSendAllowed(),
   state,
   audio,
   peerManager,
@@ -1570,6 +1576,7 @@ function stopHeartbeat(): void {
     heartbeatTimerId = null;
   }
   heartbeatAwaitingPong = false;
+  heartbeatMissedPongs = 0;
 }
 
 /** Sends one heartbeat ping packet using reserved negative ids. */
@@ -1586,7 +1593,9 @@ function startHeartbeat(): void {
   sendHeartbeatPing();
   heartbeatTimerId = window.setInterval(() => {
     if (!state.running) return;
-    if (heartbeatAwaitingPong) {
+    const heartbeat = nextHeartbeatState(heartbeatMissedPongs, !heartbeatAwaitingPong);
+    heartbeatMissedPongs = heartbeat.missedPongs;
+    if (heartbeat.stale) {
       void reconnectAfterHeartbeatTimeout();
       return;
     }
@@ -1612,6 +1621,7 @@ async function reconnectWithRetry(reason: 'heartbeat' | 'socketClose'): Promise<
   const controller = new AbortController();
   reconnectAbort = controller;
   reconnectInFlight = true;
+  dom.disconnectButton.classList.remove('hidden');
   if (reason === 'heartbeat') {
     pushChatMessage('Connection stale. Reconnecting...');
   }
@@ -1629,6 +1639,7 @@ async function reconnectWithRetry(reason: 'heartbeat' | 'socketClose'): Promise<
     if (reconnectAbort === controller) {
       reconnectAbort = null;
       reconnectInFlight = false;
+      if (!state.running) dom.disconnectButton.classList.add('hidden');
     }
   }
 }
@@ -1790,11 +1801,10 @@ function disconnect(): void {
 /** Connects the authenticated browser to its LiveKit voice room. */
 async function connectLiveKit(url: string, token: string): Promise<void> {
   try {
-    await peerManager.connectToRoom(url, token);
+    if (!await peerManager.connectToRoom(url, token)) return;
     for (const peer of state.peers.values()) peerManager.ensurePeer(peer.id, peer);
   } catch (error) {
     console.error('LiveKit connection failed:', error);
-    updateStatus('Voice connection failed.');
   }
 }
 
@@ -1876,9 +1886,10 @@ const onAppMessage = createOnMessageHandler({
 
 /** Handles signaling packets with heartbeat/restart metadata before app-level dispatch. */
 async function onSignalingMessage(message: IncomingMessage, onWelcome?: () => void): Promise<void> {
-  if (message.type === 'pong' && message.clientSentAt < 0) {
+  if (message.type === 'pong') {
+    heartbeatMissedPongs = 0;
     heartbeatAwaitingPong = false;
-    return;
+    if (message.clientSentAt < 0) return;
   }
   let restartAnnouncement: string | null = null;
   let connectedAnnouncement: string | null = null;

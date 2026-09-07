@@ -15,6 +15,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `auth_resume`: resume prior session via stored session token.
 - `auth_logout`: revoke current session and disconnect.
 - `welcome_ready`: client confirms it accepted `welcome` preflight and is ready to join active roster.
+- `livekit_token_request`: request fresh voice credentials with `{ "type": "livekit_token_request" }`. Requires an authenticated, world-ready client and enabled LiveKit configuration. The server replies only to the requester with `livekit_token`; unauthenticated requests receive the normal authentication error, and pre-ready or disabled-LiveKit requests are ignored.
 - `admin_roles_list`: request server role list (with user counts + permission sets).
 - `admin_role_create`: create role.
 - `admin_role_update_permissions`: replace one role permission set.
@@ -57,7 +58,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `welcome`: initial snapshot with users/items plus server UI/world metadata.
   - Server delays roster activation until `welcome_ready`, then publishes the new user's position and nickname before the login announcement.
 - `livekit_token`: short-lived authenticated LiveKit room token and public WebSocket URL.
-  - Issued only after authentication when complete LiveKit configuration is enabled.
+  - Contains `type: "livekit_token"`, `token`, and `url`. Issued after authenticated `welcome` or in response to `livekit_token_request` when complete LiveKit configuration is enabled. Each issuance generates a token with a fresh 15-minute lifetime for the current connection identity and permissions.
   - The API secret is never sent to the browser.
 - `update_position`, `update_nickname`, `user_left`: presence updates. `welcome.player`, `welcome.users[]`, and `update_position` carry the server-owned `acousticZoneId` (`floor:<z>` or `elevator:<itemId>`). Activation publishes position followed by nickname so existing clients can hydrate a complete peer entry immediately.
 - `teleport_complete`: peer teleport landing event with spatial coordinates and source `acousticZoneId`.
@@ -186,8 +187,8 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - Client sends automatic heartbeat `ping` packets every 10 seconds while connected.
 - Heartbeat pings use negative `clientSentAt` ids and are internal (not user-visible ping status).
 - If websocket close is observed unexpectedly, client starts reconnect flow.
-- If a heartbeat `pong` is missed for one interval (10 seconds), client also starts reconnect flow.
-- Reconnect flow waits 5 seconds and retries up to 3 times before stopping.
+- Two consecutive heartbeat intervals without a `pong` start reconnect flow; a received pong resets the counter.
+- Reconnect flow waits 5 seconds before each attempt and retries up to 3 times before stopping. Returning to a visible tab brings a waiting retry forward; disconnect, logout, and manual Connect cancel recovery.
 - After reconnect, if `welcome.serverInfo.instanceId` changed, client announces `Server restarted.`
 - Client emits `Connected to server. Version <version>.` on initial `welcome` and
   `Reconnected to server. Version <version>.` after reconnect.
