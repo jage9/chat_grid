@@ -8,6 +8,7 @@
   - `public/sounds/`: all client sound assets.
 - `server/`: Python signaling service.
   - `app/server.py`: websocket lifecycle + packet routing.
+  - `app/delivery.py`: packet delivery to clients (send, broadcast) over a transport adapter; tests use the recording transport via the `world` fixture.
   - `app/client.py`: client connection model.
   - `app/item_service.py`: item persistence + hydration.
   - `app/item_catalog.py`: global item-type properties.

@@ -12,6 +12,7 @@ from websockets.asyncio.server import ServerConnection
 from .auth_service import AuthService
 from .acoustic_zones import client_acoustic_zone_id, floor_acoustic_zone_id
 from .client import ClientConnection
+from .delivery import Delivery
 from .item_catalog import (
     get_item_definition,
     get_item_use_cooldown_ms,
@@ -57,6 +58,7 @@ class ItemRuntimeHost(Protocol):
 
     auth_service: AuthService
     clients: dict[ServerConnection, ClientConnection]
+    delivery: Delivery
     item_service: ItemService
     max_carried_items: int
 
@@ -72,12 +74,6 @@ class ItemRuntimeHost(Protocol):
 
     def _request_state_save(self) -> None: ...
 
-    async def _broadcast(
-        self, packet: object, exclude: ServerConnection | None = None
-    ) -> None: ...
-
-    async def _send(self, websocket: ServerConnection, packet: object) -> None: ...
-
 
 class ItemRuntime:
     """Own item-domain routing, shared rules, and per-type runtimes."""
@@ -86,6 +82,7 @@ class ItemRuntime:
         """Compose generic and type-specific item runtimes."""
 
         self.host = host
+        self.delivery = host.delivery
         self.item_last_use_ms: dict[str, int] = {}
         self.piano = PianoRuntime(self)
         self.radio = RadioRuntime(self)
@@ -94,8 +91,7 @@ class ItemRuntime:
             ElevatorRuntimeCallbacks(
                 get_item=lambda item_id: self.items.get(item_id),
                 iter_clients=lambda: self.clients.values(),
-                broadcast=self.broadcast,
-                send=self.send,
+                delivery=self.delivery,
                 broadcast_item=self.broadcast_item,
                 send_item_result=self.send_result,
                 request_state_save=self.request_state_save,
@@ -199,18 +195,6 @@ class ItemRuntime:
                 return client
         return None
 
-    async def broadcast(
-        self, packet: object, exclude: ServerConnection | None = None
-    ) -> None:
-        """Broadcast an item-domain packet through the server transport."""
-
-        await self.host._broadcast(packet, exclude=exclude)
-
-    async def send(self, websocket: ServerConnection, packet: object) -> None:
-        """Send an item-domain packet through the server transport."""
-
-        await self.host._send(websocket, packet)
-
     async def handle_packet(
         self, client: ClientConnection, packet: ClientPacket
     ) -> bool:
@@ -296,13 +280,13 @@ class ItemRuntime:
             item.z,
         )
         item_text = f"{item.title} ({self._item_type_label(item)})"
-        await self.broadcast(
+        await self.delivery.broadcast(
             BroadcastChatMessagePacket(
                 type="chat_message",
                 message=f"{client.nickname} placed {item_text} at {item.x}, {item.y}, {item.z}, {self.floor_name(item.z)}.",
                 system=True,
             ),
-            exclude=client.websocket,
+            exclude=client,
         )
         await self.send_result(
             client,
@@ -389,13 +373,13 @@ class ItemRuntime:
         await self.broadcast_item(pickup_item)
         self.request_state_save()
         item_text = f"{pickup_item.title} ({self._item_type_label(pickup_item)})"
-        await self.broadcast(
+        await self.delivery.broadcast(
             BroadcastChatMessagePacket(
                 type="chat_message",
                 message=f"{client.nickname} picked up {item_text}.",
                 system=True,
             ),
-            exclude=client.websocket,
+            exclude=client,
         )
         await self.send_result(
             client,
@@ -457,13 +441,13 @@ class ItemRuntime:
         await self.broadcast_item(drop_item)
         self.request_state_save()
         item_text = f"{drop_item.title} ({self._item_type_label(drop_item)})"
-        await self.broadcast(
+        await self.delivery.broadcast(
             BroadcastChatMessagePacket(
                 type="chat_message",
                 message=f"{client.nickname} dropped {item_text} at {drop_item.x}, {drop_item.y}, {drop_item.z}, {self.floor_name(drop_item.z)}.",
                 system=True,
             ),
-            exclude=client.websocket,
+            exclude=client,
         )
         await self.send_result(
             client,
@@ -541,18 +525,18 @@ class ItemRuntime:
         self.item_service.remove_item(delete_item.id)
         await self.elevator.cancel(delete_item.id)
         self.item_last_use_ms.pop(delete_item.id, None)
-        await self.broadcast(
+        await self.delivery.broadcast(
             ItemRemovePacket(type="item_remove", itemId=delete_item.id)
         )
         self.request_state_save()
         item_text = f"{delete_item.title} ({self._item_type_label(delete_item)})"
-        await self.broadcast(
+        await self.delivery.broadcast(
             BroadcastChatMessagePacket(
                 type="chat_message",
                 message=f"{client.nickname} deleted {item_text}.",
                 system=True,
             ),
-            exclude=client.websocket,
+            exclude=client,
         )
         await self.send_result(
             client, True, "delete", f"You deleted {item_text}.", delete_item.id
@@ -618,8 +602,8 @@ class ItemRuntime:
             if str(entry.get("status")) == "active"
             and str(entry["id"]) != transfer_targets_item.createdBy
         ]
-        await self.send(
-            client.websocket,
+        await self.delivery.send(
+            client,
             ItemTransferTargetsResultPacket(
                 type="item_transfer_targets",
                 itemId=transfer_targets_item.id,
@@ -707,13 +691,13 @@ class ItemRuntime:
         await self.broadcast_item(transfer_item)
         self.request_state_save()
         item_text = f"{transfer_item.title} ({self._item_type_label(transfer_item)})"
-        await self.broadcast(
+        await self.delivery.broadcast(
             BroadcastChatMessagePacket(
                 type="chat_message",
                 message=f"{client.nickname} transferred {item_text} to {target_username}.",
                 system=True,
             ),
-            exclude=client.websocket,
+            exclude=client,
         )
         await self.send_result(
             client,
@@ -749,8 +733,10 @@ class ItemRuntime:
                 continue
             if not self._can_hand_to_target(client, target, hand_item):
                 continue
-            assert target.user_id is not None
-            target_clients.setdefault(target.user_id, target)
+            target_user_id = target.user_id
+            if target_user_id is None:
+                continue
+            target_clients.setdefault(target_user_id, target)
         targets = [
             ItemTransferTargetSummary(
                 userId=user_id,
@@ -761,8 +747,8 @@ class ItemRuntime:
             )
             for user_id, target in target_clients.items()
         ]
-        await self.send(
-            client.websocket,
+        await self.delivery.send(
+            client,
             ItemHandTargetsResultPacket(
                 type="item_hand_targets", itemId=hand_item.id, targets=targets
             ),
@@ -815,13 +801,13 @@ class ItemRuntime:
         await self.broadcast_item(hand_item)
         self.request_state_save()
         item_text = f"{hand_item.title} ({self._item_type_label(hand_item)})"
-        await self.broadcast(
+        await self.delivery.broadcast(
             BroadcastChatMessagePacket(
                 type="chat_message",
                 message=f"{client.nickname} handed {item_text} to {target_username}.",
                 system=True,
             ),
-            exclude=client.websocket,
+            exclude=client,
         )
         await self.send_result(
             client,
@@ -943,19 +929,19 @@ class ItemRuntime:
 
         self.item_last_use_ms[use_item.id] = now_ms
         if use_result.others_message:
-            await self.broadcast(
+            await self.delivery.broadcast(
                 BroadcastChatMessagePacket(
                     type="chat_message",
                     message=use_result.others_message,
                     system=True,
                 ),
-                exclude=client.websocket,
+                exclude=client,
             )
         use_sound = self._resolve_item_use_sound(use_item)
         if use_sound:
             sound_x, sound_y, sound_z, sound_zone_id = self.get_sound_source(use_item)
             sound_range = self.get_emit_range(use_item)
-            await self.broadcast(
+            await self.delivery.broadcast(
                 ItemUseSoundPacket(
                     type="item_use_sound",
                     itemId=use_item.id,
@@ -1076,13 +1062,13 @@ class ItemRuntime:
             self.request_state_save()
             await self.broadcast_item(secondary_item)
         if secondary_result.others_message.strip():
-            await self.broadcast(
+            await self.delivery.broadcast(
                 BroadcastChatMessagePacket(
                     type="chat_message",
                     message=secondary_result.others_message,
                     system=True,
                 ),
-                exclude=client.websocket,
+                exclude=client,
             )
         await self.send_result(
             client,
@@ -1397,8 +1383,8 @@ class ItemRuntime:
     ) -> None:
         """Send a structured item action result to one client."""
 
-        await self.send(
-            client.websocket,
+        await self.delivery.send(
+            client,
             ItemActionResultPacket(
                 type="item_action_result",
                 ok=ok,
@@ -1411,7 +1397,7 @@ class ItemRuntime:
     async def broadcast_item(self, item: WorldItem) -> None:
         """Broadcast a full item snapshot update to all connected clients."""
 
-        await self.broadcast(
+        await self.delivery.broadcast(
             ItemUpsertPacket(type="item_upsert", item=self.outbound_item(item))
         )
 
@@ -1425,15 +1411,15 @@ class ItemRuntime:
         """Delay then publish wheel result text to self and other users."""
 
         await asyncio.sleep(delay_seconds)
-        await self.broadcast(
+        await self.delivery.broadcast(
             BroadcastChatMessagePacket(
                 type="chat_message", message=others_message, system=True
             ),
-            exclude=client.websocket,
+            exclude=client,
         )
         if client.websocket in self.clients:
-            await self.send(
-                client.websocket,
+            await self.delivery.send(
+                client,
                 BroadcastChatMessagePacket(
                     type="chat_message", message=self_message, system=True
                 ),

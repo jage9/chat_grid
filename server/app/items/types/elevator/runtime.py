@@ -8,13 +8,12 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Literal
 
-from websockets.asyncio.server import ServerConnection
-
 from ....acoustic_zones import (
     client_position_packet,
     floor_acoustic_zone_id,
 )
 from ....client import ClientConnection
+from ....delivery import Delivery
 from ....models import (
     ItemElevatorStatusPacket,
     ItemUseSoundPacket,
@@ -27,8 +26,6 @@ ELEVATOR_DOOR_CLOSE_SOUND_SECONDS = 3.765601
 ELEVATOR_TRAVEL_SECONDS = 5.0
 ELEVATOR_TRAVEL_UPDATE_SECONDS = 0.25
 
-PacketCallback = Callable[[object], Awaitable[None]]
-SendCallback = Callable[[ServerConnection, object], Awaitable[None]]
 ItemResultCallback = Callable[
     [ClientConnection, bool, Literal["use"], str, str | None], Awaitable[None]
 ]
@@ -40,8 +37,7 @@ class ElevatorRuntimeCallbacks:
 
     get_item: Callable[[str], WorldItem | None]
     iter_clients: Callable[[], Iterable[ClientConnection]]
-    broadcast: PacketCallback
-    send: SendCallback
+    delivery: Delivery
     broadcast_item: Callable[[WorldItem], Awaitable[None]]
     send_item_result: ItemResultCallback
     request_state_save: Callable[[], None]
@@ -59,6 +55,7 @@ class ElevatorRuntime:
         """Create an elevator runtime using generic server delivery callbacks."""
 
         self.callbacks = callbacks
+        self.delivery = callbacks.delivery
         self._tasks: dict[str, asyncio.Task[None]] = {}
 
     async def shutdown(self) -> None:
@@ -113,9 +110,9 @@ class ElevatorRuntime:
                 )
                 return
             client.elevator_id = None
-            await self.callbacks.broadcast(client_position_packet(client))
-            await self.callbacks.send(
-                client.websocket,
+            await self.delivery.broadcast(client_position_packet(client))
+            await self.delivery.send(
+                client,
                 ItemElevatorStatusPacket(
                     type="item_elevator_status",
                     itemId=item.id,
@@ -163,14 +160,14 @@ class ElevatorRuntime:
             return
 
         client.elevator_id = item.id
-        await self.callbacks.broadcast(client_position_packet(client))
+        await self.delivery.broadcast(client_position_packet(client))
         destination_z = next(z for z in self._floor_elevations(item) if z != current_z)
         item.params["departOnCloseZ"] = destination_z
         self._touch(item)
         await self.callbacks.broadcast_item(item)
         self._restart_task(item.id)
-        await self.callbacks.send(
-            client.websocket,
+        await self.delivery.send(
+            client,
             ItemElevatorStatusPacket(
                 type="item_elevator_status",
                 itemId=item.id,
@@ -330,9 +327,9 @@ class ElevatorRuntime:
             rider.z = destination_z
             rider.last_position_update_ms = self.callbacks.now_ms()
             self.callbacks.persist_client_position(rider)
-            await self.callbacks.broadcast(client_position_packet(rider))
-            await self.callbacks.send(
-                rider.websocket,
+            await self.delivery.broadcast(client_position_packet(rider))
+            await self.delivery.send(
+                rider,
                 ItemElevatorStatusPacket(
                     type="item_elevator_status",
                     itemId=item.id,
@@ -369,7 +366,7 @@ class ElevatorRuntime:
             acousticZoneId=floor_acoustic_zone_id(current_z),
             range=self.callbacks.get_emit_range(item),
         )
-        await self.callbacks.broadcast(packet)
+        await self.delivery.broadcast(packet)
 
     async def _broadcast_travel_position(self, item: WorldItem, travel_z: int) -> None:
         """Move riders to one intermediate elevator height."""
@@ -386,9 +383,9 @@ class ElevatorRuntime:
                 carried.y = rider.y
                 carried.z = rider.z
                 await self.callbacks.broadcast_item(carried)
-            await self.callbacks.broadcast(client_position_packet(rider))
-            await self.callbacks.send(
-                rider.websocket,
+            await self.delivery.broadcast(client_position_packet(rider))
+            await self.delivery.send(
+                rider,
                 ItemElevatorStatusPacket(
                     type="item_elevator_status",
                     itemId=item.id,

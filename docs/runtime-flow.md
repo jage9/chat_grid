@@ -151,6 +151,7 @@ On disconnect:
 
 ## Runtime Components
 
+- `Delivery`: routes typed packets to one client or the authenticated roster through a transport. Production uses the websocket transport; server tests use a recording transport so delivery and fanout assertions do not patch server internals.
 - `PeerManager`: LiveKit room lifecycle and remote track attach.
 - `RadioStationRuntime`: shared stream sources + per-item output/effects/spatialization.
 - `ItemEmitRuntime`: per-item looping emit source + spatialization.
