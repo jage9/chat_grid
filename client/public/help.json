@@ -30,11 +30,11 @@
       "items": [
         {
           "keys": "L",
-          "description": "Locate nearest user"
+          "description": "Locate nearest user; includes what they are carrying, if anything"
         },
         {
           "keys": "Shift+L",
-          "description": "List users; Enter teleports to that user, left/right arrow adjusts volume"
+          "description": "List users, including what they are carrying; Enter teleports to that user, left/right arrow adjusts volume"
         },
         {
           "keys": "U",
@@ -61,6 +61,10 @@
     {
       "title": "Items",
       "items": [
+        {
+          "keys": "H",
+          "description": "Speak what you are holding, or that you are holding nothing"
+        },
         {
           "keys": "I",
           "description": "Locate nearest item"

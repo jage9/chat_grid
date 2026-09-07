@@ -99,6 +99,12 @@ Core incoming message effects:
 - Connect/reconnect status message is emitted from `welcome` and includes server version.
 - Server-only deploys no longer force browser reloads unless `expectedClientRevision` changes.
 
+## Carried Item Presentation
+
+- `H` announces the local player’s carried item or says they are holding nothing.
+- `L` and `Shift+L` append carried item titles after the user’s location, only when carrying something. These descriptions use the current server-synchronized `carrierId` on items.
+- Carrying remains limited to one item. Disconnect drops it at the last tile (or the elevator’s last completed landing); reconnect does not restore carrying.
+
 ## Authorization Runtime
 
 - Server enforces item/chat/nickname/voice/admin/World Builder permissions for each packet.

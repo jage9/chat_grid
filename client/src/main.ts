@@ -26,6 +26,7 @@ import {
 } from './input/textInput';
 import { formatCommandMenuLabel, type CommandDescriptor, type ModeInput } from './input/commandTypes';
 import { getAvailableMainModeCommands } from './input/mainModeCommands';
+import { describeHeldItems, formatCarryingSuffix, getCarriedItems } from './items/carriedItems';
 import { resolveMainModeCommand, type MainModeCommand } from './input/mainCommandRouter';
 import { dispatchModeInput } from './input/modeDispatcher';
 import { handleListControlKey } from './input/listController';
@@ -1151,8 +1152,7 @@ function floorPositionPhrase(z: number): string {
 
 /** Returns the item currently carried by the local player, if any. */
 function getCarriedItem(): WorldItem | null {
-  if (!state.player.id) return null;
-  return Array.from(state.items.values()).find((item) => item.carrierId === state.player.id) || null;
+  return getCarriedItems(state.items.values(), state.player.id)[0] ?? null;
 }
 
 /** Opens the shared item-selection flow for the provided context and items. */
@@ -2277,7 +2277,7 @@ function listUsersCommand(): void {
   const gainPhrase = `volume ${formatSteppedNumber(getPeerListenGainForNickname(first.nickname), MIC_INPUT_GAIN_STEP)}`;
   announceMenuEntry(
     `${userCount} ${userLabelText}`,
-    `${first.nickname}, ${formatLastSeen(null, true)}, ${gainPhrase}, ${first.z === state.player.z ? distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y) : 'different floor'}, ${locationPhrase(first.x, first.y, first.z)}`,
+    `${first.nickname}, ${formatLastSeen(null, true)}, ${gainPhrase}, ${first.z === state.player.z ? distanceDirectionPhrase(state.player.x, state.player.y, first.x, first.y) : 'different floor'}, ${locationPhrase(first.x, first.y, first.z)}${formatCarryingSuffix(state.items.values(), first.id)}`,
   );
 }
 
@@ -2291,7 +2291,7 @@ function locateNearestUserCommand(): void {
   const peer = state.peers.get(nearest.peerId);
   if (!peer) return;
   audio.sfxLocate({ x: peer.x - state.player.x, y: peer.y - state.player.y });
-  updateStatus(`${peer.nickname}, ${distanceDirectionPhrase(state.player.x, state.player.y, peer.x, peer.y)}, ${locationPhrase(peer.x, peer.y, peer.z)}`);
+  updateStatus(`${peer.nickname}, ${distanceDirectionPhrase(state.player.x, state.player.y, peer.x, peer.y)}, ${locationPhrase(peer.x, peer.y, peer.z)}${formatCarryingSuffix(state.items.values(), peer.id)}`);
 }
 
 function openHelpCommand(): void {
@@ -2342,6 +2342,7 @@ const mainModeCommandHandlers: Record<MainModeCommand, () => void> = {
   locateNearestItem: locateNearestItemCommand,
   listItems: listItemsCommand,
   pickupDropItem: pickupDropItemCommand,
+  speakHeldItems: () => updateStatus(describeHeldItems(state.items.values(), state.player.id)),
   openItemManagement: openItemManagementCommand,
   editItem: editItemCommand,
   inspectItem: inspectItemCommand,
@@ -2663,7 +2664,7 @@ function handleListModeInput(code: string, key: string): void {
     if (!entry) return;
     const gainPhrase = `volume ${formatSteppedNumber(getPeerListenGainForNickname(entry.nickname), MIC_INPUT_GAIN_STEP)}`;
     updateStatus(
-      `${entry.nickname}, ${formatLastSeen(null, true)}, ${gainPhrase}, ${entry.z === state.player.z ? distanceDirectionPhrase(state.player.x, state.player.y, entry.x, entry.y) : 'different floor'}, ${locationPhrase(entry.x, entry.y, entry.z)}`,
+      `${entry.nickname}, ${formatLastSeen(null, true)}, ${gainPhrase}, ${entry.z === state.player.z ? distanceDirectionPhrase(state.player.x, state.player.y, entry.x, entry.y) : 'different floor'}, ${locationPhrase(entry.x, entry.y, entry.z)}${formatCarryingSuffix(state.items.values(), entry.id)}`,
     );
     if (control.reason === 'initial') {
       audio.sfxUiBlip();

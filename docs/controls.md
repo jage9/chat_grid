@@ -23,8 +23,8 @@ This document is the authoritative keymap for the client.
 - `Escape`: Press once for disconnect prompt, press again to disconnect
 
 ### Users, Nickname, Chat
-- `L`: Locate nearest user
-- `Shift+L`: List users alphabetically with current presence; `Enter` teleports to selected user; `ArrowLeft`/`ArrowRight` adjust selected user volume
+- `L`: Locate nearest user; appends what they are carrying, if anything
+- `Shift+L`: List users alphabetically with current presence and any carried items at the end of each entry; `Enter` teleports to selected user; `ArrowLeft`/`ArrowRight` adjust selected user volume
 - `U`: Speak connected users
 - `N`: Edit nickname
 - `/`: Start chat
@@ -37,6 +37,7 @@ This document is the authoritative keymap for the client.
 - `<` / `>`: First/last message
 
 ### Items
+- `H`: Speak what you are holding, or that you are holding nothing
 - `I`: Locate nearest item
 - `Shift+I`: List items and teleport to selected item with `Enter`
 - `A`: Add item
