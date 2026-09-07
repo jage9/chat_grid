@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ConnectionState, RoomEvent } from 'livekit-client';
+import { ConnectionState, RoomEvent, type LocalAudioTrack } from 'livekit-client';
 import type { AudioEngine } from '../audio/audioEngine';
 import { PeerManager } from './peerManager';
 
@@ -9,7 +9,7 @@ const livekit = vi.hoisted(() => {
     handlers = new Map<string, () => void>();
     state = 'disconnected';
     remoteParticipants = new Map<string, unknown>();
-    localParticipant = { publishTrack: vi.fn(async () => undefined) };
+    localParticipant = { publishTrack: vi.fn(async (_track: LocalAudioTrack): Promise<void> => undefined) };
     connect = vi.fn(async (_url: string, _token: string) => { this.state = 'connected'; });
     disconnect = vi.fn(async (_stopTracks?: boolean) => {
       this.state = 'disconnected';
@@ -29,7 +29,11 @@ vi.mock('livekit-client', async (importOriginal) => {
     ...original,
     Room: livekit.MockRoom,
     LocalAudioTrack: class {
-      constructor(readonly mediaStreamTrack: MediaStreamTrack) {}
+      constructor(public mediaStreamTrack: MediaStreamTrack) {}
+      replaceTrack = vi.fn(async (track: MediaStreamTrack) => {
+        this.mediaStreamTrack = track;
+        return this;
+      });
     },
   };
 });
@@ -57,6 +61,108 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); });
 
 describe('LiveKit voice recovery', () => {
+  it('publishes the first microphone captured during an SDK reconnect', async () => {
+    const { manager, status } = setup();
+    await manager.connectToRoom('wss://voice.test', 'token');
+    const room = latestRoom();
+    room.state = ConnectionState.Reconnecting;
+    room.emit(RoomEvent.Reconnecting);
+    const track = { stop: vi.fn() } as unknown as MediaStreamTrack;
+    await manager.replaceOutgoingTrack({ getAudioTracks: () => [track] } as MediaStream);
+    expect(room.localParticipant.publishTrack).not.toHaveBeenCalled();
+
+    room.state = ConnectionState.Connected;
+    room.emit(RoomEvent.Reconnected);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(room.localParticipant.publishTrack).toHaveBeenCalledTimes(1);
+    expect(room.localParticipant.publishTrack).toHaveBeenCalledWith(
+      expect.objectContaining({ mediaStreamTrack: track }),
+    );
+    expect(status).toHaveBeenLastCalledWith('Voice reconnected.');
+    manager.cleanupAll();
+  });
+
+  it('applies only the latest microphone replacement after an SDK reconnect', async () => {
+    const { manager } = setup();
+    const originalTrack = { stop: vi.fn() } as unknown as MediaStreamTrack;
+    await manager.replaceOutgoingTrack({ getAudioTracks: () => [originalTrack] } as MediaStream);
+    await manager.connectToRoom('wss://voice.test', 'token');
+    const room = latestRoom();
+    const publishedTrack = room.localParticipant.publishTrack.mock.calls[0][0];
+    room.state = ConnectionState.Reconnecting;
+    room.emit(RoomEvent.Reconnecting);
+    const replacedTrack = { stop: vi.fn() } as unknown as MediaStreamTrack;
+    const latestTrack = { stop: vi.fn() } as unknown as MediaStreamTrack;
+    await manager.replaceOutgoingTrack({ getAudioTracks: () => [replacedTrack] } as MediaStream);
+    await manager.replaceOutgoingTrack({ getAudioTracks: () => [latestTrack] } as MediaStream);
+    expect(publishedTrack.mediaStreamTrack).toBe(originalTrack);
+
+    room.state = ConnectionState.Connected;
+    room.emit(RoomEvent.Reconnected);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(publishedTrack.mediaStreamTrack).toBe(latestTrack);
+    expect(room.localParticipant.publishTrack).toHaveBeenCalledTimes(1);
+    manager.cleanupAll();
+  });
+
+  it('requests fresh credentials if microphone publication fails after an SDK reconnect', async () => {
+    const { manager, status, requestToken } = setup();
+    await manager.connectToRoom('wss://voice.test', 'token');
+    const room = latestRoom();
+    room.state = ConnectionState.Reconnecting;
+    const track = { stop: vi.fn() } as unknown as MediaStreamTrack;
+    await manager.replaceOutgoingTrack({ getAudioTracks: () => [track] } as MediaStream);
+    room.localParticipant.publishTrack.mockRejectedValueOnce(new Error('publication failed'));
+
+    room.state = ConnectionState.Connected;
+    room.emit(RoomEvent.Reconnected);
+    await vi.advanceTimersByTimeAsync(2000);
+
+    expect(status).not.toHaveBeenCalledWith('Voice reconnected.');
+    expect(room.disconnect).toHaveBeenCalledWith(false);
+    expect(requestToken).toHaveBeenCalledTimes(1);
+    await manager.connectToRoom('wss://voice.test', 'fresh-token');
+    expect(latestRoom().localParticipant.publishTrack).toHaveBeenCalledWith(
+      expect.objectContaining({ mediaStreamTrack: track }),
+    );
+    expect(status).toHaveBeenLastCalledWith('Voice reconnected.');
+    manager.cleanupAll();
+  });
+
+  it.each([
+    ['cleanup', 'success'],
+    ['cleanup', 'failure'],
+    ['room replacement', 'success'],
+    ['room replacement', 'failure'],
+  ])('ignores publication after %s followed by %s during SDK recovery', async (action, outcome) => {
+    const { manager, status, requestToken } = setup();
+    await manager.connectToRoom('wss://voice.test', 'token');
+    const room = latestRoom();
+    room.state = ConnectionState.Reconnecting;
+    const track = { stop: vi.fn() } as unknown as MediaStreamTrack;
+    await manager.replaceOutgoingTrack({ getAudioTracks: () => [track] } as MediaStream);
+    let finishPublication = () => {};
+    room.localParticipant.publishTrack.mockImplementationOnce(() => new Promise<void>((resolve, reject) => {
+      finishPublication = () => outcome === 'success' ? resolve() : reject(new Error('room closed'));
+    }));
+
+    room.state = ConnectionState.Connected;
+    room.emit(RoomEvent.Reconnected);
+    expect(status).not.toHaveBeenCalledWith('Voice reconnected.');
+    if (action === 'cleanup') manager.cleanupAll();
+    else await manager.connectToRoom('wss://voice.test', 'replacement-token');
+    finishPublication();
+    await vi.advanceTimersByTimeAsync(60000);
+
+    expect(status).not.toHaveBeenCalled();
+    expect(requestToken).not.toHaveBeenCalled();
+    expect(livekit.MockRoom.instances).toHaveLength(action === 'cleanup' ? 1 : 2);
+    if (action === 'room replacement') expect(latestRoom().state).toBe(ConnectionState.Connected);
+    manager.cleanupAll();
+  });
+
   it('requests at most three fresh credentials when no token response arrives', async () => {
     const { manager, status, requestToken } = setup();
     await manager.connectToRoom('wss://voice.test', 'old-token');

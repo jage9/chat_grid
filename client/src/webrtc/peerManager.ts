@@ -94,7 +94,19 @@ export class PeerManager {
       this.clearRemoteStream(participant.identity);
     });
     room.on(RoomEvent.Reconnecting, () => this.status('Voice reconnecting...'));
-    room.on(RoomEvent.Reconnected, () => this.status('Voice reconnected.'));
+    room.on(RoomEvent.Reconnected, async () => {
+      if (this.room !== room || !this.recovery.isSessionRunning()) return;
+      try {
+        await this.publishOutboundTrack();
+        if (this.room === room && this.recovery.isSessionRunning()) {
+          this.status('Voice reconnected.');
+        }
+      } catch {
+        if (this.room !== room || !this.recovery.isSessionRunning()) return;
+        this.releaseRoom();
+        this.scheduleRecovery();
+      }
+    });
     room.on(RoomEvent.Disconnected, () => {
       if (this.room !== room) return;
       this.releaseRoom();
