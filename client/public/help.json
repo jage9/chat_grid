@@ -20,6 +20,10 @@
           "description": "Change nickname"
         },
         {
+          "keys": "W",
+          "description": "World Builder"
+        },
+        {
           "keys": "Escape",
           "description": "Disconnect/cancel"
         }
@@ -30,11 +34,11 @@
       "items": [
         {
           "keys": "L",
-          "description": "Locate nearest user; includes what they are carrying, if anything"
+          "description": "Locate nearest user"
         },
         {
           "keys": "Shift+L",
-          "description": "List users, including what they are carrying; Enter teleports to that user, left/right arrow adjusts volume"
+          "description": "List users; Enter teleports to that user, left/right arrow adjusts volume"
         },
         {
           "keys": "U",
@@ -63,7 +67,7 @@
       "items": [
         {
           "keys": "H",
-          "description": "Speak what you are holding, or that you are holding nothing"
+          "description": "What are you holding?"
         },
         {
           "keys": "I",
@@ -79,27 +83,27 @@
         },
         {
           "keys": "O",
-          "description": "Edit a held item or an item on your square; choose from a list when needed"
+          "description": "Edit item properties"
         },
         {
           "keys": "Shift+O",
-          "description": "Inspect a held item or an item on your square; choose from a list when needed"
+          "description": "Read all item properties"
         },
         {
           "keys": "D",
-          "description": "Choose an item to pick up or drop; held items and items on your square are listed together"
+          "description": "Pick up or drop item"
         },
         {
           "keys": "Z",
-          "description": "Manage held items or items on your square (delete/transfer when permitted; drop before transferring)"
+          "description": "Manage items"
         },
         {
           "keys": "Enter",
-          "description": "Use a held item or an item on your square; choose from a list when needed"
+          "description": "Use item"
         },
         {
           "keys": "Shift+Enter",
-          "description": "Secondary action for a held item or an item on your square; choose from a list when needed"
+          "description": "Secondary item action"
         }
       ]
     },

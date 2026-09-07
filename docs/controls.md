@@ -23,8 +23,8 @@ This document is the authoritative keymap for the client.
 - `Escape`: Press once for disconnect prompt, press again to disconnect
 
 ### Users, Nickname, Chat
-- `L`: Locate nearest user; appends what they are carrying, if anything
-- `Shift+L`: List users alphabetically with current presence and any carried items at the end of each entry; `Enter` teleports to selected user; `ArrowLeft`/`ArrowRight` adjust selected user volume
+- `L`: Locate nearest user
+- `Shift+L`: List users alphabetically with current presence; `Enter` teleports to selected user; `ArrowLeft`/`ArrowRight` adjust selected user volume
 - `U`: Speak connected users
 - `N`: Edit nickname
 - `/`: Start chat
@@ -37,19 +37,17 @@ This document is the authoritative keymap for the client.
 - `<` / `>`: First/last message
 
 ### Items
-- `H`: Speak what you are holding, or that you are holding nothing
+- `H`: What are you holding?
 - `I`: Locate nearest item
 - `Shift+I`: List items and teleport to selected item with `Enter`
 - `A`: Add item
-- `O`: Edit properties of a held item or an item on your square
-- `Shift+O`: Inspect all properties of a held item or an item on your square
-- `D`: Pick up/drop item; when several items are available, choose from a list labeled “Pick up” or “Drop”
-- `Z`: Item management for held items or items on your square (delete/transfer when permitted; drop before transferring)
+- `O`: Edit item properties
+- `Shift+O`: Inspect all item properties
+- `D`: Pick up or drop item
+- `Z`: Manage items
 - `Space` in item management menu: Read tooltip/help for the selected action
-- `Enter`: Use a held item or an item on your square
-- `Shift+Enter`: Secondary action for a held item or an item on your square
-- Item commands act directly when there is one target and open a selection list when there are several. Held items appear first and are announced as “item name, held”; items held by other users are excluded.
-- Carrying defaults to at most two items, configured by the server. `H` announces all held items.
+- `Enter`: Use item
+- `Shift+Enter`: Secondary item action
 - For an elevator, `Enter` calls or starts opening it, enters or exits only after the door is fully open, and has no boarding effect while the door is opening or closing.
 
 ### World Builder
