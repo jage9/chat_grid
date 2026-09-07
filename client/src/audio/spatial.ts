@@ -90,17 +90,22 @@ export function configureSpatialAudio(
   const scene = sceneFor(context);
   const heading = normalizeDegrees(facingDeg);
   if (scene.mode === mode && scene.outputMode === outputMode && scene.facingDeg === heading) return;
+  const angle = heading * Math.PI / 180;
+  const listener = context.listener;
+  if (listener.forwardX) {
+    listener.forwardX.setTargetAtTime(Math.sin(angle), context.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
+    listener.forwardY.setTargetAtTime(0, context.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
+    listener.forwardZ.setTargetAtTime(-Math.cos(angle), context.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
+    listener.upX.value = 0;
+    listener.upY.value = 1;
+    listener.upZ.value = 0;
+  } else {
+    // Firefox exposes listener orientation through this method, without the AudioParams.
+    listener.setOrientation(Math.sin(angle), 0, -Math.cos(angle), 0, 1, 0);
+  }
   scene.mode = mode;
   scene.outputMode = outputMode;
   scene.facingDeg = heading;
-  const angle = heading * Math.PI / 180;
-  const listener = context.listener;
-  listener.forwardX.setTargetAtTime(Math.sin(angle), context.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
-  listener.forwardY.setTargetAtTime(0, context.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
-  listener.forwardZ.setTargetAtTime(-Math.cos(angle), context.currentTime, SPATIAL_TIME_CONSTANT_SECONDS);
-  listener.upX.value = 0;
-  listener.upY.value = 1;
-  listener.upZ.value = 0;
   for (const [panner, mix] of scene.panners) updateSpatialPanner(panner, mix);
 }
 

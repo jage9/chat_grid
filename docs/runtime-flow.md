@@ -61,6 +61,7 @@ Radio metadata polling is limited to stations near a listener, deduplicated by s
 
 - Voice, world samples and locate tones, radios, item emitters, elevator ambience, and piano notes use the same positional renderer in `audio/spatial.ts`.
 - Both standard and HRTF modes use a browser `PannerNode`; only its panning model changes (`equalpower` or `HRTF`). The application owns distance gain, source directionality, wall filtering, and acoustic-zone transmission. Browser distance attenuation is disabled to avoid applying a second distance curve.
+- Listener orientation uses AudioParams where available and `setOrientation` on browsers such as Firefox that expose only the method. Both APIs feed the same spatial renderer.
 - Positions use listener-relative world coordinates, mapping grid north (`+y`) to audio forward (`-z`) and world height to audio up. Server-owned facing rotates the audio listener. Arrows retain compass movement; separate turning keys are not assigned yet.
 - `Shift+4` switches active and future sources immediately and saves the listener's preference in browser storage. Standard mode is the default. Mono centers and downmixes positional sources while preserving the HRTF preference for a return to stereo.
 - Sustained piano notes and release tails update their source position and transmission as the listener or item moves. The shared world transmission resolver also serves voice, sampled world sounds, radio, and emit audio.
