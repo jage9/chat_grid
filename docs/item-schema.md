@@ -30,7 +30,7 @@
 - `emitSound`: optional continuously-looping spatial sound emitted from the item on the grid; global item field and not user-editable in V1.
 - `capabilities`, `useSound`, and `emitSound` are derived from global item-type definitions at runtime (not stored per-instance in persisted state).
 - `carrierId`: carrying connection ID or `null` when on the grid. Several items may reference one carrier, up to the server’s `items.max_carried_items` limit (default `2`). Carrying is separate from ownership and is cleared on disconnect/restart.
-- Handing an item updates `carrierId`, position, update audit fields, and version without changing ownership. The server checks range, floor, online status, carrying capacity, and pickup permissions both when listing recipients and when handing it over. Ownership transfer applies to ground items and does not move them.
+- Handing an item updates `carrierId`, position, update audit fields, and version without changing ownership. The server checks range, floor, online status, carrying capacity, and pickup permissions both when listing recipients and when handing it over. Ownership transfer applies to items on the sender’s square or held by the sender; it leaves position and carrier unchanged and does not depend on recipient carrying capacity or proximity.
 - `createdBy` / `updatedBy` are stable user IDs.
 - `createdByName` / `updatedByName` are display-name snapshots used for inspect/readout text.
 - `useCooldownMs`: global per item type (`radio_station=1000`, `dice=1000`, `wheel=4000`, `clock=1000`, `widget=1000`, `piano=1000`), not per-instance editable.

@@ -46,7 +46,7 @@ This document is the authoritative keymap for the client.
 - `D`: Pick up or drop item
 - `Z`: Manage items
 - `Hand to user`: Select an eligible nearby user to receive a held item without changing ownership.
-- `Transfer ownership`: Change a ground item’s owner without moving it.
+- `Transfer ownership`: Change an item’s owner without moving it or changing who holds it.
 - `Space` in item management menu: Read tooltip/help for the selected action
 - `Enter`: Use item
 - `Shift+Enter`: Secondary item action

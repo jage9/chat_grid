@@ -568,16 +568,19 @@ class ItemRuntime:
         if not transfer_targets_item:
             await self.send_result(client, False, "transfer", "Item not found.")
             return
-        if transfer_targets_item.carrierId:
+        if transfer_targets_item.carrierId not in (None, client.id):
             await self.send_result(
                 client,
                 False,
                 "transfer",
-                "Item cannot be transferred while carried.",
+                "Item is carried by another user.",
                 transfer_targets_item.id,
             )
             return
-        if not self.item_is_on_client_square(transfer_targets_item, client):
+        if (
+            transfer_targets_item.carrierId is None
+            and not self.item_is_on_client_square(transfer_targets_item, client)
+        ):
             await self.send_result(
                 client,
                 False,
@@ -634,16 +637,18 @@ class ItemRuntime:
         if not transfer_item:
             await self.send_result(client, False, "transfer", "Item not found.")
             return
-        if transfer_item.carrierId:
+        if transfer_item.carrierId not in (None, client.id):
             await self.send_result(
                 client,
                 False,
                 "transfer",
-                "Item cannot be transferred while carried.",
+                "Item is carried by another user.",
                 transfer_item.id,
             )
             return
-        if not self.item_is_on_client_square(transfer_item, client):
+        if transfer_item.carrierId is None and not self.item_is_on_client_square(
+            transfer_item, client
+        ):
             await self.send_result(
                 client,
                 False,

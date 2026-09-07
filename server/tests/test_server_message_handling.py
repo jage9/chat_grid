@@ -1098,8 +1098,9 @@ async def test_item_transfer_accepts_offline_target_user_id(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("carried_by_actor", [False, True], ids=["ground", "held"])
 async def test_item_transfer_targets_lists_online_and_offline(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, carried_by_actor: bool
 ) -> None:
     server = SignalingServer(
         "127.0.0.1", 8765, None, None, auth_db_path=tmp_path / "auth.db", grid_size=41
@@ -1153,7 +1154,15 @@ async def test_item_transfer_targets_lists_online_and_offline(
     item = server.item_service.default_item(owner, "dice")
     item.x = actor.x
     item.y = actor.y
+    if carried_by_actor:
+        item.carrierId = actor.id
     server.item_service.add_item(item)
+    online_carried_items = [
+        server.item_service.default_item(online, "dice") for _ in range(2)
+    ]
+    for online_item in online_carried_items:
+        online_item.carrierId = online.id
+        server.item_service.add_item(online_item)
 
     send_payloads: list[object] = []
 
@@ -1751,12 +1760,22 @@ async def test_hand_item_rejects_offline_recipient_without_mutation(
 
 
 @pytest.mark.asyncio
-async def test_transfer_rejects_item_carried_by_sender(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("target_online", [True, False], ids=["online", "offline"])
+async def test_transfer_allows_item_carried_by_sender_without_moving_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, target_online: bool
 ) -> None:
-    """Ownership transfer keeps the previous ground-only restriction."""
+    """Ownership transfer changes only ownership for an item held by the sender."""
 
-    server = SignalingServer("127.0.0.1", 8765, None, None, grid_size=41)
+    server = SignalingServer(
+        "127.0.0.1",
+        8765,
+        None,
+        None,
+        auth_db_path=tmp_path / "auth.db",
+        grid_size=41,
+    )
+    owner_session = server.auth_service.register("held_owner", "password99")
+    target_session = server.auth_service.register("held_target", "password99")
     owner_ws = _fake_ws()
     owner = _activate_client(
         ClientConnection(
@@ -1764,8 +1783,8 @@ async def test_transfer_rejects_item_carried_by_sender(
             id="u1",
             nickname="owner",
             authenticated=True,
-            user_id="1",
-            username="owner_user",
+            user_id=owner_session.user.id,
+            username=owner_session.user.username,
             permissions={"item.transfer.own"},
             x=5,
             y=6,
@@ -1773,10 +1792,38 @@ async def test_transfer_rejects_item_carried_by_sender(
         )
     )
     server.clients[owner_ws] = owner
+    if target_online:
+        target_ws = _fake_ws()
+        target = _activate_client(
+            ClientConnection(
+                websocket=target_ws,
+                id="u2",
+                nickname="target",
+                authenticated=True,
+                user_id=target_session.user.id,
+                username=target_session.user.username,
+                permissions=set(),
+                x=20,
+                y=20,
+                z=40,
+            )
+        )
+        server.clients[target_ws] = target
     item = server.item_service.default_item(owner, "dice")
     item.carrierId = owner.id
+    item.x = owner.x
+    item.y = owner.y
+    item.z = owner.z
     server.item_service.add_item(item)
-    original_state = (item.carrierId, item.createdBy, item.version)
+    if target_online:
+        target_items = [
+            server.item_service.default_item(target, "dice") for _ in range(2)
+        ]
+        for target_item in target_items:
+            target_item.carrierId = target.id
+            server.item_service.add_item(target_item)
+    original_position = (item.x, item.y, item.z)
+    original_version = item.version
     send_payloads: list[object] = []
 
     async def fake_send(websocket: ServerConnection, packet: object) -> None:
@@ -1786,14 +1833,23 @@ async def test_transfer_rejects_item_carried_by_sender(
 
     await server._handle_message(
         owner,
-        json.dumps({"type": "item_transfer", "itemId": item.id, "targetUserId": "2"}),
+        json.dumps(
+            {
+                "type": "item_transfer",
+                "itemId": item.id,
+                "targetUserId": target_session.user.id,
+            }
+        ),
     )
 
-    assert (item.carrierId, item.createdBy, item.version) == original_state
+    assert item.createdBy == target_session.user.id
+    assert item.createdByName == target_session.user.username
+    assert item.carrierId == owner.id
+    assert (item.x, item.y, item.z) == original_position
+    assert item.version == original_version + 1
     result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
-    assert result.ok is False
+    assert result.ok is True
     assert result.action == "transfer"
-    assert "while carried" in result.message.lower()
 
 
 @pytest.mark.asyncio
@@ -1895,7 +1951,7 @@ async def test_held_item_transfer_rejects_item_carried_by_someone_else(
     assert (item.carrierId, item.createdBy, item.version) == original_state
     result = _last_packet_of_type(send_payloads, ItemActionResultPacket)
     assert result.ok is False
-    assert "while carried" in result.message.lower()
+    assert "carried by another" in result.message.lower()
 
 
 @pytest.mark.asyncio

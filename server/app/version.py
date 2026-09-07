@@ -9,7 +9,7 @@ the whole app.
 from __future__ import annotations
 
 
-SERVER_REVISION = "S400"
+SERVER_REVISION = "S401"
 
 
 def format_server_version(release_version: str) -> str:

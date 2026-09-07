@@ -9,7 +9,7 @@ This is behavior-focused documentation for item types and their defaults.
 - All held items follow movement, teleport, and elevator travel, and drop at the final tile on disconnect. Ownership is unchanged.
 - Use, secondary use, edit, inspect, and management offer held items alongside items on the current square.
 - “Hand to user” moves a held item without changing ownership. Recipients must be online, on the same floor within five squares (including diagonals), have a free carrying slot, and have pickup permission for that item.
-- “Transfer ownership” changes ownership of a ground item without moving it and allows offline recipients.
+- “Transfer ownership” changes ownership of an item on your square or in your hands without moving it or changing its carrier. Recipients may be offline, distant, or carrying their maximum number of items.
 - Global per-type fields are injected by the server and are not persisted per-instance:
   - `capabilities`
   - `useSound`

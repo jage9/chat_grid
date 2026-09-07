@@ -107,7 +107,7 @@ Core incoming message effects:
 - Item action menus combine held items with ground items on the current square. `D` selects a pickup or drop action by item; use, secondary use, edit, inspect, and management likewise select one target when there are several.
 
 - Selecting “Hand to user” requests eligible recipients from the server: online, on the same floor within five grid squares (Chebyshev distance), with pickup permission and a free carrying slot. Selecting a name sends the hand request; the server rechecks eligibility before moving the item into that user’s hands, leaving ownership unchanged.
-- “Transfer ownership” retains the ground-item ownership-only flow, including offline recipients and confirmation.
+- “Transfer ownership” works for items on your square or in your hands, including offline recipients and confirmation. Only ownership changes; carrier and position stay unchanged, with no recipient range or capacity requirement.
 
 ## Authorization Runtime
 

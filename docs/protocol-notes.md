@@ -29,8 +29,8 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `chat_message`: player chat.
 - `ping`: latency measurement.
 - `item_add`, `item_pickup`, `item_drop`, `item_delete`, `item_use`, `item_update`: item actions.
-- `item_transfer_targets`: request active ownership-transfer accounts, including offline accounts and excluding the current owner. The item must be on the ground at the sender’s square.
-- `item_transfer`: transfer ground-item ownership to another account (`targetUserId` required), without moving it.
+- `item_transfer_targets`: request active ownership-transfer accounts, including offline accounts and excluding the current owner. The item must be on the ground at the sender’s square or held by the sender.
+- `item_transfer`: transfer item ownership to another account (`targetUserId` required), without moving it or changing its carrier.
 - `item_hand_targets`: request eligible recipients for an item held by the sender: online, another user on the same floor within five grid squares (Chebyshev distance), with pickup permission for the item and a free carrying slot. The sender also needs pickup/drop permission.
 - `item_hand`: hand the held item to `targetUserId`. Recheck the sender and recipient conditions before changing carrier and position; ownership stays unchanged.
 - `item_secondary_use`: trigger type-specific secondary action when implemented.
@@ -86,7 +86,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `item_action_result` messages are intended for direct screen-reader/user status feedback.
   - `action` includes: `add`, `pickup`, `drop`, `delete`, `transfer`, `hand`, `use`, `secondary_use`, `update`
 - Successful `item_pickup` and `item_drop` also emit system chat lines to other users in the room.
-- Ownership transfer is account-based and ground-only; recipients may be offline. Handing an item changes only possession, requires the sender to hold it, and validates recipient eligibility again on execution. Failed handoffs leave ownership, carrier, position, and audit fields unchanged.
+- Ownership transfer is account-based and permits ground items on the sender’s square or items held by the sender; recipients may be offline, distant, or at carrying capacity. Handing an item changes only possession, requires the sender to hold it, and validates recipient eligibility again on execution. Failed handoffs leave ownership, carrier, position, and audit fields unchanged.
 - Piano runtime control no longer depends on parsing `item_action_result.message` text.
 - `item_piano_status` carries machine-readable piano events (`use_mode_entered`, record/playback transitions).
 - `item_use_sound` contains absolute item world coordinates (`x`, `y`, `z`), source `acousticZoneId`, and sound path.
