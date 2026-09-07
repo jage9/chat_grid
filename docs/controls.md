@@ -71,6 +71,9 @@ This document is the authoritative keymap for the client.
 - New curtain, glass, and fence walls use their matching contact sounds; brick uses the standard wall sound. Builders may edit any wall's sound URL.
 
 ### Audio
+
+The number-key audio toggles act once per press; holding a key does not toggle repeatedly.
+
 - `P`: Ping server
 - `V`: Set microphone gain
 - `Shift+V`: Microphone calibration

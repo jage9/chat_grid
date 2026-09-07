@@ -65,6 +65,26 @@ describe('shared spatial renderer', () => {
     expect(remote.positionZ.value).toBe(6);
   });
 
+  it('supports turning and HRTF changes when the listener only exposes setOrientation', () => {
+    const ctx = context();
+    const setOrientation = vi.fn();
+    Object.defineProperty(ctx, 'listener', { value: { setOrientation } });
+    const panner = createSpatialPanner(ctx);
+    updateSpatialPanner(panner, resolveSpatialMix({ dx: 5, dy: 0, range: 15 }));
+
+    for (const heading of [0, 90, 180, 270, 45]) {
+      expect(() => configureSpatialAudio(ctx, 'standard', 'stereo', heading)).not.toThrow();
+    }
+    expect(setOrientation).toHaveBeenLastCalledWith(
+      Math.sin(Math.PI / 4), 0, -Math.cos(Math.PI / 4), 0, 1, 0,
+    );
+    expect(() => configureSpatialAudio(ctx, 'hrtf', 'stereo', 45)).not.toThrow();
+    expect(panner.panningModel).toBe('HRTF');
+    expect(createSpatialPanner(ctx).panningModel).toBe('HRTF');
+    configureSpatialAudio(ctx, 'standard', 'stereo', 45);
+    expect(panner.panningModel).toBe('equalpower');
+  });
+
   it('stops updating disposed sources', () => {
     const ctx = context();
     const panner = createSpatialPanner(ctx);
