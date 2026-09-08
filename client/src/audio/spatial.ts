@@ -21,6 +21,7 @@ export type SpatialMixResult = {
   dz: number;
   distance: number;
   gain: number;
+  pan: number;
 };
 
 export const SPATIAL_RAMP_SECONDS = 0.2;
@@ -76,9 +77,17 @@ export function updateSpatialPanner(panner: PannerNode, mix: SpatialMixResult | 
   const centered = !mix || (mix.dx === 0 && mix.dy === 0 && mix.dz === 0) || scene.outputMode === 'mono';
   // Keep the native listener fixed and rotate sources into its frame. This uses
   // the same smoothed AudioParams in every browser, including Firefox.
-  const x = centered ? 0 : mix.dx * Math.cos(angle) - mix.dy * Math.sin(angle);
-  const y = centered ? 0 : mix.dz;
-  const z = centered ? -1 : -(mix.dx * Math.sin(angle) + mix.dy * Math.cos(angle));
+  let x = centered ? 0 : mix.dx * Math.cos(angle) - mix.dy * Math.sin(angle);
+  let y = centered ? 0 : mix.dz;
+  let z = centered ? -1 : -(mix.dx * Math.sin(angle) + mix.dy * Math.cos(angle));
+  if (!centered && scene.mode === 'standard') {
+    // Preserve the original range-based stereo pan using the same renderer.
+    // A front-hemisphere azimuth of pan * 90 degrees matches StereoPannerNode.
+    const panAngle = mix.pan * Math.PI / 2;
+    x = Math.sin(panAngle);
+    y = 0;
+    z = -Math.cos(panAngle);
+  }
   const now = panner.context.currentTime;
   panner.positionX.setTargetAtTime(x, now, SPATIAL_TIME_CONSTANT_SECONDS);
   panner.positionY.setTargetAtTime(y, now, SPATIAL_TIME_CONSTANT_SECONDS);
@@ -160,7 +169,8 @@ export function resolveSpatialMix(options: SpatialMixOptions): SpatialMixResult 
   }
 
   const centered = nearFieldCenterPan && nearFieldDistance !== undefined && distance < nearFieldDistance;
-  return { distance, gain, dx: centered ? 0 : dx, dy: centered ? 0 : dy, dz: centered ? 0 : dz };
+  const pan = centered ? 0 : Math.sin(Math.max(-1, Math.min(1, dx / range)) * Math.PI / 2);
+  return { distance, gain, pan, dx: centered ? 0 : dx, dy: centered ? 0 : dy, dz: centered ? 0 : dz };
 }
 
 export function resolveDirectionalMuffleRatio(

@@ -46,8 +46,43 @@ describe('shared spatial renderer', () => {
     );
     expect(ctx.listener.forwardX.setTargetAtTime).not.toHaveBeenCalled();
     configureSpatialAudio(ctx, 'standard', 'stereo', heading);
-    expect(panner.positionX.value).toBe(5);
-    expect(panner.positionZ.value).toBeCloseTo(0);
+    expect(panner.positionX.value).toBeCloseTo(Math.sin(mix.pan * Math.PI / 2));
+    expect(panner.positionY.value).toBe(0);
+    expect(panner.positionZ.value).toBeCloseTo(-Math.cos(mix.pan * Math.PI / 2));
+  });
+
+  it.each([
+    { name: 'right', dx: 1, dy: 0, range: 15, expectedPan: Math.sin(Math.PI / 30) },
+    { name: 'left', dx: -1, dy: 0, range: 15, expectedPan: -Math.sin(Math.PI / 30) },
+    { name: 'front', dx: 0, dy: 1, range: 15, expectedPan: 0 },
+    { name: 'back', dx: 0, dy: -1, range: 15, expectedPan: 0 },
+    { name: 'right at a shorter range', dx: 1, dy: 0, range: 10, expectedPan: Math.sin(Math.PI / 20) },
+    { name: 'right at a longer range', dx: 1, dy: 0, range: 20, expectedPan: Math.sin(Math.PI / 40) },
+  ])('preserves legacy normalized pan for one square $name', ({ dx, dy, range, expectedPan }) => {
+    const ctx = context();
+    const panner = createSpatialPanner(ctx);
+    const mix = resolveSpatialMix({ dx, dy, range })!;
+
+    expect(mix.pan).toBeCloseTo(expectedPan);
+    updateSpatialPanner(panner, mix);
+    expect(panner.positionX.value).toBeCloseTo(Math.sin(expectedPan * Math.PI / 2));
+    expect(panner.positionY.value).toBe(0);
+    expect(panner.positionZ.value).toBeCloseTo(-Math.cos(expectedPan * Math.PI / 2));
+  });
+
+  it('restores the same source between standard and HRTF modes', () => {
+    const ctx = context();
+    const panner = createSpatialPanner(ctx);
+    const mix = resolveSpatialMix({ dx: 1, dy: 0, range: 15 })!;
+    updateSpatialPanner(panner, mix);
+    const standardPosition = [panner.positionX.value, panner.positionY.value, panner.positionZ.value];
+
+    configureSpatialAudio(ctx, 'hrtf', 'stereo', 90);
+    expect(panner.positionX.value).toBeCloseTo(0);
+    expect(panner.positionY.value).toBe(0);
+    expect(panner.positionZ.value).toBeCloseTo(-1);
+    configureSpatialAudio(ctx, 'standard', 'stereo', 90);
+    expect([panner.positionX.value, panner.positionY.value, panner.positionZ.value]).toEqual(standardPosition);
   });
 
   it('keeps co-located sounds centered throughout turns and restores spatial audio after mono', () => {

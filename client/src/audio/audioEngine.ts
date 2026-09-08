@@ -651,7 +651,7 @@ export class AudioEngine {
           range: HEARING_RADIUS,
           baseGain,
         })
-      : { gain: baseGain, distance: 0, dx: 0, dy: 0, dz: 0 };
+      : { gain: baseGain, distance: 0, pan: 0, dx: 0, dy: 0, dz: 0 };
     if (!resolved) return;
     const finalGain = resolved.gain;
 

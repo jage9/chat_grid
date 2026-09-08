@@ -91,14 +91,17 @@ describe('AudioEngine spatial preferences', () => {
     updateSpatialPanner(panner, resolveSpatialMix({ dx: 5, dy: 0, range: 15 }));
 
     audio.setListenerFacing(90);
-    expect(panner.positionX.value).toBe(5);
+    expect(panner.positionX.value).toBeCloseTo(Math.sin(Math.PI / 4));
+    expect(panner.positionZ.value).toBeCloseTo(-Math.cos(Math.PI / 4));
     audio.setSpatialMode('hrtf');
     expect(panner.positionX.value).toBeCloseTo(0);
     expect(panner.positionZ.value).toBeCloseTo(-5);
     audio.setSpatialMode('standard');
-    expect(panner.positionX.value).toBe(5);
+    expect(panner.positionX.value).toBeCloseTo(Math.sin(Math.PI / 4));
+    expect(panner.positionZ.value).toBeCloseTo(-Math.cos(Math.PI / 4));
     audio.setListenerFacing(225);
-    expect(panner.positionX.value).toBe(5);
+    expect(panner.positionX.value).toBeCloseTo(Math.sin(Math.PI / 4));
+    expect(panner.positionZ.value).toBeCloseTo(-Math.cos(Math.PI / 4));
     audio.setSpatialMode('hrtf');
     expect(panner.positionX.value).toBeCloseTo(-5 / Math.sqrt(2));
     expect(panner.positionZ.value).toBeCloseTo(5 / Math.sqrt(2));
@@ -174,7 +177,9 @@ describe('AudioEngine spatial preferences', () => {
     expect(standardGain).toBeGreaterThan(0);
     expect(standardFilter).toBe(900);
     expect(peer.panner?.panningModel).toBe('equalpower');
-    expect(peer.panner?.positionX.value).toBeCloseTo(4);
+    expect(peer.panner?.positionX.value).toBeCloseTo(Math.sin(Math.sin(Math.PI / 10) * Math.PI / 2));
+    expect(peer.panner?.positionY.value).toBe(0);
+    expect(peer.panner?.positionZ.value).toBeCloseTo(-Math.cos(Math.sin(Math.PI / 10) * Math.PI / 2));
 
     audio.setSpatialMode('hrtf');
     audio.setListenerFacing(90);
@@ -195,5 +200,8 @@ describe('AudioEngine spatial preferences', () => {
     audio.updateSpatialAudio([peer], listener);
     expect(gainTarget.mock.calls[gainTarget.mock.calls.length - 1]?.[0]).toBe(0);
     expect(filterTarget.mock.calls[filterTarget.mock.calls.length - 1]?.[0]).toBe(120);
+    expect(peer.panner?.positionX.value).toBe(0);
+    expect(peer.panner?.positionY.value).toBe(0);
+    expect(peer.panner?.positionZ.value).toBe(-1);
   });
 });
