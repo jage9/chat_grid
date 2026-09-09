@@ -202,7 +202,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 
 - `welcome.ambiances` contains server-owned inclusive rectangles: `id`, `name`, `soundId`, `floorZ`, `startX`, `startY`, `endX`, `endY`, `volume`, `fadeDistance`.
 - `welcome.worldConfig.ambianceTypes` contains the server-discovered `{id, title, url}` sound catalog.
-- `ambiance_add` creates a default one-square region at the caller's position; the first configured sound is selected, volume is 25, and Fade distance is 3.
+- `ambiance_add` creates a default one-square region at the caller's position; its name is Ambiance, the first configured sound is selected, volume is 25, and Fade distance is 5.
 - `ambiance_update` carries `ambianceId` and optional `name`, `soundId`, `volume`, and `fadeDistance`. Type selection does not reset the other properties.
 - `ambiance_resize` carries `ambianceId`, `edge` (`west`, `east`, `south`, `north`), and `delta` (-1 or 1). `ambiance_slide` carries `ambianceId`, `axis` (`x`, `y`), and `delta` (-1 or 1). These are atomic server-relative edits.
 - `ambiance_delete` carries `ambianceId`.

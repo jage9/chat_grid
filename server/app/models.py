@@ -571,7 +571,7 @@ class AmbianceRegion(BaseModel):
     endX: StrictInt = Field(ge=0)
     endY: StrictInt = Field(ge=0)
     volume: StrictInt = Field(default=25, ge=0, le=100)
-    fadeDistance: FiniteFloat = Field(default=3.0, ge=0.0, le=100.0)
+    fadeDistance: FiniteFloat = Field(default=5.0, ge=0.0, le=100.0)
 
 
 class AmbianceType(BaseModel):

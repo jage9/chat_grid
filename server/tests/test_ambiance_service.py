@@ -172,6 +172,8 @@ def test_regions_validate_geometry_and_persist_missing_assets(tmp_path: Path) ->
 
     service = make_service(tmp_path)
     region = service.add_ambiance(builder(x=1, y=1, z=40))
+    assert region.name == "Ambiance"
+    assert region.fadeDistance == 5
     updated = service.resize_ambiance(region.id, edge="east", delta=1)
     updated = service.slide_ambiance(updated.id, axis="y", delta=1)
     updated = service.update_ambiance(

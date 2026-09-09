@@ -149,7 +149,7 @@ class AmbianceService:
             raise AmbianceError("No ambiance sounds are available.")
         region = AmbianceRegion(
             id=str(uuid.uuid4()),
-            name=first_type.title,
+            name="Ambiance",
             soundId=first_type.id,
             floorZ=client.z,
             startX=client.x,

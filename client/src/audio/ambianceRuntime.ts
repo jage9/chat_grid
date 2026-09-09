@@ -10,7 +10,7 @@ import {
 } from './spatial';
 
 const DEFAULT_VOLUME_PERCENT = 25;
-const DEFAULT_FADE_DISTANCE = 3;
+const DEFAULT_FADE_DISTANCE = 5;
 const PLAY_RETRY_DELAY_MS = 5_000;
 const PLAY_MAX_FAILURES = 3;
 
