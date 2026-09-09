@@ -6,6 +6,7 @@ import {
   createSpatialPanner,
   disconnectSpatialPanner,
   resolveSpatialMix,
+  SPATIAL_TIME_CONSTANT_SECONDS,
 } from './spatial';
 
 const DEFAULT_VOLUME_PERCENT = 25;
@@ -84,7 +85,7 @@ export function resolveAmbianceSpatialResolution(
   const falloff = inside
     ? 1
     : fadeDistance > 0
-    ? Math.max(0, Math.min(1, 1 - distance / fadeDistance))
+    ? Math.max(0, Math.min(1, 1 - distance / fadeDistance)) ** 2
     : 0;
   const volume = clampNumber(region.volume, 0, 100, DEFAULT_VOLUME_PERCENT) / 100;
 
@@ -123,6 +124,7 @@ type AmbianceOutput = {
   occlusionFilter: BiquadFilterNode;
   panner: PannerNode;
   media: SharedMediaSource;
+  silentUntil?: number;
 };
 
 type PlayFailure = {
@@ -183,9 +185,22 @@ export class AmbianceRuntime {
       if (!region || typeof region.id !== 'string') continue;
       const type = this.types.get(region.soundId);
       const resolution = resolveAmbianceSpatialResolution(region, listener);
-      if (!type || !resolution || !isAmbianceOnListenerFloor(region, listener)
-        || (!resolution.inside && resolution.falloff <= 0)) {
+      if (!type || !resolution || !isAmbianceOnListenerFloor(region, listener)) {
         this.cleanupOutput(region.id);
+        continue;
+      }
+
+      if (!resolution.inside && resolution.falloff <= 0) {
+        const output = this.outputs.get(region.id);
+        if (output) {
+          const now = this.audio.context.currentTime;
+          if (output.silentUntil === undefined) {
+            output.gain.gain.setTargetAtTime(0, now, SPATIAL_TIME_CONSTANT_SECONDS);
+            output.silentUntil = now + SPATIAL_TIME_CONSTANT_SECONDS * 6;
+          }
+          if (now < output.silentUntil) activeIds.add(region.id);
+          else this.cleanupOutput(region.id);
+        }
         continue;
       }
 
@@ -202,6 +217,7 @@ export class AmbianceRuntime {
         output = created;
         this.outputs.set(region.id, created);
       }
+      output.silentUntil = undefined;
       this.applyOutputMix(output, region, listener);
       void this.tryStartMedia(output.media, this.generation);
     }
@@ -381,7 +397,7 @@ export class AmbianceRuntime {
         })
       : null;
     // Keep resolveSpatialMix's shared direction/pan, but replace its shaped
-    // distance gain with the rectangle's linear falloff.
+    // distance gain with the rectangle's squared falloff.
     const mix = baseMix
       ? { ...baseMix, gain: resolution.volume * resolution.falloff * acoustic.gain }
       : null;

@@ -174,7 +174,7 @@ On disconnect:
 
 ## Ambiance audio
 
-The server persists authored ambiance rectangles and supplies the sound catalog. Welcome replaces the client's region snapshot; live upserts/removals update it without restarting the session. Each active loop uses the nearest point on its region rather than the rectangle center. Inside is centered at the configured volume; outside fades linearly over Fade distance. Regions can overlap. Wall and acoustic-zone transmission applies at that nearest point before the shared standard/HRTF panner. The World layer controls all ambiance loops, and disconnect releases them.
+The server persists authored ambiance rectangles and supplies the sound catalog. Welcome replaces the client's region snapshot; live upserts/removals update it without restarting the session. Each active loop uses the nearest point on its region rather than the rectangle center. Inside is centered at the configured volume; outside uses `(1 - distance / fadeDistance)²`, clamped to silence beyond Fade distance. Gain and direction use shared spatial smoothing; leaving range fades the existing loop to silence before releasing its graph. Regions can overlap. Wall and acoustic-zone transmission applies at that nearest point before the shared standard/HRTF panner. The World layer controls all ambiance loops, and disconnect releases them.
 
 ## Item teleport transitions
 

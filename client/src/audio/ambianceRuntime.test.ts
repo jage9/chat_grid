@@ -6,6 +6,7 @@ import {
   resolveAmbianceSpatialResolution,
 } from './ambianceRuntime';
 import type { AmbianceRegion } from '../state/gameState';
+import { SPATIAL_TIME_CONSTANT_SECONDS } from './spatial';
 
 type FakeParam = {
   value: number;
@@ -148,13 +149,13 @@ describe('ambiance rectangle geometry', () => {
     expect(resolved.source).toMatchObject({ x: 4, y: 2, z: 0, acousticZoneId: 'floor:0' });
   });
 
-  it('uses the nearest rectangle point for linear fade and direction', () => {
+  it('uses the nearest rectangle point for a strong squared fade and direction', () => {
     const item = region({ startX: 10, startY: 10, endX: 14, endY: 14, fadeDistance: 4 });
     const resolved = resolveAmbianceSpatialResolution(item, listener({ x: 8, y: 12 }))!;
 
     expect(getAmbianceNearestPoint(item, listener({ x: 8, y: 12 }))).toEqual({ x: 10, y: 12 });
     expect(resolved.distance).toBe(2);
-    expect(resolved.falloff).toBe(0.5);
+    expect(resolved.falloff).toBe(0.25);
     expect(resolved.source.x).toBe(10);
     expect(resolved.source.y).toBe(12);
   });
@@ -167,6 +168,32 @@ describe('ambiance rectangle geometry', () => {
 });
 
 describe('AmbianceRuntime', () => {
+  it('smooths movement and fades to silence before releasing an out-of-range loop', () => {
+    const context = new FakeAudioContext();
+    const media = installMedia().media;
+    const runtime = new AmbianceRuntime(makeAudio(context), () => ({ gain: 1, lowpassHz: 20_000 }));
+    runtime.setTypes([{ id: 'water', title: 'Water', url: '/sounds/water.ogg' }]);
+    runtime.update([region()], listener(), true);
+    const gain = (context.gains[0] as unknown as { gain: FakeParam }).gain;
+    runtime.update([region()], listener({ x: 6 }), true);
+    expect(gain.setTargetAtTime).toHaveBeenLastCalledWith(0.125, 0, SPATIAL_TIME_CONSTANT_SECONDS);
+    const pan = context.panners[0] as unknown as { positionX: FakeParam };
+    expect(pan.positionX.setTargetAtTime.mock.calls.at(-1)?.[2]).toBe(SPATIAL_TIME_CONSTANT_SECONDS);
+
+    runtime.update([region()], listener({ x: 8 }), true);
+    expect(gain.setTargetAtTime).toHaveBeenLastCalledWith(0, 0, SPATIAL_TIME_CONSTANT_SECONDS);
+    expect(media[0].pause).not.toHaveBeenCalled();
+    context.currentTime = SPATIAL_TIME_CONSTANT_SECONDS * 3;
+    runtime.update([region()], listener({ x: 7 }), true);
+    expect(media).toHaveLength(1);
+    expect(media[0].pause).not.toHaveBeenCalled();
+    runtime.update([region()], listener({ x: 8 }), true);
+    context.currentTime += SPATIAL_TIME_CONSTANT_SECONDS * 6;
+    runtime.update([region()], listener({ x: 8 }), true);
+    expect(media[0].pause).toHaveBeenCalledOnce();
+    runtime.cleanup();
+  });
+
   it('allows overlapping regions, applies acoustic gain, and does not restart loops per frame', async () => {
     const context = new FakeAudioContext();
     const audio = makeAudio(context);
@@ -187,7 +214,7 @@ describe('AmbianceRuntime', () => {
 
     runtime.update([first, second], listener({ x: 6, y: 3 }), true);
     expect(mediaInstall.media[0].play).toHaveBeenCalledOnce();
-    expect((context.gains[0] as unknown as { gain: FakeParam }).gain.value).toBeCloseTo(0.1);
+    expect((context.gains[0] as unknown as { gain: FakeParam }).gain.value).toBeCloseTo(0.05);
     expect((context.panners[0] as unknown as { positionX: FakeParam }).positionX.value).toBeLessThan(0);
     expect(acoustic).toHaveBeenCalledWith(
       expect.objectContaining({ x: 4, y: 3, z: 0, acousticZoneId: 'floor:0' }),
