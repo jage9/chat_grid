@@ -1593,10 +1593,10 @@ class SignalingServer:
                     delta=packet.delta,
                 )
                 result_message = {
-                    "west": f"Start X: {ambiance.startX}",
-                    "east": f"End X: {ambiance.endX}",
-                    "south": f"Start Y: {ambiance.startY}",
-                    "north": f"End Y: {ambiance.endY}",
+                    "west": str(ambiance.startX),
+                    "east": str(ambiance.endX),
+                    "south": str(ambiance.startY),
+                    "north": str(ambiance.endY),
                 }[packet.edge]
             elif isinstance(packet, AmbianceSlidePacket):
                 ambiance = self.ambiance_service.slide_ambiance(
@@ -1605,9 +1605,9 @@ class SignalingServer:
                     delta=packet.delta,
                 )
                 result_message = (
-                    f"X: {ambiance.startX} to {ambiance.endX}"
+                    f"{ambiance.startX} to {ambiance.endX}"
                     if packet.axis == "x"
-                    else f"Y: {ambiance.startY} to {ambiance.endY}"
+                    else f"{ambiance.startY} to {ambiance.endY}"
                 )
             else:
                 removed = self.ambiance_service.remove(packet.ambianceId)

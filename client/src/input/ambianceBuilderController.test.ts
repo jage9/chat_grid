@@ -72,6 +72,20 @@ function openAmbianceActions(controller: ReturnType<typeof createWorldBuilderCon
 }
 
 describe('World Builder ambiance controls', () => {
+  it('announces one server-confirmed value for an arrow adjustment', () => {
+    const { controller, state, updateStatus } = setup();
+    openAmbianceActions(controller, state);
+    for (let index = 0; index < 8; index += 1) controller.handleAmbianceActions('ArrowDown', '');
+    updateStatus.mockClear();
+    controller.handleAmbianceActions('ArrowRight', '');
+    expect(updateStatus).not.toHaveBeenCalled();
+    controller.handleAmbianceActionResult({
+      ok: true, action: 'update', ambianceId: 'ambiance-1', message: '30 percent',
+    });
+    expect(updateStatus).toHaveBeenCalledTimes(1);
+    expect(updateStatus).toHaveBeenCalledWith('30 percent');
+  });
+
   it('adds directly from the root menu without type or direction menus', () => {
     const { controller, send, state } = setup();
 

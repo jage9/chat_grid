@@ -340,7 +340,6 @@ export function createAmbianceBuilderController(deps: WorldBuilderDeps & { onBac
         }
         deps.state.ambiances.set(ambiance.id, { ...latest, soundId: nextSoundId });
         if (!sendUpdate(ambiance.id, 'soundId', nextSoundId)) return;
-        deps.updateStatus(adjustment.displayValue);
         deps.blip();
         return;
       }
@@ -363,7 +362,6 @@ export function createAmbianceBuilderController(deps: WorldBuilderDeps & { onBac
         if (!hasPermission()) return;
         const value = Number(adjustment.value);
         if (!previewNumericValue(ambiance.id, currentAction, value)) return;
-        deps.updateStatus(adjustment.displayValue);
         if (adjustment.hitBoundary) deps.cancel();
         else deps.blip();
         return;

@@ -290,8 +290,7 @@ async def test_packet_mutations_require_permission_and_publish_before_result(
         ),
     )
     assert (
-        transport.last_packet_of_type(editor, AmbianceActionResultPacket).message
-        == "End X: 3"
+        transport.last_packet_of_type(editor, AmbianceActionResultPacket).message == "3"
     )
 
     transport.clear()
@@ -308,7 +307,7 @@ async def test_packet_mutations_require_permission_and_publish_before_result(
     )
     assert (
         transport.last_packet_of_type(editor, AmbianceActionResultPacket).message
-        == "Y: 3 to 3"
+        == "3 to 3"
     )
 
     transport.clear()

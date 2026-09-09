@@ -1809,7 +1809,7 @@ const onAppMessage = createOnMessageHandler({
   },
   setStructurePresets: (presets: StructurePreset[]) => worldBuilderController.setPresets(presets),
   setAmbianceTypes: (types) => {
-    ambianceRuntime.setTypes(types);
+    ambianceRuntime.setTypes(types.map((type) => ({ ...type, url: resolveIncomingSoundUrl(type.url) })));
     worldBuilderController.setAmbianceTypes(types);
   },
   refreshStructureGeometry: () => {
