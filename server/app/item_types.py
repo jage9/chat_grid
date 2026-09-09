@@ -17,6 +17,7 @@ class ItemUseResult:
     updated_params: dict | None = None
     delayed_self_message: str | None = None
     delayed_others_message: str | None = None
+    teleport_destination: tuple[int, int, int] | None = None
 
 
 @dataclass(frozen=True)

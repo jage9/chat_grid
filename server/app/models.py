@@ -430,6 +430,17 @@ class BroadcastPositionPacket(BasePacket):
     acousticZoneId: str
 
 
+class TeleportTransitionPacket(BasePacket):
+    """Server-timed transition phase sent to the teleporting actor."""
+
+    type: Literal["teleport_transition"]
+    phase: Literal["start", "arrive", "complete", "cancel"]
+    x: int
+    y: int
+    z: int
+    durationMs: int = Field(gt=0)
+
+
 class BroadcastTeleportCompletePacket(BasePacket):
     type: Literal["teleport_complete"]
     id: str

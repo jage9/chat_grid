@@ -2136,6 +2136,9 @@ class SignalingServer:
             return
 
         if isinstance(packet, UpdateFacingPacket):
+            if self.item_runtime.is_teleporting(client):
+                await self.delivery.send(client, client_position_packet(client))
+                return
             client.facing_deg = packet.facingDeg
             self._persist_client_position(client, force=True)
             position_packet = client_position_packet(client)
@@ -2144,6 +2147,9 @@ class SignalingServer:
             return
 
         if isinstance(packet, TurnPacket):
+            if self.item_runtime.is_teleporting(client):
+                await self.delivery.send(client, client_position_packet(client))
+                return
             client.facing_deg = self._turn_facing(client.facing_deg, packet.direction)
             self._persist_client_position(client, force=True)
             position_packet = client_position_packet(client)
@@ -2161,6 +2167,9 @@ class SignalingServer:
             return
 
         if isinstance(packet, UpdatePositionPacket):
+            if self.item_runtime.is_teleporting(client):
+                await self.delivery.send(client, client_position_packet(client))
+                return
             if client.elevator_id is not None:
                 await self.delivery.send(
                     client,
@@ -2252,6 +2261,9 @@ class SignalingServer:
             return
 
         if isinstance(packet, TeleportCompletePacket):
+            if self.item_runtime.is_teleporting(client):
+                await self.delivery.send(client, client_position_packet(client))
+                return
             if client.elevator_id is not None:
                 await self.delivery.send(
                     client,

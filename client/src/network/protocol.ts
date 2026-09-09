@@ -266,6 +266,15 @@ export const updatePositionSchema = z.object({
   acousticZoneId: z.string().min(1),
 });
 
+export const teleportTransitionSchema = z.object({
+  type: z.literal('teleport_transition'),
+  phase: z.enum(['start', 'arrive', 'complete', 'cancel']),
+  x: z.number().int(),
+  y: z.number().int(),
+  z: z.number().int(),
+  durationMs: z.number().int().positive(),
+});
+
 export const teleportCompleteSchema = z.object({
   type: z.literal('teleport_complete'),
   id: z.string(),
@@ -512,6 +521,7 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   welcomeMessageSchema,
   livekitTokenSchema,
   updatePositionSchema,
+  teleportTransitionSchema,
   teleportCompleteSchema,
   updateNicknameSchema,
   userLeftSchema,

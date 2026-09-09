@@ -22,6 +22,8 @@ class FakeAudioContext {
       value: 1,
       setTargetAtTime: vi.fn(function (this: { value: number }, value: number) { this.value = value; }),
       setValueAtTime: vi.fn(function (this: { value: number }, value: number) { this.value = value; }),
+      cancelScheduledValues: vi.fn(),
+      linearRampToValueAtTime: vi.fn(function (this: { value: number }, value: number) { this.value = value; }),
     });
     return { gain: param(), connect: vi.fn() };
   }
@@ -40,6 +42,27 @@ describe('AudioEngine output device', () => {
     expect(context.setSinkId).toHaveBeenLastCalledWith('speakers');
     await audio.setOutputDevice('');
     expect(context.setSinkId).toHaveBeenLastCalledWith('');
+  });
+
+  it('keeps UI output outside the shared world transition gain', async () => {
+    vi.stubGlobal('window', { AudioContext: FakeAudioContext });
+    const audio = new AudioEngine();
+    await audio.ensureContext();
+
+    const worldOutput = audio.getOutputDestinationNode() as unknown as {
+      gain: {
+        value: number;
+        cancelScheduledValues: ReturnType<typeof vi.fn>;
+        linearRampToValueAtTime: ReturnType<typeof vi.fn>;
+      };
+    };
+    const uiOutput = audio.getUiOutputDestinationNode();
+    audio.setWorldTransitionGain(0, 500);
+
+    expect(worldOutput).not.toBe(uiOutput);
+    expect(worldOutput.gain.cancelScheduledValues).toHaveBeenCalledWith(0);
+    expect(worldOutput.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0, 0.5);
+    expect(worldOutput.gain.value).toBe(0);
   });
 
   it.each(['headset', ''])('stores selection %j without creating a context, then applies it on creation', async (deviceId) => {

@@ -11,6 +11,7 @@ import {
 import { getProxyUrlForMedia, shouldProxyExternalMediaUrl } from './audio/mediaUrl';
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
 import { AmbianceRuntime } from './audio/ambianceRuntime';
+import { TeleportTransitionController } from './audio/teleportTransition';
 import { ElevatorAudioRuntime } from './items/types/elevator/runtime';
 import { AcousticZoneRuntime, worldItemAcousticZoneId } from './audio/acousticZones';
 import { WorldAudioRouter, WORLD_FOOTSTEP_GAIN } from './audio/worldAudio';
@@ -474,6 +475,32 @@ const signaling = new SignalingClient(signalingUrl, handleSignalingStatus);
 const peerManager = new PeerManager(audio, updateStatus, {
   isSessionRunning: () => state.running,
   requestToken: () => signaling.send({ type: 'livekit_token_request' }),
+});
+
+const teleportTransition = new TeleportTransitionController({
+  setWorldTransitionGain: (gain, durationMs) => audio.setWorldTransitionGain(gain, durationMs),
+  onStart: () => {
+    activeTeleport = null;
+    stopTeleportLoopAudio();
+    const token = ++activeTeleportLoopToken;
+    for (const key of ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']) state.keysPressed[key] = false;
+    lastWallCollisionDirection = null;
+    void audio.startLoopingSample(TELEPORT_START_SOUND_URL, TELEPORT_START_GAIN).then((stop) => {
+      if (teleportTransition.isActive() && token === activeTeleportLoopToken) activeTeleportLoopStop = stop;
+      else stop?.();
+    });
+  },
+  onArrive: () => { void refreshAudioSubscriptions(true); },
+  onComplete: () => {
+    stopTeleportLoopAudio();
+    activeTeleportLoopToken += 1;
+    void audio.playSample(TELEPORT_SOUND_URL, WORLD_FOOTSTEP_GAIN);
+  },
+  onCancel: () => {
+    stopTeleportLoopAudio();
+    activeTeleportLoopToken += 1;
+    updateStatus('Teleport cancelled.');
+  },
 });
 
 /** Synchronizes voice subscriptions with the server-authoritative acoustic zones. */
@@ -1319,6 +1346,7 @@ function stopTeleportLoopAudio(): void {
 
 /** Starts animated teleport movement toward a target tile at fixed squares-per-second pace. */
 function startTeleportTo(targetX: number, targetY: number, completionStatus: string): void {
+  if (teleportTransition.isActive()) return;
   const startX = state.player.x;
   const startY = state.player.y;
   const distance = Math.hypot(targetX - startX, targetY - startY);
@@ -1434,7 +1462,7 @@ function gameLoop(): void {
 /** Applies held-arrow movement with bounds checks, tile cues, and server position sync. */
 function handleMovement(): void {
   if (state.mode !== 'normal') return;
-  if (activeTeleport) return;
+  if (activeTeleport || teleportTransition.isActive()) return;
   if (state.elevatorItemId) return;
   const now = Date.now();
   if (now - state.player.lastMoveTime < movementTickMs) return;
@@ -1735,6 +1763,10 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
     peerManagerCleanupAll: () => peerManager.cleanupAll(),
     radioCleanupAll: () => radioRuntime.cleanupAll(),
     emitCleanupAll: () => {
+      teleportTransition.reset();
+      stopTeleportLoopAudio();
+      activeTeleportLoopToken += 1;
+      activeTeleport = null;
       ambianceRuntime.cleanup();
       state.ambiances.clear();
       itemEmitRuntime.cleanupAll();
@@ -1875,6 +1907,7 @@ const onAppMessage = createOnMessageHandler({
   handleItemHandTargets,
   handleStructureActionResult: (message) => worldBuilderController.handleActionResult(message),
   handleAmbianceActionResult: (message) => worldBuilderController.handleAmbianceActionResult(message),
+  handleTeleportTransition: (message) => teleportTransition.handle(message),
   connectToLiveKit: (url, token) => {
     void connectLiveKit(url, token);
   },
@@ -3018,7 +3051,7 @@ function getMobileTextEntry(): MobileTextEntry | null {
 }
 
 function pressMobileDirection(code: 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight'): void {
-  if (!state.running || state.mode !== 'normal' || activeTeleport) return;
+  if (!state.running || state.mode !== 'normal' || activeTeleport || teleportTransition.isActive()) return;
   state.keysPressed[code] = true;
 }
 
@@ -3044,7 +3077,7 @@ setupKeyboardInputHandlers({
   state,
   isTextEditingMode,
   closeSettings,
-  hasBlockedArrowTeleport: (code) => Boolean(activeTeleport && code.startsWith('Arrow')),
+  hasBlockedArrowTeleport: (code) => Boolean((activeTeleport || teleportTransition.isActive()) && code.startsWith('Arrow')),
   handleModeInput,
   canOpenCommandPaletteInMode,
   openCommandPalette,

@@ -138,7 +138,7 @@ Core incoming message effects:
 
 - World positions use integer `x`, `y`, and `z`. Ground is `z=0`; the second floor is `z=40`.
 - Player facing uses eight headings in degrees: `0` north (`+y`), `45` northeast, `90` east (`+x`), `135` southeast, `180` south, `225` southwest, `270` west, and `315` northwest. Turns in either audio mode change facing; movement, blocked movement, teleports, and elevator travel preserve it.
-- Normal movement and teleport packets must keep the server-owned `z`. Only the elevator changes floors.
+- Normal movement and client-requested teleport packets must keep the server-owned `z`. Elevators and server-authorized item teleport transitions can change floors.
 - The client renders only the current floor. Item lists and interactions are current-floor only; the user list remains global and names each floor.
 - Cross-floor user teleport is blocked in the client, and the server rejects any packet that attempts to change `z` directly.
 - Presence snapshots and position updates include a server-authoritative `acousticZoneId`. A user belongs to a floor zone while outside and to an elevator-cabin zone after boarding, including during travel.
@@ -175,3 +175,7 @@ On disconnect:
 ## Ambiance audio
 
 The server persists authored ambiance rectangles and supplies the sound catalog. Welcome replaces the client's region snapshot; live upserts/removals update it without restarting the session. Each active loop uses the nearest point on its region rather than the rectangle center. Inside is centered at the configured volume; outside fades linearly over Fade distance. Regions can overlap. Wall and acoustic-zone transmission applies at that nearest point before the shared standard/HRTF panner. The World layer controls all ambiance loops, and disconnect releases them.
+
+## Item teleport transitions
+
+An item plugin can return `ItemUseResult.teleport_destination`. Shared server orchestration validates the destination and runs a one-second transition; it does not branch on the teleporter type. The client fades location audio out for 500 ms, waits for the server's position change, then fades the new location in for 500 ms. It never interpolates through intervening squares or sends a completion coordinate. The server moves carried items with the user, preserves facing, persists the new position, and blocks movement and further item use until completion. Disconnect cancels the task and retains whichever endpoint the server has reached.

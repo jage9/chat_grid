@@ -5,7 +5,7 @@
 ```json
 {
   "id": "string",
-  "type": "radio_station | dice | wheel | clock | widget | piano | elevator",
+  "type": "radio_station | dice | wheel | clock | widget | piano | elevator | teleporter",
   "title": "string",
   "x": 0,
   "y": 0,
@@ -45,7 +45,7 @@
 ```json
 {
   "id": "string",
-  "type": "radio_station | dice | wheel | clock | widget | piano | elevator",
+  "type": "radio_station | dice | wheel | clock | widget | piano | elevator | teleporter",
   "title": "string",
   "x": 0,
   "y": 0,
@@ -70,6 +70,18 @@
 - End-to-end add-item template: `docs/item-type-template.md`.
 
 ## Type Params
+
+### `teleporter`
+
+```json
+{
+  "destination": "0, 0, 0"
+}
+```
+
+- `destination`: text containing exactly three integers, normalized to `x, y, z`; maximum 100 characters. The server checks horizontal grid bounds and configured floor elevation before use.
+- The normal `title` field provides its editable name. Its own `x`, `y`, and `z` locate the device; they are separate from its destination.
+- Capabilities: `editable`, `deletable`, `usable`. Cooldown: 1000 ms. No persistent per-item runtime state or custom client behavior is required.
 
 ### `radio_station`
 

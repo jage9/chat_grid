@@ -66,7 +66,9 @@ export class AudioEngine {
   private audioCtx: AudioContext | null = null;
   private outputDeviceId = '';
   private masterGainNode: GainNode | null = null;
+  private worldGainNode: GainNode | null = null;
   private sfxGainNode: GainNode | null = null;
+  private worldTransitionGain = 1;
   private readonly sampleCache = new Map<string, AudioBuffer>();
   private readonly sampleLoaders = new Map<string, Promise<AudioBuffer>>();
   private readonly activeSpatialSamples = new Set<ActiveSpatialSampleRuntime>();
@@ -106,6 +108,9 @@ export class AudioEngine {
       this.masterGainNode = this.audioCtx.createGain();
       this.masterGainNode.gain.value = this.masterVolume / 100;
       this.masterGainNode.connect(this.audioCtx.destination);
+      this.worldGainNode = this.audioCtx.createGain();
+      this.worldGainNode.gain.value = this.worldTransitionGain;
+      this.worldGainNode.connect(this.masterGainNode);
       this.sfxGainNode = this.audioCtx.createGain();
       this.sfxGainNode.connect(this.masterGainNode);
       // An unavailable saved speaker must not prevent microphone setup or playback.
@@ -121,7 +126,32 @@ export class AudioEngine {
   }
 
   getOutputDestinationNode(): AudioNode | null {
+    return this.worldGainNode ?? this.masterGainNode ?? this.audioCtx?.destination ?? null;
+  }
+
+  /** Routes non-positional UI audio around the shared world transition gain. */
+  getUiOutputDestinationNode(): AudioNode | null {
     return this.masterGainNode ?? this.audioCtx?.destination ?? null;
+  }
+
+  /** Schedules a shared fade for all positional/world audio. */
+  setWorldTransitionGain(targetGain: number, durationMs: number): void {
+    const nextGain = Math.max(0, Math.min(1, Number.isFinite(targetGain) ? targetGain : 1));
+    this.worldTransitionGain = nextGain;
+    const gainParam = this.worldGainNode?.gain;
+    const audioCtx = this.audioCtx;
+    if (!gainParam || !audioCtx) return;
+
+    const now = audioCtx.currentTime;
+    const safeDurationMs = Number.isFinite(durationMs) ? Math.max(0, durationMs) : 0;
+    const currentGain = gainParam.value;
+    gainParam.cancelScheduledValues(now);
+    gainParam.setValueAtTime(currentGain, now);
+    if (safeDurationMs > 0) {
+      gainParam.linearRampToValueAtTime(nextGain, now + safeDurationMs / 1000);
+    } else {
+      gainParam.setValueAtTime(nextGain, now);
+    }
   }
 
   /** Routes all Web Audio output, retaining the selection until a context exists. */
@@ -339,7 +369,7 @@ export class AudioEngine {
 
     const pannerNode = createSpatialPanner(this.audioCtx);
     if (this.voiceLayerEnabled) {
-      gainNode.connect(occlusionFilter).connect(pannerNode).connect(this.masterGainNode ?? this.audioCtx.destination);
+      gainNode.connect(occlusionFilter).connect(pannerNode).connect(this.worldGainNode ?? this.masterGainNode ?? this.audioCtx.destination);
     }
 
     peer.audioElement = audioElement;
@@ -438,7 +468,7 @@ export class AudioEngine {
       gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
       source.connect(gainNode);
       const pannerNode = createSpatialPanner(audioCtx);
-      gainNode.connect(occlusionFilter).connect(pannerNode).connect(sfxGainNode);
+      gainNode.connect(occlusionFilter).connect(pannerNode).connect(this.worldGainNode ?? sfxGainNode);
       const runtime: ActiveSpatialSampleRuntime = {
         sourceX: sourcePosition.x,
         sourceY: sourcePosition.y,
@@ -493,7 +523,7 @@ export class AudioEngine {
       gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
       source.connect(gainNode);
       const pannerNode = createSpatialPanner(audioCtx);
-      gainNode.connect(occlusionFilter).connect(pannerNode).connect(sfxGainNode);
+      gainNode.connect(occlusionFilter).connect(pannerNode).connect(this.worldGainNode ?? sfxGainNode);
       const runtime: ActiveSpatialSampleRuntime = {
         sourceX: sourcePosition.x,
         sourceY: sourcePosition.y,
@@ -671,7 +701,7 @@ export class AudioEngine {
     if (spec.sourcePosition) {
       panner = createSpatialPanner(audioCtx);
       updateSpatialPanner(panner, resolved);
-      gainNode.connect(panner).connect(sfxGainNode);
+      gainNode.connect(panner).connect(this.worldGainNode ?? sfxGainNode);
     } else {
       gainNode.connect(sfxGainNode);
     }

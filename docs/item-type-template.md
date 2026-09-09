@@ -29,6 +29,11 @@ When adding a new item type:
 
 That is enough for a first working item type.
 
+Generic actions can request a server-owned teleport by returning
+`ItemUseResult.teleport_destination=(x, y, z)`. The shared transition runtime
+owns destination checks, timing, position publication, and cleanup. The
+`teleporter` package demonstrates this without an item-specific client module.
+
 ## Reference Sample Folder
 
 See `docs/examples/item-type-sample/` for a complete copyable folder.

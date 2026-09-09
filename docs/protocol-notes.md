@@ -64,6 +64,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - The API secret is never sent to the browser.
 - `update_position`, `update_nickname`, `user_left`: presence updates. `welcome.player`, `welcome.users[]`, and `update_position` carry the server-owned `acousticZoneId` (`floor:<z>` or `elevator:<itemId>`), and player/presence records carry canonical `facingDeg`. Activation publishes position followed by nickname so existing clients can hydrate a complete peer entry immediately.
 - `teleport_complete`: peer teleport landing event with spatial coordinates, preserved `facingDeg`, and source `acousticZoneId`.
+- `teleport_transition`: actor-only server transition with `phase` (`start`, `arrive`, `complete`, or `cancel`), destination `x`, `y`, `z`, and `durationMs` (1000). The server publishes the authoritative position before `arrive`, halfway through the transition. The browser fades location audio and blocks movement until completion or cancellation; it does not send a destination or completion response for this flow.
 - `chat_message`: system and user chat stream.
 - `pong`: ping response.
 - `nickname_result`: accepted/rejected nickname result.

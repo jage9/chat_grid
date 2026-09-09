@@ -24,6 +24,11 @@ from .items.types.clock.runtime import ClockRuntime
 from .items.types.elevator.runtime import ElevatorRuntime, ElevatorRuntimeCallbacks
 from .items.types.piano.runtime import PianoRuntime
 from .items.types.radio_station.runtime import RadioRuntime
+from .teleport_runtime import (
+    TeleportDestination,
+    TeleportRuntime,
+    TeleportRuntimeCallbacks,
+)
 from .models import (
     BroadcastChatMessagePacket,
     ClientPacket,
@@ -66,6 +71,9 @@ class ItemRuntimeHost(Protocol):
 
     def _is_in_bounds(self, x: int, y: int) -> bool: ...
 
+    @staticmethod
+    def _is_supported_floor(z: int) -> bool: ...
+
     def _floor_name(self, z: int) -> str: ...
 
     def _persist_client_position(
@@ -87,6 +95,21 @@ class ItemRuntime:
         self.piano = PianoRuntime(self)
         self.radio = RadioRuntime(self)
         self.clock = ClockRuntime(self)
+        self.teleport = TeleportRuntime(
+            TeleportRuntimeCallbacks(
+                delivery=self.delivery,
+                is_in_bounds=self.host._is_in_bounds,
+                is_supported_floor=self.host._is_supported_floor,
+                persist_client_position=lambda client: (
+                    self.host._persist_client_position(client, force=True)
+                ),
+                sync_carried_items=lambda client: self.sync_carried_items(client),
+                now_ms=lambda: self.item_service.now_ms(),
+                is_client_connected=lambda client: any(
+                    active is client for active in self.clients.values()
+                ),
+            )
+        )
         self.elevator = ElevatorRuntime(
             ElevatorRuntimeCallbacks(
                 get_item=lambda item_id: self.items.get(item_id),
@@ -138,6 +161,7 @@ class ItemRuntime:
     async def shutdown(self) -> None:
         """Stop all item tasks owned by generic and type-specific runtimes."""
 
+        await self.teleport.shutdown()
         await self.piano.shutdown()
         await self.elevator.shutdown()
         await self.clock.shutdown()
@@ -146,6 +170,7 @@ class ItemRuntime:
     async def prepare_client_disconnect(self, client: ClientConnection) -> None:
         """Release per-client item runtime state before position persistence."""
 
+        await self.teleport.client_disconnected(client)
         await self.piano.client_disconnected(client)
         self.elevator.restore_rider_to_landing(client)
 
@@ -181,6 +206,23 @@ class ItemRuntime:
         """Request coalesced persistence after an item mutation."""
 
         self.host._request_state_save()
+
+    def is_teleporting(self, client: ClientConnection) -> bool:
+        """Return whether a client is in a server-authoritative teleport."""
+
+        return self.teleport.is_active(client)
+
+    def teleport_destination_error(self, destination: object) -> str | None:
+        """Return a server-side validation error for one item destination."""
+
+        return self.teleport.destination_error(destination)
+
+    async def begin_teleport(
+        self, client: ClientConnection, destination: TeleportDestination
+    ) -> bool:
+        """Start one validated generic item teleport transition."""
+
+        return await self.teleport.begin(client, destination)
 
     def floor_name(self, z: int) -> str:
         """Return the configured label for a floor elevation."""
@@ -886,6 +928,15 @@ class ItemRuntime:
                 client, False, "use", "Item is not on your square.", use_item.id
             )
             return
+        if self.is_teleporting(client):
+            await self.send_result(
+                client,
+                False,
+                "use",
+                "You are already in a teleport transition.",
+                use_item.id,
+            )
+            return
         if use_item.type == "elevator":
             await self.elevator.use(client, use_item)
             return
@@ -912,14 +963,48 @@ class ItemRuntime:
             await self.send_result(client, False, "use", str(exc), use_item.id)
             return
 
+        teleport_destination = use_result.teleport_destination
+        if teleport_destination is not None:
+            destination_error = self.teleport_destination_error(teleport_destination)
+            if destination_error is not None:
+                await self.send_result(
+                    client, False, "use", destination_error, use_item.id
+                )
+                return
+            if client.elevator_id is not None:
+                await self.send_result(
+                    client,
+                    False,
+                    "use",
+                    "Leave the elevator before teleporting.",
+                    use_item.id,
+                )
+                return
+
+        validated_params: dict | None = None
         if use_result.updated_params is not None:
             try:
-                use_item.params = handler.validate_update(
+                validated_params = handler.validate_update(
                     use_item, {**use_item.params, **use_result.updated_params}
                 )
             except ValueError as exc:
                 await self.send_result(client, False, "use", str(exc), use_item.id)
                 return
+
+        if teleport_destination is not None and not await self.begin_teleport(
+            client, teleport_destination
+        ):
+            await self.send_result(
+                client,
+                False,
+                "use",
+                "Teleport could not start.",
+                use_item.id,
+            )
+            return
+
+        if validated_params is not None:
+            use_item.params = validated_params
             use_item.updatedAt = now_ms
             actor_id, actor_name = self._item_updated_actor(client)
             use_item.updatedBy = actor_id
@@ -988,6 +1073,14 @@ class ItemRuntime:
         if not self.client_has_permission(client, "item.use"):
             await self.send_result(
                 client, False, "secondary_use", "Not authorized to use items."
+            )
+            return
+        if self.is_teleporting(client):
+            await self.send_result(
+                client,
+                False,
+                "secondary_use",
+                "You are already in a teleport transition.",
             )
             return
         secondary_item = self.items.get(packet.itemId)

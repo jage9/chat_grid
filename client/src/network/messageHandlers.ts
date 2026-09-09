@@ -84,6 +84,7 @@ type MessageHandlerDeps = {
   handleItemHandTargets: (message: Extract<IncomingMessage, { type: 'item_hand_targets' }>) => void;
   handleStructureActionResult: (message: Extract<IncomingMessage, { type: 'structure_action_result' }>) => void;
   handleAmbianceActionResult: (message: Extract<IncomingMessage, { type: 'ambiance_action_result' }>) => void;
+  handleTeleportTransition: (message: Extract<IncomingMessage, { type: 'teleport_transition' }>) => void;
   connectToLiveKit: (url: string, token: string) => void;
 };
 
@@ -267,6 +268,10 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         }
         break;
       }
+
+      case 'teleport_transition':
+        deps.handleTeleportTransition(message);
+        break;
 
       case 'teleport_complete': {
         const peer = deps.state.peers.get(message.id);
