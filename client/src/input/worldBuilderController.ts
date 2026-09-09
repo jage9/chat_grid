@@ -13,10 +13,12 @@ import {
   validateNumericPropertyInput,
   type PropertyControlMetadata,
 } from './propertyControls';
+import { createAmbianceBuilderController } from './ambianceBuilderController';
+import type { AmbianceType } from '../state/gameState';
 
 type MenuEntry<T extends string = string> = { id: T; label: string; tooltip?: string };
 
-type WorldBuilderDeps = {
+export type WorldBuilderDeps = {
   state: GameState;
   hasPermission: (key: string) => boolean;
   send: (message: OutgoingMessage) => void;
@@ -34,6 +36,8 @@ type WorldBuilderDeps = {
 const ROOT_ACTIONS = [
   { id: 'add', label: 'Add wall', tooltip: 'Create a one-square wall beside your current position.' },
   { id: 'edit', label: 'Edit walls', tooltip: 'Choose a wall on this floor to resize, edit, or delete.' },
+  { id: 'addAmbiance', label: 'Add ambiance', tooltip: 'Create a one-square ambiance at your current position.' },
+  { id: 'editAmbiances', label: 'Edit ambiances', tooltip: 'Choose an ambiance on this floor to resize, edit, or delete.' },
 ] as const;
 const DIRECTIONS = [
   { id: 'north', label: 'North', tooltip: 'Place the wall along the north edge of your current square.' },
@@ -108,6 +112,10 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
   let walls: WallStructure[] = [];
   let selectedWallId: string | null = null;
   let editingProperty: PropertyId | null = null;
+  const ambianceBuilderController = createAmbianceBuilderController({
+    ...deps,
+    onBackToRoot: () => open(),
+  });
 
   function selectedWall(): WallStructure | null {
     return selectedWallId ? deps.state.structures.get(selectedWallId) ?? null : null;
@@ -224,6 +232,14 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
         index = 0;
         deps.state.mode = 'worldBuilderPreset';
         deps.announceMenuEntry('Wall presets', presets[0].title);
+        return;
+      }
+      if (entry === 'addAmbiance') {
+        ambianceBuilderController.requestAdd();
+        return;
+      }
+      if (entry === 'editAmbiances') {
+        ambianceBuilderController.openList();
         return;
       }
       walls = nearbyWalls(deps.state.structures.values(), deps.state.player.x, deps.state.player.y, deps.state.player.z);
@@ -510,6 +526,9 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
     getEditingPropertyLabel() {
       return PROPERTY_ACTIONS.find((entry) => entry.id === editingProperty)?.label ?? 'Wall property';
     },
+    setAmbianceTypes(next: AmbianceType[]) {
+      ambianceBuilderController.setTypes(next);
+    },
     open,
     handleRoot,
     handlePreset,
@@ -518,6 +537,10 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
     handleWallActions,
     handlePropertyList,
     handlePropertyEdit,
+    handleAmbianceList: ambianceBuilderController.handleList,
+    handleAmbianceActions: ambianceBuilderController.handleActions,
+    handleAmbianceEdit: ambianceBuilderController.handleEdit,
+    getEditingAmbiancePropertyLabel: ambianceBuilderController.getEditingPropertyLabel,
     handleActionResult(message: {
       ok: boolean;
       action: 'add' | 'resize' | 'slide' | 'rotate' | 'update' | 'delete';
@@ -534,6 +557,14 @@ export function createWorldBuilderController(deps: WorldBuilderDeps) {
         const wall = deps.state.structures.get(message.structureId);
         if (wall) openWallActions(wall);
       }
+    },
+    handleAmbianceActionResult(message: {
+      ok: boolean;
+      action: 'add' | 'resize' | 'slide' | 'update' | 'delete';
+      message: string;
+      ambianceId?: string | null;
+    }) {
+      ambianceBuilderController.handleActionResult(message);
     },
   };
 }

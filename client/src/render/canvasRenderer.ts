@@ -24,6 +24,16 @@ export class CanvasRenderer {
   draw(state: GameState): void {
     const { ctx } = this;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.fillStyle = 'rgba(45, 212, 191, 0.12)';
+    for (const ambiance of state.ambiances.values()) {
+      if (ambiance.floorZ !== state.player.z) continue;
+      ctx.fillRect(
+        ambiance.startX * this.squarePixelSize,
+        this.canvas.height - (ambiance.endY + 1) * this.squarePixelSize,
+        (ambiance.endX - ambiance.startX + 1) * this.squarePixelSize,
+        (ambiance.endY - ambiance.startY + 1) * this.squarePixelSize,
+      );
+    }
     ctx.strokeStyle = '#374151';
     for (let i = 0; i <= this.gridSize; i += 1) {
       ctx.beginPath();
@@ -65,7 +75,7 @@ export class CanvasRenderer {
     }
     this.drawObject(state.player, '#34d399', state.player.nickname);
 
-    if (state.mode === 'nickname' || state.mode === 'chat' || state.mode === 'itemPropertyEdit') {
+    if (state.mode === 'nickname' || state.mode === 'chat' || state.mode === 'itemPropertyEdit' || state.mode === 'worldBuilderAmbianceEdit') {
       const label =
         state.mode === 'nickname' ? 'New Nickname' : state.mode === 'chat' ? 'Message' : 'Property Value';
       this.drawTextOverlay(state, label);

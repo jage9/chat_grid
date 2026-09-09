@@ -33,6 +33,7 @@ from .acoustic_zones import (
     client_position_packet,
     floor_acoustic_zone_id,
 )
+from .ambiance_service import AmbianceError, AmbianceService
 from .client import ClientConnection
 from .config import load_config
 from .delivery import Delivery, Transport, WebsocketTransport
@@ -69,6 +70,14 @@ from .models import (
     AdminUserSummary,
     AdminUsersListPacket,
     AdminUsersListResultPacket,
+    AmbianceActionResultPacket,
+    AmbianceAddPacket,
+    AmbianceDeletePacket,
+    AmbianceRemovePacket,
+    AmbianceResizePacket,
+    AmbianceSlidePacket,
+    AmbianceUpdatePacket,
+    AmbianceUpsertPacket,
     BroadcastChatMessagePacket,
     BroadcastNicknamePacket,
     BroadcastTeleportCompletePacket,
@@ -159,6 +168,8 @@ AdminActionName: TypeAlias = Literal[
     "user_delete",
 ]
 
+AmbianceActionName: TypeAlias = Literal["add", "update", "resize", "slide", "delete"]
+
 
 class SignalingServer:
     """Coordinates websocket clients, signaling, and authoritative item actions."""
@@ -195,6 +206,7 @@ class SignalingServer:
         *,
         transport: Transport | None = None,
         max_carried_items: int = 2,
+        ambiance_sounds_dir: Path | None = None,
     ):
         """Initialize runtime state, TLS context, and item service."""
 
@@ -232,6 +244,15 @@ class SignalingServer:
             state_file=structure_state_file,
             grid_size=self.grid_size,
             presets=structure_presets or {},
+        )
+        ambiance_state_file = (
+            state_file.with_name("ambiances.json") if state_file else None
+        )
+        self.ambiance_service = AmbianceService(
+            state_file=ambiance_state_file,
+            grid_size=self.grid_size,
+            sounds_dir=ambiance_sounds_dir,
+            floor_elevations=FLOOR_ELEVATIONS,
         )
         self.item_runtime = ItemRuntime(self)
         self.movement_tick_ms = MOVEMENT_TICK_MS
@@ -664,6 +685,7 @@ class SignalingServer:
         self._pending_state_save_started_at = None
         self.item_service.save_state()
         self.structure_service.save_state()
+        self.ambiance_service.save_state()
 
     def _request_state_save(self) -> None:
         """Debounce/coalesce world-state persistence to reduce write churn."""
@@ -1026,12 +1048,17 @@ class SignalingServer:
                 structure.model_dump()
                 for structure in self.structure_service.structures.values()
             ],
+            ambiances=[
+                ambiance.model_dump()
+                for ambiance in self.ambiance_service.ambiances.values()
+            ],
             worldConfig={
                 "gridSize": self.grid_size,
                 "movementTickMs": self.movement_tick_ms,
                 "movementMaxStepsPerTick": self.movement_max_steps_per_tick,
                 "floors": [dict(floor) for floor in FLOOR_DEFINITIONS],
                 "structurePresets": self.structure_service.preset_snapshot(),
+                "ambianceTypes": self.ambiance_service.ambiance_type_snapshot(),
             },
             uiDefinitions=self._build_ui_definitions(client),
             serverInfo={
@@ -1489,6 +1516,140 @@ class SignalingServer:
                 action=action,
                 message=result_message,
                 structureId=wall.id,
+            ),
+        )
+        return True
+
+    async def _handle_ambiance_packet(
+        self, client: ClientConnection, packet: ClientPacket
+    ) -> bool:
+        """Handle permission-gated live ambiance region mutations."""
+
+        if not isinstance(
+            packet,
+            (
+                AmbianceAddPacket,
+                AmbianceUpdatePacket,
+                AmbianceResizePacket,
+                AmbianceSlidePacket,
+                AmbianceDeletePacket,
+            ),
+        ):
+            return False
+        action: AmbianceActionName = (
+            "add"
+            if isinstance(packet, AmbianceAddPacket)
+            else "update"
+            if isinstance(packet, AmbianceUpdatePacket)
+            else "resize"
+            if isinstance(packet, AmbianceResizePacket)
+            else "slide"
+            if isinstance(packet, AmbianceSlidePacket)
+            else "delete"
+        )
+        if not self._client_has_permission(client, "world.structure.edit"):
+            await self.delivery.send(
+                client,
+                AmbianceActionResultPacket(
+                    type="ambiance_action_result",
+                    ok=False,
+                    action=action,
+                    message="Not authorized to edit world ambiances.",
+                ),
+            )
+            return True
+
+        try:
+            if isinstance(packet, AmbianceAddPacket):
+                ambiance = self.ambiance_service.add_ambiance(client)
+                result_message = f"Added {ambiance.name}."
+            elif isinstance(packet, AmbianceUpdatePacket):
+                ambiance = self.ambiance_service.update_ambiance(
+                    packet.ambianceId,
+                    name=packet.name,
+                    sound_id=packet.soundId,
+                    volume=packet.volume,
+                    fade_distance=packet.fadeDistance,
+                )
+                if packet.name is not None:
+                    result_message = ambiance.name
+                elif packet.soundId is not None:
+                    result_message = next(
+                        (
+                            sound_type.title
+                            for sound_type in self.ambiance_service.ambiance_types
+                            if sound_type.id == ambiance.soundId
+                        ),
+                        ambiance.soundId,
+                    )
+                elif packet.volume is not None:
+                    result_message = f"{ambiance.volume} percent"
+                else:
+                    result_message = f"{ambiance.fadeDistance:g} squares"
+            elif isinstance(packet, AmbianceResizePacket):
+                ambiance = self.ambiance_service.resize_ambiance(
+                    packet.ambianceId,
+                    edge=packet.edge,
+                    delta=packet.delta,
+                )
+                result_message = {
+                    "west": f"Start X: {ambiance.startX}",
+                    "east": f"End X: {ambiance.endX}",
+                    "south": f"Start Y: {ambiance.startY}",
+                    "north": f"End Y: {ambiance.endY}",
+                }[packet.edge]
+            elif isinstance(packet, AmbianceSlidePacket):
+                ambiance = self.ambiance_service.slide_ambiance(
+                    packet.ambianceId,
+                    axis=packet.axis,
+                    delta=packet.delta,
+                )
+                result_message = (
+                    f"X: {ambiance.startX} to {ambiance.endX}"
+                    if packet.axis == "x"
+                    else f"Y: {ambiance.startY} to {ambiance.endY}"
+                )
+            else:
+                removed = self.ambiance_service.remove(packet.ambianceId)
+                self._request_state_save()
+                await self.delivery.broadcast(
+                    AmbianceRemovePacket(type="ambiance_remove", ambianceId=removed.id)
+                )
+                await self.delivery.send(
+                    client,
+                    AmbianceActionResultPacket(
+                        type="ambiance_action_result",
+                        ok=True,
+                        action=action,
+                        message=f"Deleted {removed.name}.",
+                        ambianceId=removed.id,
+                    ),
+                )
+                return True
+        except AmbianceError as exc:
+            await self.delivery.send(
+                client,
+                AmbianceActionResultPacket(
+                    type="ambiance_action_result",
+                    ok=False,
+                    action=action,
+                    message=str(exc),
+                ),
+            )
+            return True
+
+        self._request_state_save()
+        await self.delivery.broadcast(
+            AmbianceUpsertPacket(type="ambiance_upsert", ambiance=ambiance)
+        )
+        await self.delivery.send(
+            client,
+            AmbianceActionResultPacket(
+                type="ambiance_action_result",
+                ok=True,
+                action=action,
+                message=result_message,
+                ambianceId=ambiance.id,
             ),
         )
         return True
@@ -1994,6 +2155,9 @@ class SignalingServer:
             return
 
         if await self._handle_structure_packet(client, packet):
+            return
+
+        if await self._handle_ambiance_packet(client, packet):
             return
 
         if isinstance(packet, UpdatePositionPacket):

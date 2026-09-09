@@ -84,7 +84,7 @@ The number-key audio toggles act once per press; holding a key does not toggle r
 - `1`: Toggle voice layer
 - `2`: Toggle item layer (emit sounds)
 - `3`: Toggle media layer (radio)
-- `4`: Toggle world layer (other-user world sounds)
+- `4`: Toggle world layer (other-user world sounds and ambiances)
 - `Shift+4`: Toggle HRTF spatial audio (saved per browser; standard mode is the default)
 - `Shift+E`: Effect select menu in standard or HRTF mode
 - `-` / `=`: Lower/raise master volume
@@ -178,3 +178,11 @@ Applies to effect select, user/item list modes, item selection, item property li
 - `Home` / `End`: First/last help line
 - `Escape`: Exit help viewer
 - No first-letter navigation in this mode
+
+### Ambiance editor (World Builder)
+
+- `Add ambiance` / `Edit ambiances`: Create at your current square or select a region on this floor. Both open the same editor, with Type first.
+- `Up` / `Down`: Browse Type, Name, start/end X and Y, horizontal/vertical slide, Volume, Fade distance, and Delete.
+- `Left` / `Right`: Adjust the selected edge, slide, type, or numeric property. `Enter` opens a type selector or name/numeric entry; `Space` reads its tooltip and controls.
+- `Escape`: Cancel text/selection or return to the previous menu. Deletion uses the shared confirmation dialog.
+- World audio layer (`4`): Includes ambiance loops. `Shift+4` changes HRTF as usual.

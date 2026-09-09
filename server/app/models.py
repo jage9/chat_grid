@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, StrictInt
 
 FacingDeg: TypeAlias = Literal[0, 45, 90, 135, 180, 225, 270, 315]
 
@@ -267,6 +267,48 @@ class StructureDeletePacket(BasePacket):
     structureId: str
 
 
+class AmbianceAddPacket(BasePacket):
+    """Request one default one-cell ambiance at the caller's position."""
+
+    type: Literal["ambiance_add"]
+
+
+class AmbianceUpdatePacket(BasePacket):
+    """Update editable properties on one ambiance region."""
+
+    type: Literal["ambiance_update"]
+    ambianceId: str
+    name: str | None = Field(default=None, max_length=100)
+    soundId: str | None = Field(default=None, max_length=128)
+    volume: StrictInt | None = Field(default=None, ge=0, le=100)
+    fadeDistance: FiniteFloat | None = Field(default=None, ge=0.0, le=100.0)
+
+
+class AmbianceResizePacket(BasePacket):
+    """Move one edge of an ambiance rectangle by one cell."""
+
+    type: Literal["ambiance_resize"]
+    ambianceId: str
+    edge: Literal["west", "east", "south", "north"]
+    delta: Literal[-1, 1]
+
+
+class AmbianceSlidePacket(BasePacket):
+    """Translate an ambiance rectangle by one cell along one axis."""
+
+    type: Literal["ambiance_slide"]
+    ambianceId: str
+    axis: Literal["x", "y"]
+    delta: Literal[-1, 1]
+
+
+class AmbianceDeletePacket(BasePacket):
+    """Delete one complete ambiance region."""
+
+    type: Literal["ambiance_delete"]
+    ambianceId: str
+
+
 ClientPacket = (
     UpdatePositionPacket
     | UpdateFacingPacket
@@ -309,6 +351,11 @@ ClientPacket = (
     | StructureRotateWallPacket
     | StructureUpdateWallPacket
     | StructureDeletePacket
+    | AmbianceAddPacket
+    | AmbianceUpdatePacket
+    | AmbianceResizePacket
+    | AmbianceSlidePacket
+    | AmbianceDeletePacket
 )
 
 
@@ -330,6 +377,7 @@ class WelcomePacket(BasePacket):
     users: list[RemoteUser]
     items: list[dict] | None = None
     structures: list[dict] | None = None
+    ambiances: list[dict] | None = None
     worldConfig: dict | None = None
     uiDefinitions: dict | None = None
     serverInfo: dict | None = None
@@ -500,6 +548,29 @@ class WallStructure(BaseModel):
     contactSound: str = "/sounds/wall.ogg"
 
 
+class AmbianceRegion(BaseModel):
+    """Server-owned inclusive rectangle carrying one looping sound source."""
+
+    id: str = Field(min_length=1, max_length=128)
+    name: str = Field(min_length=1, max_length=100)
+    soundId: str = Field(min_length=1, max_length=128)
+    floorZ: StrictInt
+    startX: StrictInt = Field(ge=0)
+    startY: StrictInt = Field(ge=0)
+    endX: StrictInt = Field(ge=0)
+    endY: StrictInt = Field(ge=0)
+    volume: StrictInt = Field(default=25, ge=0, le=100)
+    fadeDistance: FiniteFloat = Field(default=3.0, ge=0.0, le=100.0)
+
+
+class AmbianceType(BaseModel):
+    """One server-discovered ambiance sound available to world editors."""
+
+    id: str = Field(min_length=1, max_length=128)
+    title: str = Field(min_length=1, max_length=100)
+    url: str = Field(min_length=1)
+
+
 class StructureUpsertPacket(BasePacket):
     """Broadcast a complete canonical structure after a live mutation."""
 
@@ -522,6 +593,30 @@ class StructureActionResultPacket(BasePacket):
     action: Literal["add", "resize", "slide", "rotate", "update", "delete"]
     message: str
     structureId: str | None = None
+
+
+class AmbianceUpsertPacket(BasePacket):
+    """Broadcast a complete canonical ambiance after a live mutation."""
+
+    type: Literal["ambiance_upsert"]
+    ambiance: AmbianceRegion
+
+
+class AmbianceRemovePacket(BasePacket):
+    """Broadcast removal of one canonical ambiance region."""
+
+    type: Literal["ambiance_remove"]
+    ambianceId: str
+
+
+class AmbianceActionResultPacket(BasePacket):
+    """Report one permission-gated ambiance mutation to its caller."""
+
+    type: Literal["ambiance_action_result"]
+    ok: bool
+    action: Literal["add", "update", "resize", "slide", "delete"]
+    message: str
+    ambianceId: str | None = None
 
 
 class ItemActionResultPacket(BasePacket):

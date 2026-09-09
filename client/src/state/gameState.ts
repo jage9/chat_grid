@@ -25,6 +25,22 @@ export type WorldItem = {
   occupiedOffsets: Array<{ x: number; y: number }>;
 };
 
+/** Server-owned inclusive rectangle carrying a looping world sound. */
+export type AmbianceRegion = {
+  id: string;
+  name: string;
+  soundId: string;
+  floorZ: number;
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  volume: number;
+  fadeDistance: number;
+};
+
+export type AmbianceType = { id: string; title: string; url: string };
+
 export type WallStructure = {
   id: string;
   floorZ: number;
@@ -80,6 +96,9 @@ export type GameMode =
   | 'worldBuilderWallActions'
   | 'worldBuilderPropertyList'
   | 'worldBuilderPropertyEdit'
+  | 'worldBuilderAmbianceList'
+  | 'worldBuilderAmbianceActions'
+  | 'worldBuilderAmbianceEdit'
   | 'pianoUse';
 
 export type Player = {
@@ -129,6 +148,7 @@ export type GameState = {
   peers: Map<string, PeerState>;
   items: Map<string, WorldItem>;
   structures: Map<string, WallStructure>;
+  ambiances: Map<string, AmbianceRegion>;
   elevatorItemId: string | null;
 };
 
@@ -167,6 +187,7 @@ export function createInitialState(): GameState {
     peers: new Map(),
     items: new Map(),
     structures: new Map(),
+    ambiances: new Map(),
     elevatorItemId: null,
   };
 }

@@ -171,3 +171,7 @@ On disconnect:
 - `AudioEngine`: shared audio context, sample playback, effects, and voice graph.
 - `WorldAudioRouter`: shared policy and playback entry point for sampled positional world events.
 - `AcousticZoneRuntime`: shared zone connectivity and opening/closing transmission gain.
+
+## Ambiance audio
+
+The server persists authored ambiance rectangles and supplies the sound catalog. Welcome replaces the client's region snapshot; live upserts/removals update it without restarting the session. Each active loop uses the nearest point on its region rather than the rectangle center. Inside is centered at the configured volume; outside fades linearly over Fade distance. Regions can overlap. Wall and acoustic-zone transmission applies at that nearest point before the shared standard/HRTF panner. The World layer controls all ambiance loops, and disconnect releases them.

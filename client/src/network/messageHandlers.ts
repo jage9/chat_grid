@@ -1,5 +1,5 @@
 import { type IncomingMessage } from './protocol';
-import { getFacingDirection, type StructurePreset, type WallStructure, type WorldItem } from '../state/gameState';
+import { getFacingDirection, type AmbianceRegion, type AmbianceType, type StructurePreset, type WallStructure, type WorldItem } from '../state/gameState';
 import { WORLD_FOOTSTEP_GAIN, type WorldSoundSource } from '../audio/worldAudio';
 
 /**
@@ -10,6 +10,7 @@ type MessageHandlerDeps = {
   setWorldGridSize: (size: number) => void;
   setWorldFloors: (floors: Array<{ id: string; name: string; z: number }>) => void;
   setStructurePresets: (presets: StructurePreset[]) => void;
+  setAmbianceTypes: (types: AmbianceType[]) => void;
   refreshStructureGeometry: () => void;
   setMovementTickMs: (value: number) => void;
   setConnecting: (value: boolean) => void;
@@ -22,6 +23,7 @@ type MessageHandlerDeps = {
     peers: Map<string, { id: string; userId?: string | null; nickname: string; x: number; y: number; z: number; facingDeg: number; acousticZoneId: string }>;
     items: Map<string, WorldItem>;
     structures: Map<string, WallStructure>;
+    ambiances: Map<string, AmbianceRegion>;
     mode: string;
     selectedItemId: string | null;
     itemPropertyKeys: string[];
@@ -81,6 +83,7 @@ type MessageHandlerDeps = {
   handleItemTransferTargets: (message: Extract<IncomingMessage, { type: 'item_transfer_targets' }>) => void;
   handleItemHandTargets: (message: Extract<IncomingMessage, { type: 'item_hand_targets' }>) => void;
   handleStructureActionResult: (message: Extract<IncomingMessage, { type: 'structure_action_result' }>) => void;
+  handleAmbianceActionResult: (message: Extract<IncomingMessage, { type: 'ambiance_action_result' }>) => void;
   connectToLiveKit: (url: string, token: string) => void;
 };
 
@@ -126,6 +129,15 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.state.structures.delete(message.structureId);
         deps.refreshStructureGeometry();
         break;
+      case 'ambiance_action_result':
+        deps.handleAmbianceActionResult(message);
+        break;
+      case 'ambiance_upsert':
+        deps.state.ambiances.set(message.ambiance.id, message.ambiance);
+        break;
+      case 'ambiance_remove':
+        deps.state.ambiances.delete(message.ambianceId);
+        break;
       case 'world_sound':
         deps.playWorldSound(deps.resolveIncomingSoundUrl(message.sound), message);
         break;
@@ -141,6 +153,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           deps.setWorldFloors(message.worldConfig.floors);
         }
         deps.setStructurePresets(message.worldConfig?.structurePresets ?? []);
+        deps.setAmbianceTypes(message.worldConfig?.ambianceTypes ?? []);
         deps.rendererSetGridSize(deps.getWorldGridSize());
         const schemaReady = deps.applyServerItemUiDefinitions(message.uiDefinitions);
         if (!schemaReady) {
@@ -173,6 +186,10 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
             ...item,
             carrierId: item.carrierId ?? null,
           });
+        }
+        deps.state.ambiances.clear();
+        for (const ambiance of message.ambiances ?? []) {
+          deps.state.ambiances.set(ambiance.id, ambiance);
         }
         deps.state.structures.clear();
         for (const structure of message.structures || []) {

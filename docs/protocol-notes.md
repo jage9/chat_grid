@@ -196,3 +196,14 @@ This is a behavior guide for packet semantics beyond raw schemas.
   `Reconnected to server. Version <version>.` after reconnect.
 - If `auth_required.expectedClientRevision` or `welcome.serverInfo.expectedClientRevision` differs from the running client revision, client auto-reloads.
 - Server-only version changes do not trigger browser reload unless `expectedClientRevision` also changes.
+
+## Ambiance regions
+
+- `welcome.ambiances` contains server-owned inclusive rectangles: `id`, `name`, `soundId`, `floorZ`, `startX`, `startY`, `endX`, `endY`, `volume`, `fadeDistance`.
+- `welcome.worldConfig.ambianceTypes` contains the server-discovered `{id, title, url}` sound catalog.
+- `ambiance_add` creates a default one-square region at the caller's position; the first configured sound is selected, volume is 25, and Fade distance is 3.
+- `ambiance_update` carries `ambianceId` and optional `name`, `soundId`, `volume`, and `fadeDistance`. Type selection does not reset the other properties.
+- `ambiance_resize` carries `ambianceId`, `edge` (`west`, `east`, `south`, `north`), and `delta` (-1 or 1). `ambiance_slide` carries `ambianceId`, `axis` (`x`, `y`), and `delta` (-1 or 1). These are atomic server-relative edits.
+- `ambiance_delete` carries `ambianceId`.
+- Every mutation requires `world.structure.edit`. Bounds, minimum area, sound selection, and numeric/name validation are server-owned. Overlap is allowed.
+- Accepted mutations broadcast `ambiance_upsert` with the complete `ambiance`, or `ambiance_remove` with `ambianceId`, before sending the caller `ambiance_action_result` (`ok`, `action`, `message`, optional `ambianceId`).

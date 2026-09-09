@@ -10,6 +10,7 @@ import {
 } from './audio/radioStationRuntime';
 import { getProxyUrlForMedia, shouldProxyExternalMediaUrl } from './audio/mediaUrl';
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
+import { AmbianceRuntime } from './audio/ambianceRuntime';
 import { ElevatorAudioRuntime } from './items/types/elevator/runtime';
 import { AcousticZoneRuntime, worldItemAcousticZoneId } from './audio/acousticZones';
 import { WorldAudioRouter, WORLD_FOOTSTEP_GAIN } from './audio/worldAudio';
@@ -373,6 +374,7 @@ function itemAcousticMix(item: WorldItem) {
   }, state.player);
 }
 
+const ambianceRuntime = new AmbianceRuntime(audio, resolveWorldAcousticMix);
 const radioRuntime = new RadioStationRuntime(
   audio,
   getItemSpatialConfig,
@@ -821,6 +823,7 @@ function persistEffectLevels(): void {
 /** Restores local audio-layer toggles and applies initial voice-layer state. */
 function loadAudioLayerState(): void {
   audioLayers = settings.loadAudioLayers();
+  ambianceRuntime.update(state.ambiances.values(), state.player, audioLayers.world && state.running);
   audio.setVoiceLayerEnabled(audioLayers.voice);
 }
 
@@ -894,6 +897,7 @@ function applyConfiguredPeerListenGains(): void {
 
 /** Applies current layer toggles to peer voice, media streams, and item emitters. */
 async function applyAudioLayerState(): Promise<void> {
+  ambianceRuntime.update(state.ambiances.values(), state.player, audioLayers.world && state.running);
   audio.setVoiceLayerEnabled(audioLayers.voice);
   if (audioLayers.voice) {
     await peerManager.resumeRemoteAudio();
@@ -1201,6 +1205,7 @@ function textInputMaxLengthForMode(mode: typeof state.mode): number | null {
   if (mode === 'micGainEdit') return 8;
   if (mode === 'adminRoleNameEdit') return 32;
   if (mode === 'worldBuilderPropertyEdit') return 200;
+  if (mode === 'worldBuilderAmbianceEdit') return 100;
   return null;
 }
 
@@ -1226,7 +1231,8 @@ function isTextEditingMode(mode: typeof state.mode): boolean {
     mode === 'itemPropertyEdit' ||
     mode === 'micGainEdit' ||
     mode === 'adminRoleNameEdit' ||
-    mode === 'worldBuilderPropertyEdit'
+    mode === 'worldBuilderPropertyEdit' ||
+    mode === 'worldBuilderAmbianceEdit'
   );
 }
 
@@ -1414,6 +1420,7 @@ function gameLoop(): void {
     peerManager.setPeerAcousticMix(peer.id, acoustic.gain, acoustic.lowpassHz);
   }
   audio.setListenerFacing(state.player.facingDeg);
+  ambianceRuntime.update(state.ambiances.values(), listenerPosition, audioLayers.world);
   audio.updateSpatialAudio(peerManager.getPeers(), listenerPosition);
   audio.updateSpatialSamples(listenerPosition);
   radioRuntime.updateSpatialAudio(state.items, listenerPosition);
@@ -1728,6 +1735,8 @@ function getConnectionFlowDeps(): ConnectFlowDeps {
     peerManagerCleanupAll: () => peerManager.cleanupAll(),
     radioCleanupAll: () => radioRuntime.cleanupAll(),
     emitCleanupAll: () => {
+      ambianceRuntime.cleanup();
+      state.ambiances.clear();
       itemEmitRuntime.cleanupAll();
       elevatorAudioRuntime.cleanupAll();
     },
@@ -1799,6 +1808,10 @@ const onAppMessage = createOnMessageHandler({
     worldFloors = new Map(floors.map((floor) => [floor.z, floor.name]));
   },
   setStructurePresets: (presets: StructurePreset[]) => worldBuilderController.setPresets(presets),
+  setAmbianceTypes: (types) => {
+    ambianceRuntime.setTypes(types);
+    worldBuilderController.setAmbianceTypes(types);
+  },
   refreshStructureGeometry: () => {
     wallEdgeIndex = buildWallEdgeIndex(state.structures.values());
   },
@@ -1861,6 +1874,7 @@ const onAppMessage = createOnMessageHandler({
   handleItemTransferTargets,
   handleItemHandTargets,
   handleStructureActionResult: (message) => worldBuilderController.handleActionResult(message),
+  handleAmbianceActionResult: (message) => worldBuilderController.handleAmbianceActionResult(message),
   connectToLiveKit: (url, token) => {
     void connectLiveKit(url, token);
   },
@@ -2927,6 +2941,9 @@ function handleModeInput(input: ModeInput): void {
       worldBuilderWallList: ({ code: currentCode, key: currentKey }) => worldBuilderController.handleWallList(currentCode, currentKey),
       worldBuilderWallActions: ({ code: currentCode, key: currentKey }) => worldBuilderController.handleWallActions(currentCode, currentKey),
       worldBuilderPropertyList: ({ code: currentCode, key: currentKey }) => worldBuilderController.handlePropertyList(currentCode, currentKey),
+      worldBuilderAmbianceList: ({ code, key }) => worldBuilderController.handleAmbianceList(code, key),
+      worldBuilderAmbianceActions: ({ code, key }) => worldBuilderController.handleAmbianceActions(code, key),
+      worldBuilderAmbianceEdit: ({ code, key, ctrlKey }) => worldBuilderController.handleAmbianceEdit(code, key, ctrlKey),
       worldBuilderPropertyEdit: ({ code: currentCode, key: currentKey, ctrlKey: currentCtrlKey }) =>
         worldBuilderController.handlePropertyEdit(currentCode, currentKey, currentCtrlKey),
       itemProperties: ({ code: currentCode, key: currentKey }) =>
@@ -2982,6 +2999,10 @@ function getMobileTextEntry(): MobileTextEntry | null {
   }
   if (state.mode === 'micGainEdit') {
     return { label: 'Microphone gain', value: state.nicknameInput, maxLength, inputMode: 'decimal', submitLabel: 'Save' };
+  }
+  if (state.mode === 'worldBuilderAmbianceEdit') {
+    const label = worldBuilderController.getEditingAmbiancePropertyLabel();
+    return { label, value: state.nicknameInput, maxLength, inputMode: label === 'Name' ? 'text' : 'decimal', submitLabel: 'Save' };
   }
   if (state.mode === 'worldBuilderPropertyEdit') {
     const label = worldBuilderController.getEditingPropertyLabel();

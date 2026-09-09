@@ -42,6 +42,21 @@ export const itemSchema = z.object({
   ),
 });
 
+export const ambianceRegionSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1).max(100),
+  soundId: z.string().min(1),
+  floorZ: z.number().int(),
+  startX: z.number().int().nonnegative(),
+  startY: z.number().int().nonnegative(),
+  endX: z.number().int().nonnegative(),
+  endY: z.number().int().nonnegative(),
+  volume: z.number().int().min(0).max(100),
+  fadeDistance: z.number().finite().min(0).max(100),
+});
+
+export const ambianceTypeSchema = z.object({ id: z.string(), title: z.string(), url: z.string() });
+
 export const wallStructureSchema = z.object({
   id: z.string(),
   floorZ: z.number().int(),
@@ -95,6 +110,7 @@ export const welcomeMessageSchema = z.object({
   ),
   items: z.array(itemSchema).optional(),
   structures: z.array(wallStructureSchema).optional(),
+  ambiances: z.array(ambianceRegionSchema).optional(),
   worldConfig: z
     .object({
       gridSize: z.number().int().positive(),
@@ -108,6 +124,7 @@ export const welcomeMessageSchema = z.object({
         }),
       ),
       structurePresets: z.array(structurePresetSchema).optional(),
+      ambianceTypes: z.array(ambianceTypeSchema).optional(),
     })
     .optional(),
   serverInfo: z
@@ -463,6 +480,22 @@ export const structureActionResultSchema = z.object({
   structureId: z.string().optional(),
 });
 
+export const ambianceUpsertSchema = z.object({
+  type: z.literal('ambiance_upsert'),
+  ambiance: ambianceRegionSchema,
+});
+export const ambianceRemoveSchema = z.object({
+  type: z.literal('ambiance_remove'),
+  ambianceId: z.string(),
+});
+export const ambianceActionResultSchema = z.object({
+  type: z.literal('ambiance_action_result'),
+  ok: z.boolean(),
+  action: z.enum(['add', 'resize', 'slide', 'update', 'delete']),
+  message: z.string(),
+  ambianceId: z.string().optional(),
+});
+
 export const worldSoundSchema = z.object({
   type: z.literal('world_sound'),
   sound: z.string(),
@@ -502,6 +535,9 @@ export const incomingMessageSchema = z.discriminatedUnion('type', [
   structureUpsertSchema,
   structureRemoveSchema,
   structureActionResultSchema,
+  ambianceUpsertSchema,
+  ambianceRemoveSchema,
+  ambianceActionResultSchema,
   worldSoundSchema,
 ]);
 
@@ -540,6 +576,11 @@ export type OutgoingMessage =
   | { type: 'item_hand'; itemId: string; targetUserId: string }
   | { type: 'item_use'; itemId: string }
   | { type: 'item_secondary_use'; itemId: string }
+  | { type: 'ambiance_add' }
+  | { type: 'ambiance_update'; ambianceId: string; name?: string; soundId?: string; volume?: number; fadeDistance?: number }
+  | { type: 'ambiance_resize'; ambianceId: string; edge: 'west' | 'east' | 'south' | 'north'; delta: -1 | 1 }
+  | { type: 'ambiance_slide'; ambianceId: string; axis: 'x' | 'y'; delta: -1 | 1 }
+  | { type: 'ambiance_delete'; ambianceId: string }
   | { type: 'structure_add_wall'; preset: string; direction: 'north' | 'south' | 'east' | 'west' }
   | { type: 'structure_resize_wall'; structureId: string; endpoint: 'start' | 'end'; delta: -1 | 1 }
   | { type: 'structure_slide_wall'; structureId: string; delta: -1 | 1 }

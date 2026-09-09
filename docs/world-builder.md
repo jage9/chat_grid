@@ -34,3 +34,15 @@ Adding a wall selects its preset and the north, south, east, or west edge of the
 All users can press `C` to hear walls bordering their current square, including each wall's title and direction.
 
 Hitting a blocking wall or crossing a passable wall plays its `contactSound` immediately for the mover. The server validates the attempted move and broadcasts the same sound positionally to other nearby users through the world-audio layer.
+
+## Ambiances
+
+`Add ambiance` and `Edit ambiances` follow the wall entries in World Builder and require the same `world.structure.edit` permission. Adding creates a one-square region at the builder's current position and opens its editor immediately. Both add and edit use the same menu, with Type first; there is no wall-side or orientation step.
+
+Ambiances occupy inclusive rectangular areas on one floor. Each has a user-editable name, sound type, start/end X and Y coordinates, volume, and Fade distance. The default volume is 25 percent and the default Fade distance is three squares. Regions may overlap and their loops play together. They do not block movement or occupy item slots.
+
+The editor reuses list navigation, option selection, numeric controls, text entry, Space tooltips, and delete confirmation. Left/Right adjusts the selected edge or slides the whole region along the chosen axis. The server rejects resizing below one square or moving outside the grid. Volume and Fade distance can also be entered directly. Zero Fade distance makes the sound audible only inside the region.
+
+Inside a region its sound is centered. Outside, the nearest point on the rectangle determines the sound direction; volume fades linearly to silence at the configured Fade distance. Ambiances use the World audio layer, master volume, shared standard/HRTF renderer, and wall/acoustic-zone transmission. The rectangles are lightly shaded on the visual grid.
+
+The server discovers sound types from `client/public/sounds/ambiances/` at startup and sends their IDs, titles, and web URLs in the welcome catalog. The supplied types are City, Dark, Forest, Nighttime, Ocean, and Waterfall. Add supported audio files to that folder, deploy the client assets, and restart the server to expose new types; no client code list needs editing. Regions persist in `ambiances.json` beside the configured item state file. A missing sound file leaves the region editable but silent until a valid type is selected or the file is restored.
