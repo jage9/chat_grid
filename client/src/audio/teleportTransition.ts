@@ -29,7 +29,7 @@ export type TeleportTransitionControllerOptions = TeleportTransitionCallbacks & 
 
 type ActivePhase = 'fadingOut' | 'fadingIn';
 
-const FULL_TRANSITION_DURATION_MS = 1000;
+const FULL_TRANSITION_DURATION_MS = 2000;
 const FULL_GAIN = 1;
 const SILENT_GAIN = 0;
 

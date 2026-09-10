@@ -9,7 +9,7 @@ const startEvent: TeleportTransitionEvent = {
   x: 20,
   y: 30,
   z: 2,
-  durationMs: 1000,
+  durationMs: 2000,
 };
 
 const arriveEvent: TeleportTransitionEvent = {
@@ -34,7 +34,7 @@ describe('TeleportTransitionController', () => {
     controller.handle(startEvent);
 
     expect(controller.isActive()).toBe(true);
-    expect(setGain).toHaveBeenCalledWith(0, 500);
+    expect(setGain).toHaveBeenCalledWith(0, 1000);
     expect(onStart).toHaveBeenCalledWith(startEvent);
   });
 
@@ -50,7 +50,7 @@ describe('TeleportTransitionController', () => {
     controller.handle(arriveEvent);
 
     expect(controller.isActive()).toBe(true);
-    expect(calls).toEqual(['arrive', 'gain:1:500']);
+    expect(calls).toEqual(['arrive', 'gain:1:1000']);
   });
 
   it('restores gain and invokes completion after the fade-in phase', () => {

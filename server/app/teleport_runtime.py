@@ -19,7 +19,7 @@ from .models import (
 
 LOGGER = logging.getLogger("chgrid.server.teleport")
 
-TELEPORT_DURATION_MS = 1000
+TELEPORT_DURATION_MS = 2000
 TELEPORT_HALF_DURATION_SECONDS = TELEPORT_DURATION_MS / 2000
 TeleportDestination: TypeAlias = tuple[int, int, int]
 TeleportPhase: TypeAlias = Literal["start", "arrive", "complete", "cancel"]

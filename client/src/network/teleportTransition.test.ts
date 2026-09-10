@@ -17,7 +17,7 @@ describe('server teleport transitions', () => {
     const handler = createOnMessageHandler(deps);
     for (const phase of ['start', 'arrive', 'complete', 'cancel']) {
       const packet = incomingMessageSchema.parse({
-        type: 'teleport_transition', phase, x: 10, y: 20, z: 40, durationMs: 1000,
+        type: 'teleport_transition', phase, x: 10, y: 20, z: 40, durationMs: 2000,
       });
       await handler(packet);
       expect(handleTeleportTransition).toHaveBeenLastCalledWith(packet);
@@ -26,7 +26,7 @@ describe('server teleport transitions', () => {
   });
 
   it('rejects malformed transition phases and coordinates', () => {
-    const packet = { type: 'teleport_transition', phase: 'start', x: 10, y: 20, z: 40, durationMs: 1000 };
+    const packet = { type: 'teleport_transition', phase: 'start', x: 10, y: 20, z: 40, durationMs: 2000 };
     for (const invalid of [{ phase: 'move' }, { x: 1.5 }, { durationMs: 0 }]) {
       expect(incomingMessageSchema.safeParse({ ...packet, ...invalid }).success).toBe(false);
     }

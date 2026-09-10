@@ -97,10 +97,11 @@ async def test_item_use_starts_authoritative_transition_and_moves_held_items(
     assert [
         (packet.phase, packet.x, packet.y, packet.z, packet.durationMs)
         for packet in starts
-    ] == [("start", 10, 11, 40, 1000)]
+    ] == [("start", 10, 11, 40, 2000)]
 
     await _drain_transition_half(sleep, 1)
     await sleep.wait_for_call(2)
+    assert sleep.calls == [1.0, 1.0]
     assert (client.x, client.y, client.z, client.facing_deg) == (10, 11, 40, 225)
     assert (
         transport.last_packet_of_type(client, TeleportTransitionPacket).phase

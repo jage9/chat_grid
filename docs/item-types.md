@@ -27,7 +27,7 @@ This is behavior-focused documentation for item types and their defaults.
 - Editable, deletable, usable, and stationary. Edit its name and **Destination** using the shared item property editor.
 - Destination is one text field containing exactly three integers: `x, y, z`. Spaces are allowed. `z` is the floor elevation (currently `0` or `40`), not a floor index.
 - Use from its square to teleport to any in-bounds square on a configured floor. Walls along the route do not affect teleportation.
-- The transition lasts one second: current location audio fades out for half a second, the server switches position, then destination audio fades in for half a second. The existing teleport start and arrival sounds play.
+- The transition lasts two seconds: current location audio fades out for one second, the server switches position, then destination audio fades in for one second. The existing teleport start and arrival sounds play.
 - Facing and held items follow the user. Ordinary item use permissions apply. Movement and further item use are blocked during the transition; elevator riders must leave the elevator before using it.
 - Destination syntax is checked when editing; grid bounds and supported floor are checked again before use. Editing or deleting the device after activation does not change the captured destination.
 
