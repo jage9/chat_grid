@@ -71,6 +71,9 @@ export class TeleportTransitionController {
       case 'arrive':
         if (this.activePhase !== 'fadingOut') return;
         this.activePhase = 'fadingIn';
+        // A silent/disconnected audio bus can report a stale AudioParam value.
+        // Arrival always begins at silence, regardless of what was rendering.
+        this.options.setWorldTransitionGain(SILENT_GAIN, 0);
         this.options.onArrive?.(event);
         this.options.setWorldTransitionGain(FULL_GAIN, halfDurationMs);
         return;

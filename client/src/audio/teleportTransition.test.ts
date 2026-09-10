@@ -38,7 +38,7 @@ describe('TeleportTransitionController', () => {
     expect(onStart).toHaveBeenCalledWith(startEvent);
   });
 
-  it('runs the midpoint callback before fading the destination back in', () => {
+  it('pins a quiet origin to silence before loading and fading the destination in', () => {
     const calls: string[] = [];
     const controller = new TeleportTransitionController({
       setWorldTransitionGain: (gain, duration) => calls.push(`gain:${gain}:${duration}`),
@@ -50,7 +50,7 @@ describe('TeleportTransitionController', () => {
     controller.handle(arriveEvent);
 
     expect(controller.isActive()).toBe(true);
-    expect(calls).toEqual(['arrive', 'gain:1:1000']);
+    expect(calls).toEqual(['gain:0:0', 'arrive', 'gain:1:1000']);
   });
 
   it('restores gain and invokes completion after the fade-in phase', () => {

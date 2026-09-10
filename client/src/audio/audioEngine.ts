@@ -69,6 +69,7 @@ export class AudioEngine {
   private worldGainNode: GainNode | null = null;
   private sfxGainNode: GainNode | null = null;
   private worldTransitionGain = 1;
+  private worldTransitionRamp: { from: number; to: number; start: number; end: number } | null = null;
   private readonly sampleCache = new Map<string, AudioBuffer>();
   private readonly sampleLoaders = new Map<string, Promise<AudioBuffer>>();
   private readonly activeSpatialSamples = new Set<ActiveSpatialSampleRuntime>();
@@ -137,14 +138,25 @@ export class AudioEngine {
   /** Schedules a shared fade for all positional/world audio. */
   setWorldTransitionGain(targetGain: number, durationMs: number): void {
     const nextGain = Math.max(0, Math.min(1, Number.isFinite(targetGain) ? targetGain : 1));
-    this.worldTransitionGain = nextGain;
     const gainParam = this.worldGainNode?.gain;
     const audioCtx = this.audioCtx;
-    if (!gainParam || !audioCtx) return;
+    if (!gainParam || !audioCtx) {
+      this.worldTransitionGain = nextGain;
+      this.worldTransitionRamp = null;
+      return;
+    }
 
     const now = audioCtx.currentTime;
     const safeDurationMs = Number.isFinite(durationMs) ? Math.max(0, durationMs) : 0;
-    const currentGain = gainParam.value;
+    // AudioParam.value can remain stale while the world bus has no active input.
+    // Derive the ramp's current value from its scheduled audio-clock times.
+    const ramp = this.worldTransitionRamp;
+    const progress = ramp ? Math.max(0, Math.min(1, (now - ramp.start) / (ramp.end - ramp.start))) : 1;
+    const currentGain = ramp ? ramp.from + (ramp.to - ramp.from) * progress : this.worldTransitionGain;
+    this.worldTransitionGain = nextGain;
+    this.worldTransitionRamp = safeDurationMs > 0
+      ? { from: currentGain, to: nextGain, start: now, end: now + safeDurationMs / 1000 }
+      : null;
     gainParam.cancelScheduledValues(now);
     gainParam.setValueAtTime(currentGain, now);
     if (safeDurationMs > 0) {

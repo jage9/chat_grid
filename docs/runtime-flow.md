@@ -179,3 +179,5 @@ The server persists authored ambiance rectangles and supplies the sound catalog.
 ## Item teleport transitions
 
 An item plugin can return `ItemUseResult.teleport_destination`. Shared server orchestration validates the destination and runs a two-second transition; it does not branch on the teleporter type. The client fades location audio out for 1000 ms, waits for the server's position change, then fades the new location in for 1000 ms. It never interpolates through intervening squares or sends a completion coordinate. The server moves carried items with the user, preserves facing, persists the new position, and blocks movement and further item use until completion. Disconnect cancels the task and retains whichever endpoint the server has reached.
+
+The world-audio transition bus tracks its scheduled gain using the audio clock, including when no source is active. Arrival pins this bus to silence before starting the destination fade, so newly loaded radio streams follow the same fade as existing sources.

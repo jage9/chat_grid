@@ -65,6 +65,22 @@ describe('AudioEngine output device', () => {
     expect(worldOutput.gain.value).toBe(0);
   });
 
+  it('starts the destination fade from silence even if an inactive bus reports stale gain', async () => {
+    vi.stubGlobal('window', { AudioContext: FakeAudioContext });
+    const audio = new AudioEngine();
+    await audio.ensureContext();
+    const context = audio.context as unknown as FakeAudioContext;
+    const output = audio.getOutputDestinationNode() as GainNode;
+    audio.setWorldTransitionGain(0, 1000);
+    context.currentTime = 1;
+    output.gain.value = 0.8;
+    audio.setWorldTransitionGain(0, 0);
+    output.gain.value = 0.8;
+    audio.setWorldTransitionGain(1, 1000);
+    expect(output.gain.setValueAtTime).toHaveBeenLastCalledWith(0, 1);
+    expect(output.gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(1, 2);
+  });
+
   it.each(['headset', ''])('stores selection %j without creating a context, then applies it on creation', async (deviceId) => {
     vi.stubGlobal('window', { AudioContext: FakeAudioContext });
     const audio = new AudioEngine();
