@@ -21,6 +21,14 @@ This is behavior-focused documentation for item types and their defaults.
 - Read-only inspect fields include `createdBy` and `updatedBy` for ownership/change tracking.
 - Every item has a server-owned `z` height and footprint. Item interaction compares the full `x`, `y`, `z` position.
 
+## Shared emitted sound controls
+
+Every item type except `radio_station` supports an editable emitted sound through the shared property editor. The clock retains its ticking sound by default; other types start with no emitted sound. Empty text, `none`, or `off` disables the emitter.
+
+Volume, range, speed/pitch, tempo, initial delay, loop delay, effect, and directional controls appear only when an emitted sound is set. Facing additionally requires directional audio; effect amount requires an effect other than `off`. Existing type-specific ranges remain in place, including the piano's `5..20` range shared with its notes, which remains visible even without an emitted sound. Emitted audio uses the Items layer and follows the item's location, including while carried.
+
+Radio retains its stream, volume, effects, range, and facing controls; it has no separate emitted sound or emitted-sound effects.
+
 ## `teleporter`
 
 - Default name: `Teleporter`; destination: `0, 0, 0`.

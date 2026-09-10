@@ -167,7 +167,7 @@ On disconnect:
 - `Delivery`: routes typed packets to one client or the authenticated roster through a transport. Production uses the websocket transport; server tests use a recording transport so delivery and fanout assertions do not patch server internals.
 - `PeerManager`: LiveKit room lifecycle and remote track attach.
 - `RadioStationRuntime`: shared stream sources + per-item output/effects/spatialization.
-- `ItemEmitRuntime`: per-item looping emit source + spatialization.
+- `ItemEmitRuntime`: per-item looping emit source + spatialization for all types except radio stations. The server composes editable emitter properties and validation into item plugins; the client uses those metadata rules in the shared editor. Empty, `none`, and `off` sound references disable generic playback.
 - `AudioEngine`: shared audio context, sample playback, effects, and voice graph.
 - `WorldAudioRouter`: shared policy and playback entry point for sampled positional world events.
 - `AcousticZoneRuntime`: shared zone connectivity and opening/closing transmission gain.

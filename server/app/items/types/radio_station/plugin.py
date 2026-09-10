@@ -13,5 +13,6 @@ ITEM_TYPE_PLUGIN = {
         validate_update=validator.validate_update,
         use_item=actions.use_item,
         secondary_use_item=actions.secondary_use_item,
+        include_emit_controls=False,
     ),
 }

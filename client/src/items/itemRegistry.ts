@@ -388,6 +388,11 @@ export function isItemPropertyVisible(item: WorldItem, key: string): boolean {
       item.params[conditionKey] ??
       getItemTypeGlobalProperties(item.type)[conditionKey];
     if (typeof expected === 'string' && expected.startsWith('!')) {
+      const normalizedSound = String(actual ?? '').trim().toLowerCase();
+      const isNormalizedEmptySound = normalizedSound === '' || normalizedSound === 'none' || normalizedSound === 'off';
+      if (conditionKey === 'emitSound' && expected === '!' && isNormalizedEmptySound) {
+        return false;
+      }
       if (String(actual) === expected.slice(1)) {
         return false;
       }

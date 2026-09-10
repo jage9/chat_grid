@@ -9,6 +9,9 @@ ITEM_TYPE_PLUGIN = {
     "type": "widget",
     "order": 60,
     "module": build_item_module(
-        definition, validate_update=validator.validate_update, use_item=actions.use_item
+        definition,
+        validate_update=validator.validate_update,
+        use_item=actions.use_item,
+        validate_shared_emit=False,
     ),
 }

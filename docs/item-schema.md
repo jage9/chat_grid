@@ -27,7 +27,7 @@
 ```
 
 - `useSound`: optional client-played one-shot sound when item `use` succeeds; global item field and not user-editable in V1.
-- `emitSound`: optional continuously-looping spatial sound emitted from the item on the grid; global item field and not user-editable in V1.
+- Top-level `emitSound` is the type default. Every non-radio type supports an editable, persisted `params.emitSound` override; empty text, `none`, and `off` normalize to an empty string and disable playback.
 - `capabilities`, `useSound`, and `emitSound` are derived from global item-type definitions at runtime (not stored per-instance in persisted state).
 - `carrierId`: carrying connection ID or `null` when on the grid. Several items may reference one carrier, up to the server’s `items.max_carried_items` limit (default `2`). Carrying is separate from ownership and is cleared on disconnect/restart.
 - Handing an item updates `carrierId`, position, update audit fields, and version without changing ownership. The server checks range, floor, online status, carrying capacity, and pickup permissions both when listing recipients and when handing it over. Ownership transfer applies to items on the sender’s square or held by the sender; it leaves position and carrier unchanged and does not depend on recipient carrying capacity or proximity.
@@ -36,7 +36,7 @@
 - `useCooldownMs`: global per item type (`radio_station=1000`, `dice=1000`, `wheel=4000`, `clock=1000`, `widget=1000`, `piano=1000`), not per-instance editable.
 - `emitRange`: global spatial range default per item type (`radio_station=10`, `dice=15`, `wheel=15`, `clock=10`, `widget=15`, `piano=15`).
   - `radio_station` can override this per instance via `params.emitRange` (`5..20`).
-- `directional`: global directional attenuation flag per item type (`radio_station=true`, others `false`); `widget` can override per instance via `params.directional`.
+- `directional`: global directional attenuation flag per item type (`radio_station=true`, others `false`); every non-radio type can override per instance via `params.directional`.
 - `z`: authoritative floor height. Ordinary items use `0` or `40`.
 - `occupiedOffsets`: server-owned horizontal footprint relative to the item anchor. Elevators and existing items use one cell; the footprint model remains available for future larger objects.
 
@@ -70,6 +70,14 @@
 - End-to-end add-item template: `docs/item-type-template.md`.
 
 ## Type Params
+
+### Shared emitter params (all types except `radio_station`)
+
+The server composes these defaults and controls into eligible plugins: `emitSound` (type default, clock ticking or empty), `emitVolume=100`, `emitRange` (type default), `emitSoundSpeed=50`, `emitSoundTempo=50`, `emitInitialDelay=0`, `emitLoopDelay=0`, `emitEffect="off"`, `emitEffectValue=50`, `directional` (type default), and `facing=0`. Authored type defaults take precedence.
+
+Standard validation uses range `1..20`, volume `0..100`, speed/tempo `0..100` (50 normal), delays `0..300` seconds, effect amount `0..100`, and effects `reverb | echo | flanger | high_pass | low_pass | off`. Existing type restrictions still apply, such as piano range `5..20`. Sound references accept filenames under `sounds/` or full URLs.
+
+Metadata hides dependent controls with `visibleWhen: {"emitSound": "!"}`. Facing also requires `directional=true`; effect amount also requires `emitEffect != off`. Disabling a sound preserves its stored settings. Piano range remains visible without an emitted sound because it also controls notes. Radio keeps only its existing stream controls.
 
 ### `teleporter`
 

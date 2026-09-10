@@ -45,6 +45,18 @@ type EmitSpatialConfig = {
   facingDeg: number;
 };
 
+/** Returns the normalized sound reference used by the generic item emitter. */
+export function resolveItemEmitSound(item: WorldItem): string {
+  const rawSound = String(item.params.emitSound ?? item.emitSound ?? '').trim();
+  if (!rawSound || rawSound.toLowerCase() === 'none' || rawSound.toLowerCase() === 'off') return '';
+  return rawSound;
+}
+
+/** Returns whether an item belongs in the generic emitted-audio runtime. */
+export function isItemEmitPlaybackEligible(item: WorldItem): boolean {
+  return item.type !== 'radio_station' && item.params.enabled !== false && resolveItemEmitSound(item) !== '';
+}
+
 const ITEM_EMIT_BASE_GAIN = 1;
 const SUBSCRIBE_PRELOAD_SQUARES = 5;
 const UNSUBSCRIBE_HYSTERESIS_SQUARES = 8;
@@ -194,13 +206,15 @@ export class ItemEmitRuntime {
 
     for (const item of items) {
       seenItemIds.add(item.id);
+      if (!isItemEmitPlaybackEligible(item)) {
+        this.cleanup(item.id);
+        continue;
+      }
       if (!this.isPlaybackAllowed(item)) {
         this.cleanup(item.id, { preserveSchedule: true });
         continue;
       }
-      const emitSound = String(item.params.emitSound ?? item.emitSound ?? '').trim();
-      const enabled = item.params.enabled !== false;
-      const soundUrl = enabled ? this.resolveSoundUrl(emitSound) : '';
+      const soundUrl = this.resolveSoundUrl(resolveItemEmitSound(item));
       if (!soundUrl) {
         this.cleanup(item.id);
         continue;

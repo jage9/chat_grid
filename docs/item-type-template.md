@@ -57,3 +57,7 @@ ITEM_TYPE_PLUGIN = {
 2. Run `cd server && uv run --extra dev pytest`.
 3. Run `cd client && npm run lint && npm run build`.
 4. Update `docs/item-types.md` and `docs/item-schema.md` if behavior/defaults changed.
+
+`build_item_module` composes shared emitter defaults, editable keys, metadata, and validation into plugins by default. Radio opts out with `include_emit_controls=False`. Plugins whose validators already use the shared emit validators can set `validate_shared_emit=False` to avoid duplicate validation. Item-specific restrictions still apply, and shared emitter fields survive validators that filter their original parameter lists.
+
+Use `always_visible_emit_keys` for existing controls that also serve another audio source, such as piano range, so clearing the optional sound does not hide those controls.

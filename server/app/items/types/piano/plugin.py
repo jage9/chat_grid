@@ -9,6 +9,9 @@ ITEM_TYPE_PLUGIN = {
     "type": "piano",
     "order": 30,
     "module": build_item_module(
-        definition, validate_update=validator.validate_update, use_item=actions.use_item
+        definition,
+        validate_update=validator.validate_update,
+        use_item=actions.use_item,
+        always_visible_emit_keys=("emitRange",),
     ),
 }
