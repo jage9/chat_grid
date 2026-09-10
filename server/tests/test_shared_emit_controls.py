@@ -148,3 +148,39 @@ def test_radio_station_does_not_receive_shared_emit_controls() -> None:
     assert not shared_only_keys.intersection(module.PARAM_KEYS)
     assert "emitVolume" not in module.PROPERTY_METADATA
     assert "emitEffect" not in module.PROPERTY_METADATA
+
+
+@pytest.mark.parametrize("item_type", ["clock", "teleporter"])
+@pytest.mark.parametrize("saved_sound", [None, "sounds/custom.ogg", ""])
+def test_old_item_volume_update_preserves_sound(
+    tmp_path, world, item_type, saved_sound
+) -> None:
+    """Older persisted items acquire missing defaults without losing sound overrides."""
+
+    state_file = tmp_path / "items.json"
+    service = ItemService(state_file=state_file)
+    item = service.default_item(world.connect("tester"), item_type)
+    expected_sound = (
+        saved_sound if saved_sound is not None else item.params["emitSound"]
+    )
+    for key in EMIT_KEYS:
+        item.params.pop(key, None)
+    if saved_sound is not None:
+        item.params["emitSound"] = saved_sound
+    service.add_item(item)
+    service.save_state()
+
+    loaded_service = ItemService(state_file=state_file)
+    loaded = loaded_service.items[item.id]
+    assert loaded.params["emitVolume"] == 100
+    assert loaded.params["emitSound"] == expected_sound
+    for volume in (0, 42):
+        loaded.params = ITEM_MODULES[item_type].validate_update(
+            loaded, {**loaded.params, "emitVolume": volume}
+        )
+        assert loaded.params["emitSound"] == expected_sound.lstrip("/")
+        assert loaded.params["emitVolume"] == volume
+        loaded_service.save_state()
+        restored = ItemService(state_file=state_file).items[item.id]
+        assert restored.params["emitSound"] == expected_sound.lstrip("/")
+        assert restored.params["emitVolume"] == volume

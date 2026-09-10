@@ -127,7 +127,7 @@ class ItemService:
         return changed
 
     def load_state(self) -> None:
-        """Load persisted item instances and rehydrate global fields from catalog."""
+        """Restore items with catalog defaults for missing params and global fields."""
 
         if not self.state_file:
             return
@@ -160,7 +160,7 @@ class ItemService:
                     capabilities=list(item_def.capabilities),
                     useSound=item_def.use_sound,
                     emitSound=item_def.emit_sound,
-                    params=persisted.params,
+                    params={**deepcopy(item_def.default_params), **persisted.params},
                     carrierId=persisted.carrierId,
                     occupiedOffsets=[
                         {"x": offset_x, "y": offset_y}
