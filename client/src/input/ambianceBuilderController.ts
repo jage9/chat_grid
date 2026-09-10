@@ -340,7 +340,6 @@ export function createAmbianceBuilderController(deps: WorldBuilderDeps & { onBac
         }
         deps.state.ambiances.set(ambiance.id, { ...latest, soundId: nextSoundId });
         if (!sendUpdate(ambiance.id, 'soundId', nextSoundId)) return;
-        deps.blip();
         return;
       }
     }
@@ -361,9 +360,12 @@ export function createAmbianceBuilderController(deps: WorldBuilderDeps & { onBac
       if (adjustment) {
         if (!hasPermission()) return;
         const value = Number(adjustment.value);
+        if (value === ambiance[currentAction]) {
+          deps.updateStatus(adjustment.displayValue);
+          deps.cancel();
+          return;
+        }
         if (!previewNumericValue(ambiance.id, currentAction, value)) return;
-        if (adjustment.hitBoundary) deps.cancel();
-        else deps.blip();
         return;
       }
     }

@@ -186,3 +186,4 @@ Applies to effect select, user/item list modes, item selection, item property li
 - `Left` / `Right`: Adjust the selected edge, slide, type, or numeric property. `Enter` opens a type selector or name/numeric entry; `Space` reads its tooltip and controls.
 - `Escape`: Cancel text/selection or return to the previous menu. Deletion uses the shared confirmation dialog.
 - World audio layer (`4`): Includes ambiance loops. `Shift+4` changes HRTF as usual.
+- Value adjustments play one confirmation when accepted by the server. Pressing past an existing numeric limit plays only the boundary sound.

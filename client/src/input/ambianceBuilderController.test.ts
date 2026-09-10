@@ -33,6 +33,9 @@ function setup(options: { permission?: boolean; regions?: AmbianceRegion[] } = {
   const announceMenuEntry = vi.fn();
   const openOptionSelector = vi.fn();
   const openConfirmation = vi.fn();
+  const blip = vi.fn();
+  const confirm = vi.fn();
+  const cancel = vi.fn();
   let permitted = options.permission ?? true;
   const controller = createWorldBuilderController({
     state,
@@ -40,9 +43,9 @@ function setup(options: { permission?: boolean; regions?: AmbianceRegion[] } = {
     send,
     updateStatus,
     announceMenuEntry,
-    blip: vi.fn(),
-    confirm: vi.fn(),
-    cancel: vi.fn(),
+    blip,
+    confirm,
+    cancel,
     applyTextInputEdit: vi.fn(),
     setReplaceTextOnNextType: vi.fn(),
     openOptionSelector,
@@ -51,6 +54,9 @@ function setup(options: { permission?: boolean; regions?: AmbianceRegion[] } = {
   controller.setAmbianceTypes(types);
   return {
     announceMenuEntry,
+    blip,
+    confirm,
+    cancel,
     controller,
     openConfirmation,
     openOptionSelector,
@@ -72,18 +78,48 @@ function openAmbianceActions(controller: ReturnType<typeof createWorldBuilderCon
 }
 
 describe('World Builder ambiance controls', () => {
-  it('announces one server-confirmed value for an arrow adjustment', () => {
-    const { controller, state, updateStatus } = setup();
+  it('announces one server-confirmed value and plays one sound for an arrow adjustment', () => {
+    const { controller, state, updateStatus, blip, confirm, cancel } = setup();
     openAmbianceActions(controller, state);
     for (let index = 0; index < 8; index += 1) controller.handleAmbianceActions('ArrowDown', '');
     updateStatus.mockClear();
+    blip.mockClear();
+    confirm.mockClear();
+    cancel.mockClear();
     controller.handleAmbianceActions('ArrowRight', '');
     expect(updateStatus).not.toHaveBeenCalled();
+    expect(blip).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(cancel).not.toHaveBeenCalled();
     controller.handleAmbianceActionResult({
       ok: true, action: 'update', ambianceId: 'ambiance-1', message: '30 percent',
     });
     expect(updateStatus).toHaveBeenCalledTimes(1);
     expect(updateStatus).toHaveBeenCalledWith('30 percent');
+    expect(confirm).toHaveBeenCalledOnce();
+  });
+
+  it('plays only the boundary sound and sends no update when already at a numeric limit', () => {
+    const { controller, state, blip, confirm, cancel, send } = setup({ regions: [ambiance({ volume: 100 })] });
+    openAmbianceActions(controller, state);
+    for (let index = 0; index < 8; index += 1) controller.handleAmbianceActions('ArrowDown', '');
+    blip.mockClear();
+    controller.handleAmbianceActions('ArrowRight', '');
+    expect(send).not.toHaveBeenCalled();
+    expect(blip).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('plays only the server confirmation when cycling ambiance type', () => {
+    const { controller, state, blip, confirm, cancel } = setup();
+    openAmbianceActions(controller, state);
+    blip.mockClear();
+    controller.handleAmbianceActions('ArrowRight', '');
+    expect(blip).not.toHaveBeenCalled();
+    controller.handleAmbianceActionResult({ ok: true, action: 'update', message: 'Wind', ambianceId: 'ambiance-1' });
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(cancel).not.toHaveBeenCalled();
   });
 
   it('adds directly from the root menu without type or direction menus', () => {
