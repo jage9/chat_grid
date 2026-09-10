@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { configureSpatialAudio } from './spatial';
 import type { WorldItem } from '../state/gameState';
 import { isItemEmitPlaybackEligible, ItemEmitRuntime, resolveItemEmitSound } from './itemEmitRuntime';
 
@@ -144,6 +145,45 @@ describe('generic item emit playback eligibility', () => {
       expect(mediaInstall.media[0].pause).toHaveBeenCalledOnce();
       expect((runtime as unknown as { nextEmitStartAtMs: Map<string, number> }).nextEmitStartAtMs.has(emitting.id)).toBe(false);
       expect((runtime as unknown as { resumeStateByItemId: Map<string, unknown> }).resumeStateByItemId.has(emitting.id)).toBe(false);
+    } finally {
+      mediaInstall.restore();
+    }
+  });
+});
+
+
+describe('emitted sound directionality', () => {
+  it.each(['standard', 'hrtf'] as const)('applies source facing and toggles live in %s mode', async (mode) => {
+    const context = new FakeAudioContext();
+    const mediaInstall = installMedia();
+    const config = { range: 10, directional: true, facingDeg: 0 };
+    const runtime = new ItemEmitRuntime(makeAudio(context), path => path, () => config);
+    try {
+      configureSpatialAudio(context as unknown as AudioContext, mode, 'stereo', 0);
+      const emitting = item('teleporter', { emitSound: '/sounds/whirr.ogg', emitVolume: 100 });
+      const items = new Map([[emitting.id, emitting]]);
+      await runtime.sync([emitting], { x: 1, y: 4, z: 0 });
+      const output = (runtime as unknown as { outputs: Map<string, { gain: { gain: { value: number } } }> }).outputs.get(emitting.id)!;
+      const gainAt = (x: number, y: number) => {
+        runtime.updateSpatialAudio(items, { x, y, z: 0 });
+        return output.gain.gain.value;
+      };
+      const front = gainAt(1, 4);
+      const side = gainAt(4, 1);
+      const rear = gainAt(1, -2);
+      expect(front).toBeGreaterThan(side);
+      expect(side).toBeGreaterThan(rear);
+      expect(rear).toBeGreaterThan(0);
+      expect(gainAt(1, -4)).toBe(0);
+      config.facingDeg = 180;
+      expect(gainAt(1, -2)).toBeCloseTo(front);
+      expect(gainAt(1, 4)).toBeCloseTo(rear);
+      configureSpatialAudio(context as unknown as AudioContext, mode, 'stereo', 90);
+      expect(gainAt(1, 4)).toBeCloseTo(rear);
+      config.directional = false;
+      expect(gainAt(1, 4)).toBeCloseTo(front);
+      expect(gainAt(1, -2)).toBeCloseTo(front);
+      expect(gainAt(4, 1)).toBeCloseTo(front);
     } finally {
       mediaInstall.restore();
     }
