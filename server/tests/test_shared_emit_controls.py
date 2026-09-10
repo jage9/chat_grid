@@ -45,7 +45,9 @@ def test_shared_emit_controls_are_composed_for_each_eligible_plugin(world) -> No
         assert EMIT_KEYS.issubset(module.PARAM_KEYS)
         assert EMIT_KEYS.issubset(item.params)
         assert item.params["emitSound"] == (
-            "sounds/clock.ogg" if item_type == "clock" else ""
+            {"clock": "sounds/clock.ogg", "teleporter": "/sounds/whirr.ogg"}.get(
+                item_type, ""
+            )
         )
         for key in EMIT_KEYS - {"emitSound"}:
             visible_when = module.PROPERTY_METADATA[key].get("visibleWhen", {})

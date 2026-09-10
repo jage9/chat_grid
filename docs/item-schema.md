@@ -73,7 +73,7 @@
 
 ### Shared emitter params (all types except `radio_station`)
 
-The server composes these defaults and controls into eligible plugins: `emitSound` (type default, clock ticking or empty), `emitVolume=100`, `emitRange` (type default), `emitSoundSpeed=50`, `emitSoundTempo=50`, `emitInitialDelay=0`, `emitLoopDelay=0`, `emitEffect="off"`, `emitEffectValue=50`, `directional` (type default), and `facing=0`. Authored type defaults take precedence.
+The server composes these defaults and controls into eligible plugins: `emitSound` (type default: clock ticking, teleporter whirr, or empty), `emitVolume=100`, `emitRange` (type default), `emitSoundSpeed=50`, `emitSoundTempo=50`, `emitInitialDelay=0`, `emitLoopDelay=0`, `emitEffect="off"`, `emitEffectValue=50`, `directional` (type default), and `facing=0`. Authored type defaults take precedence.
 
 Standard validation uses range `1..20`, volume `0..100`, speed/tempo `0..100` (50 normal), delays `0..300` seconds, effect amount `0..100`, and effects `reverb | echo | flanger | high_pass | low_pass | off`. Existing type restrictions still apply, such as piano range `5..20`. Sound references accept filenames under `sounds/` or full URLs.
 
@@ -83,7 +83,9 @@ Metadata hides dependent controls with `visibleWhen: {"emitSound": "!"}`. Facing
 
 ```json
 {
-  "destination": "0, 0, 0"
+  "destination": "0, 0, 0",
+  "emitSound": "/sounds/whirr.ogg",
+  "emitRange": 8
 }
 ```
 

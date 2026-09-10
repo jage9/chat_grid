@@ -23,7 +23,7 @@ This is behavior-focused documentation for item types and their defaults.
 
 ## Shared emitted sound controls
 
-Every item type except `radio_station` supports an editable emitted sound through the shared property editor. The clock retains its ticking sound by default; other types start with no emitted sound. Empty text, `none`, or `off` disables the emitter.
+Every item type except `radio_station` supports an editable emitted sound through the shared property editor. The clock retains its ticking sound by default, and teleporters emit `/sounds/whirr.ogg`; other types start with no emitted sound. Empty text, `none`, or `off` disables the emitter.
 
 Volume, range, speed/pitch, tempo, initial delay, loop delay, effect, and directional controls appear only when an emitted sound is set. Facing additionally requires directional audio; effect amount requires an effect other than `off`. Existing type-specific ranges remain in place, including the piano's `5..20` range shared with its notes, which remains visible even without an emitted sound. Emitted audio uses the Items layer and follows the item's location, including while carried.
 
@@ -32,6 +32,7 @@ Radio retains its stream, volume, effects, range, and facing controls; it has no
 ## `teleporter`
 
 - Default name: `Teleporter`; destination: `0, 0, 0`.
+- Default emitted sound: `/sounds/whirr.ogg`, with an emit range of `8` squares.
 - Editable, deletable, usable, and stationary. Edit its name and **Destination** using the shared item property editor.
 - Destination is one text field containing exactly three integers: `x, y, z`. Spaces are allowed. `z` is the floor elevation (currently `0` or `40`), not a floor index.
 - Use from its square to teleport to any in-bounds square on a configured floor. Walls along the route do not affect teleportation.
