@@ -42,6 +42,12 @@ def test_shared_emit_controls_are_composed_for_each_eligible_plugin(world) -> No
         item = service.default_item(client, item_type)
 
         assert EMIT_KEYS.issubset(module.EDITABLE_PROPERTIES)
+        sound_index = module.EDITABLE_PROPERTIES.index("emitSound")
+        assert set(module.EDITABLE_PROPERTIES[sound_index:]) == EMIT_KEYS
+        assert all(
+            module.EDITABLE_PROPERTIES.index(key) > sound_index
+            for key in EMIT_KEYS - {"emitSound"}
+        )
         assert EMIT_KEYS.issubset(module.PARAM_KEYS)
         assert EMIT_KEYS.issubset(item.params)
         assert item.params["emitSound"] == (

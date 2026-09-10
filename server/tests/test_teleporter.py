@@ -28,7 +28,7 @@ def test_teleporter_defaults_and_destination_metadata(world) -> None:
     assert item.title == DEFAULT_TITLE
     assert item.params["destination"] == DEFAULT_DESTINATION
     assert item.params["emitSound"] == "/sounds/whirr.ogg"
-    assert item.params["emitRange"] == 8
+    assert item.params["emitRange"] == 5
     assert item.params["emitVolume"] == 100
     assert item.params["emitEffect"] == "off"
     assert teleporter["capabilities"] == list(CAPABILITIES)

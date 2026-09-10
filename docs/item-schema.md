@@ -85,7 +85,7 @@ Metadata hides dependent controls with `visibleWhen: {"emitSound": "!"}`. Facing
 {
   "destination": "0, 0, 0",
   "emitSound": "/sounds/whirr.ogg",
-  "emitRange": 8
+  "emitRange": 5
 }
 ```
 

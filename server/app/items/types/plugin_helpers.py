@@ -190,7 +190,11 @@ def build_item_module(
             tuple(getattr(definition, "PARAM_KEYS", ())), SHARED_EMIT_PARAM_KEYS
         )
         exports["EDITABLE_PROPERTIES"] = _merge_unique(
-            tuple(getattr(definition, "EDITABLE_PROPERTIES", ())),
+            tuple(
+                key
+                for key in getattr(definition, "EDITABLE_PROPERTIES", ())
+                if key not in SHARED_EMIT_EDITABLE_PROPERTIES
+            ),
             SHARED_EMIT_EDITABLE_PROPERTIES,
         )
         exports["PROPERTY_METADATA"] = _compose_shared_emit_metadata(
