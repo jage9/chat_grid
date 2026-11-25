@@ -10,6 +10,7 @@ from app.models import (
     BroadcastChatMessagePacket,
     ItemActionResultPacket,
     ItemPianoNoteBroadcastPacket,
+    PlatformActionResultPacket,
 )
 
 from .conftest import World
@@ -239,6 +240,43 @@ async def test_item_updates_have_their_own_limit(make_world, clock) -> None:
         json.dumps({"type": "item_update", "itemId": item_id, "title": "Four"}),
     )
     assert server.item_service.items[item_id].title == "Four"
+
+
+@pytest.mark.asyncio
+async def test_platform_arrow_edits_use_the_update_budget(make_world, clock) -> None:
+    world = make_world(
+        rate_limits=RateLimitsConfigSection(item_changes=1, item_updates=12)
+    )
+    now = clock(world)
+    builder = world.join("Builder")
+
+    async def send(packet):
+        await world.server._handle_message(builder, json.dumps(packet))
+        return world.transport.last_packet_of_type(builder, PlatformActionResultPacket)
+
+    added = await send(
+        dict(
+            type="platform_add",
+            name="Bridge",
+            startX=41,
+            endX=41,
+            startY=0,
+            endY=0,
+            z=0,
+        )
+    )
+    assert added.ok
+    update = dict(type="platform_update", platformId=added.platformId)
+    for end_x in range(42, 54):
+        assert (await send(dict(update, endX=end_x))).ok
+    rejected = await send(dict(update, endX=54, requestId="repeat"))
+    assert not rejected.ok and rejected.requestId == "repeat"
+    assert world.server.platform_service.platforms[added.platformId].endX == 53
+
+    now.now_ms += 1_000
+    assert (await send(dict(update, endX=54))).ok
+    deleted = await send(dict(type="platform_delete", platformId=added.platformId))
+    assert not deleted.ok and "too quickly" in deleted.message
 
 
 @pytest.mark.asyncio
