@@ -16,7 +16,7 @@ function setup() {
   const provided = {
     state, setAmbianceTypes, handleAmbianceActionResult,
     getWorldGridSize: () => 41,
-    peerManager: { setListenerFloor: vi.fn() },
+    peerManager: { setListenerPosition: vi.fn() },
     dom: { connectButton: element, disconnectButton: element, focusGridButton: element, canvas: element, instructions: element },
   };
   const deps = new Proxy(provided, {

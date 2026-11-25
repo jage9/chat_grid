@@ -6,14 +6,7 @@ export type WorldItemSourcePosition = {
   z: number;
 };
 
-/**
- * Resolves the positional source for an item relative to one listener floor.
- *
- * Floor-aware items represent one source on every configured floor.  Their
- * acoustic routing follows the listener's connected landing, so their
- * vertical source coordinate must do the same.  Ordinary and carried items
- * use their current world coordinates, which the server keeps synchronized.
- */
+/** Resolve the nearest emitting point for a point item, bounded item, or multi-stop shaft. */
 export function resolveWorldItemSourcePosition(
   item: WorldItem,
   listenerZ: number,
@@ -21,11 +14,20 @@ export function resolveWorldItemSourcePosition(
   listenerY?: number,
 ): WorldItemSourcePosition {
   const floorZs = item.params.floorZs;
-  const sourceZ = Array.isArray(floorZs) && floorZs.some((floorZ) => Number(floorZ) === listenerZ)
-    ? listenerZ
+  const servedFloorZs = Array.isArray(floorZs)
+    ? floorZs.map(Number).filter(Number.isFinite)
+    : [];
+  const sourceZ = servedFloorZs.length > 0
+    ? servedFloorZs.reduce((nearest, floorZ) => Math.abs(floorZ - listenerZ) < Math.abs(nearest - listenerZ) ? floorZ : nearest)
     : Math.max(item.z, Math.min(item.endZ ?? item.z, listenerZ));
   const position = hasItemBounds(item) && listenerX !== undefined && listenerY !== undefined
     ? getNearestItemPosition(item, listenerX, listenerY)
     : { x: item.x, y: item.y };
   return { ...position, z: sourceZ };
+}
+
+/** Use the playback source position to decide whether a listener is within preload range. */
+export function itemInListenerRange(item: WorldItem, listener: WorldItemSourcePosition, range: number): boolean {
+  const source = resolveWorldItemSourcePosition(item, listener.z, listener.x, listener.y);
+  return Math.hypot(source.x - listener.x, source.y - listener.y, source.z - listener.z) <= range;
 }

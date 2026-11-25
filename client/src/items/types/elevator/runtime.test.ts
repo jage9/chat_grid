@@ -36,6 +36,7 @@ describe('shouldPlayElevatorAmbience', () => {
     const closing = elevator({ currentZ: 40, state: 'closing', doorOpen: false });
 
     expect(shouldPlayElevatorAmbience(open, { x: 25, y: 10, z: 40 }, null, 15)).toBe(true);
+    expect(shouldPlayElevatorAmbience(open, { x: 10, y: 10, z: 39 }, null, 15)).toBe(true);
     expect(shouldPlayElevatorAmbience(open, { x: 10, y: 10, z: 0 }, null, 15)).toBe(false);
     expect(shouldPlayElevatorAmbience(closing, { x: 10, y: 10, z: 40 }, null, 15)).toBe(true);
   });

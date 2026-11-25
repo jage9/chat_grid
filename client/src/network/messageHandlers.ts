@@ -47,7 +47,7 @@ type MessageHandlerDeps = {
   peerManager: {
     ensurePeer: (id: string, user: { id: string; userId?: string | null; nickname: string; x: number; y: number; z: number; facingDeg: number; acousticZoneId: string }) => unknown;
     setPeerPosition: (id: string, x: number, y: number, z: number, acousticZoneId: string) => void;
-    setListenerFloor: (z: number) => void;
+    setListenerPosition: (x: number, y: number, z: number) => void;
     setPeerNickname: (id: string, nickname: string) => void;
     removePeer: (id: string) => void;
   };
@@ -223,7 +223,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
         deps.state.player.z = message.player.z;
         deps.state.player.facingDeg = message.player.facingDeg;
         deps.state.player.acousticZoneId = message.player.acousticZoneId;
-        deps.peerManager.setListenerFloor(message.player.z);
+        deps.peerManager.setListenerPosition(message.player.x, message.player.y, message.player.z);
         deps.dom.connectButton.classList.add('hidden');
         deps.dom.disconnectButton.classList.remove('hidden');
         deps.dom.focusGridButton.classList.remove('hidden');
@@ -275,9 +275,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           deps.state.player.facingDeg = message.facingDeg;
           const zoneChanged = deps.state.player.acousticZoneId !== message.acousticZoneId;
           deps.state.player.acousticZoneId = message.acousticZoneId;
-          if (floorChanged) {
-            deps.peerManager.setListenerFloor(message.z);
-          }
+          deps.peerManager.setListenerPosition(message.x, message.y, message.z);
           if (floorChanged || zoneChanged) {
             deps.refreshAcousticModel();
             await deps.refreshAudioSubscriptions(true);
@@ -486,7 +484,7 @@ export function createOnMessageHandler(deps: MessageHandlerDeps): (message: Inco
           ? resolveWorldItemSourcePosition(item, listener.z, listener.x, listener.y)
           : message;
         const acousticZoneId = useItemPosition
-          ? worldItemAcousticZoneId(item, listener.acousticZoneId, deps.state.items)
+          ? worldItemAcousticZoneId(item, deps.state)
           : message.acousticZoneId;
         deps.playWorldSound(soundUrl, { ...message, ...position, acousticZoneId });
         break;

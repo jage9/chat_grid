@@ -95,6 +95,7 @@ type PianoControllerDeps = {
   state: {
     mode: GameMode;
     items: Map<string, WorldItem>;
+    peers: ReadonlyMap<string, { acousticZoneId: string }>;
     player: { id: string | null; x: number; y: number; z: number; acousticZoneId: string };
   };
   audio: {
@@ -504,7 +505,7 @@ export class PianoController {
       x: item.x,
       y: item.y,
       z: item.z,
-      acousticZoneId: worldItemAcousticZoneId(item, listener.acousticZoneId, this.deps.state.items),
+      acousticZoneId: worldItemAcousticZoneId(item, this.deps.state),
     };
   }
 
@@ -542,7 +543,7 @@ export class PianoController {
       x: note.x,
       y: note.y,
       z: note.z,
-      acousticZoneId: worldItemAcousticZoneId(item, listener.acousticZoneId, this.deps.state.items),
+      acousticZoneId: worldItemAcousticZoneId(item, this.deps.state),
     };
     const acoustic = this.deps.audio.resolveSpatialTransmission(initial, listener);
     return {

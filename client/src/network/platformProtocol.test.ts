@@ -29,7 +29,7 @@ describe('signed platform world coordinates', () => {
       if (change === 'remove') expect(state.platforms.has('island')).toBe(false);
       else expect(state.platforms.get('island')?.startX).toBe(-3);
     });
-    const provided = { state, handlePlatformGeometryChanged, peerManager: { setListenerFloor: vi.fn() } };
+    const provided = { state, handlePlatformGeometryChanged, peerManager: { setListenerPosition: vi.fn() } };
     const deps = new Proxy(provided, {
       get: (target, property, receiver) => Reflect.has(target, property) ? Reflect.get(target, property, receiver) : vi.fn(),
     }) as unknown as Parameters<typeof createOnMessageHandler>[0];

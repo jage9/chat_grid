@@ -27,12 +27,17 @@ function elevator(state: string, currentZ = 0): WorldItem {
 }
 
 describe('AcousticZoneRuntime', () => {
-  it('keeps floors isolated while cabin occupants hear one another', () => {
+  it('connects outdoor elevations for voice, emitters and one-shots while isolating a moving cabin', () => {
     const runtime = new AcousticZoneRuntime();
     const items = new Map([['car-1', elevator('moving', 0)]]);
     runtime.sync(items.values(), 0);
 
-    expect(runtime.transmission(floorAcousticZoneId(0), floorAcousticZoneId(40), items, 1000)).toBe(0);
+    const ground = floorAcousticZoneId(0);
+    const above = floorAcousticZoneId(1);
+    expect(runtime.transmission(ground, above, items, 1000)).toBe(1);
+    expect(runtime.couldConnect(above, ground, items)).toBe(true);
+    expect(runtime.canTransmit(ground, above, items)).toBe(true);
+    expect(runtime.transmission(above, elevatorAcousticZoneId('car-1'), items)).toBe(0);
     expect(runtime.transmission(elevatorAcousticZoneId('car-1'), elevatorAcousticZoneId('car-1'), items, 1000)).toBe(1);
   });
 
@@ -81,9 +86,10 @@ describe('AcousticZoneRuntime', () => {
   it('places a multi-floor item on the listener-connected landing', () => {
     const car = elevator('door_open', 40);
     car.params.floorZs = [0, 40];
-    const items = new Map([['car-1', car]]);
-
-    expect(worldItemAcousticZoneId(car, floorAcousticZoneId(40), items)).toBe('floor:40');
-    expect(worldItemAcousticZoneId(car, elevatorAcousticZoneId('car-1'), items)).toBe('floor:40');
+    const state = { player: { id: 'local', z: 40, acousticZoneId: 'floor:40' }, peers: new Map() };
+    expect(worldItemAcousticZoneId(car, state)).toBe('floor:40');
+    const carried = { ...car, carrierId: 'rider' };
+    state.peers.set('rider', { acousticZoneId: 'elevator:other' });
+    expect(worldItemAcousticZoneId(carried, state)).toBe('elevator:other');
   });
 });

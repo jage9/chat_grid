@@ -399,7 +399,7 @@ export class AudioEngine {
       if (!peer.gain) continue;
       const acousticGain = Number.isFinite(peer.acousticGain)
         ? Math.max(0, Math.min(1, peer.acousticGain as number))
-        : peer.z === playerPosition.z ? 1 : 0;
+        : 1;
       const mix = acousticGain > 0 ? resolveSpatialMix({
         dx: peer.x - playerPosition.x,
         dy: peer.y - playerPosition.y,
