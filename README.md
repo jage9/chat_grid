@@ -1,5 +1,5 @@
 # Chat Grid
-## A Mostly Vibed, Audio-first Interactive Playground
+## An Audio-first, Multiplayer Interactive Playground
 
 Chat Grid is one of those projects that started with a random idea, and then grew to be many things, but most with spacial audio as its core. Briefly put, Chat Grid allows users to move around a grid and interact with each other, or with items placed on the grid. Your voice, as well as items are shared as positional audio. Item types currently range from dice and a wheel to a fully-playable toy piano and media players with directional audio. New item types can be added as plugins.
 
