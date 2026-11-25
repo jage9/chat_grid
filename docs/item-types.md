@@ -2,6 +2,8 @@
 
 ## Widget dimensions
 
+Walking onto a widget announces it and plays the item ping once. Walking between its occupied squares stays quiet for that widget. Leaving and stepping back onto it announces it again.
+
 Widgets start at 1 by 1 by 1. In the item property editor, Width counts squares along X, Depth along Y, and Height along Z. Each count includes the starting square. For example, setting Width to 3 on a widget at X = 10 makes it occupy X = 10, 11, and 12. The starting square stays in place as you resize. Use Left or Right for one-square adjustments, Enter to type a size, and Space for help. Each dimension accepts whole numbers from 1 to 1000, within the world coordinate limits of -1000000 through 1000000. A widget's whole base must have platform coverage. Its height can reach through air and intersect another platform. Use the widget from any occupied cell. Dimensions add no walking surface or movement obstruction.
 
 Pickup, carrying, handing and drop translate the widget's bounds together. Drop rejects unsupported footprints. Disconnect and restart return a carried widget to a fitting position, preferring its last resting position when the current cell cannot support it. Duplicate preserves dimensions and places the new anchor at the caller. Sound is positioned at the nearest point of a broad widget to the listener. All other current item types retain their existing fixed footprints.

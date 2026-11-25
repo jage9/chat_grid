@@ -1572,6 +1572,9 @@ function handleMovement(): void {
     }
   }
 
+  const itemsToAnnounce = getItemsAtPosition(nextX, nextY).filter(
+    (item) => item.type !== 'widget' || !itemOccupiesPosition(item, state.player.x, state.player.y, state.player.z),
+  );
   state.player.x = nextX;
   state.player.y = nextY;
   lastWallCollisionDirection = null;
@@ -1581,14 +1584,13 @@ function handleMovement(): void {
   signaling.send({ type: 'update_position', x: nextX, y: nextY, z: state.player.z });
 
   const namesOnTile = getPeerNamesAtPosition(nextX, nextY);
-  const itemsOnTile = getItemsAtPosition(nextX, nextY);
   const tileAnnouncements: string[] = [];
   if (namesOnTile.length > 0) {
     tileAnnouncements.push(namesOnTile.join(', '));
     audio.sfxTileUserPing();
   }
-  if (itemsOnTile.length > 0) {
-    tileAnnouncements.push(itemsOnTile.map((item) => itemLabel(item)).join(', '));
+  if (itemsToAnnounce.length > 0) {
+    tileAnnouncements.push(itemsToAnnounce.map((item) => itemLabel(item)).join(', '));
     audio.sfxTileItemPing();
   }
   if (tileAnnouncements.length > 0) {
