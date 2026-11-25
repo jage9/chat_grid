@@ -1943,14 +1943,19 @@ class SignalingServer:
                 ),
             )
             return True
-        if not self._consume_rate_limit(client, "item_changes"):
+        budget: RateLimitName = (
+            "item_updates"
+            if isinstance(packet, PlatformUpdatePacket)
+            else "item_changes"
+        )
+        if not self._consume_rate_limit(client, budget):
             await self.delivery.send(
                 client,
                 PlatformActionResultPacket(
                     type="platform_action_result",
                     requestId=packet.requestId,
                     ok=False,
-                    message=ITEM_CHANGE_RATE_LIMIT_MESSAGE,
+                    message="You are changing platforms too quickly. Please wait a moment.",
                 ),
             )
             return True

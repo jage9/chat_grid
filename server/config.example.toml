@@ -99,9 +99,9 @@ chat_window_ms = 5000
 # releases for notes that were dropped are dropped too.
 piano_notes = 40
 piano_window_ms = 1000
-# item_add and item_delete share one budget.
+# Item creation, duplication, deletion, platform creation/deletion and checkpoints share this budget.
 item_changes = 10
 item_window_ms = 10000
-# item_update has its own budget; property editing sends one per arrow-key press.
+# Item and platform property edits use this budget, as do door actions.
 item_updates = 60
 item_update_window_ms = 1000
