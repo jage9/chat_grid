@@ -196,6 +196,7 @@ async def test_arrival_sets_all_riders_before_exits_and_does_not_send_stale_arri
 
     runtime.callbacks = replace(runtime.callbacks, broadcast_item=exit_during_broadcast)
     await runtime._move_occupants(elevator, 40)
+    await runtime._announce_arrival(elevator, 40)
     events = world.transport.packets_of_type(rider, ItemElevatorStatusPacket)
     assert [packet.event for packet in events] == ["exited"]
     assert (
@@ -550,6 +551,23 @@ async def test_elevator_arrival_moves_rider_and_carried_item(
     assert (ELEVATOR_DOOR_CLOSE_SOUND_SECONDS, "closing") in sleeps
     close_index = sleeps.index((ELEVATOR_DOOR_CLOSE_SOUND_SECONDS, "closing"))
     assert all(state == "moving" for _, state in sleeps[close_index + 1 :])
+    rider_packets = transport.packets_to(client)
+    landing_position = next(
+        packet
+        for packet in rider_packets
+        if isinstance(packet, BroadcastPositionPacket)
+        and packet.id == client.id
+        and packet.z == 40
+    )
+    chime, door, _ = transport.packets_of_type(client, ItemUseSoundPacket)
+    assert (
+        rider_packets.index(landing_position)
+        < rider_packets.index(chime)
+        < rider_packets.index(door)
+        < rider_packets.index(arrival)
+    )
+    assert chime.acousticZoneId == f"elevator:{elevator.id}"
+    assert door.acousticZoneId == "floor:40"
     for sound in elevator_sounds:
         assert (sound.x, sound.y, sound.z) == (10, 10, 40)
         assert sound.acousticZoneId == "floor:40"
@@ -577,7 +595,11 @@ async def test_middle_stop_opening_chime(world, monkeypatch, queue, direction) -
             f"/sounds/elevator_{direction}.ogg",
             "/sounds/elevator_open.ogg",
         ]
-        assert all(packet.acousticZoneId == "floor:20" for packet in sounds)
+        expected_zone = f"elevator:{elevator.id}" if listener is rider else "floor:20"
+        assert [packet.acousticZoneId for packet in sounds] == [
+            expected_zone,
+            "floor:20",
+        ]
     assert elevator.params["requestedZs"] == queue
 
 
