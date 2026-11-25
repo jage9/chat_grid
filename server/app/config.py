@@ -6,10 +6,11 @@ from pathlib import Path
 import tomllib
 from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 
 StructurePresetId = Annotated[str, Field(min_length=1, max_length=40)]
+StoragePath = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 class ServerConfigSection(BaseModel):
@@ -46,9 +47,10 @@ class LoggingConfigSection(BaseModel):
 
 
 class StorageConfigSection(BaseModel):
-    """Persistent state file location."""
+    """Grid data directory, optional world file override, and save timing."""
 
-    state_file: str = "runtime/items.json"
+    data_dir: StoragePath = "runtime"
+    state_file: str | None = None
     state_save_debounce_ms: int = Field(default=200, gt=0)
     state_save_max_delay_ms: int = Field(default=1000, gt=0)
 
@@ -97,7 +99,7 @@ class WorldConfigSection(BaseModel):
 class AuthConfigSection(BaseModel):
     """Authentication persistence and validation settings."""
 
-    db_file: str = "runtime/chatgrid.db"
+    db_file: StoragePath | None = None
     password_min_length: int = Field(default=8, ge=1)
     password_max_length: int = Field(default=32, ge=1)
     username_min_length: int = Field(default=2, ge=1)
@@ -144,6 +146,23 @@ class AppConfig(BaseModel):
     livekit: LiveKitConfigSection = LiveKitConfigSection()
     items: ItemsConfigSection = ItemsConfigSection()
     rate_limits: RateLimitsConfigSection = RateLimitsConfigSection()
+
+
+def resolve_storage_paths(
+    config: AppConfig, config_path: Path | None
+) -> tuple[Path | None, Path]:
+    """Resolve world and account paths relative to the selected config directory."""
+
+    base = config_path.absolute().parent if config_path is not None else Path.cwd()
+    data_dir = base / config.storage.data_dir
+    state_file: Path | None = data_dir / "items.json"
+    if config.storage.state_file is not None:
+        override = config.storage.state_file.strip()
+        state_file = base / override if override else None
+    db_file = (
+        base / config.auth.db_file if config.auth.db_file else data_dir / "chatgrid.db"
+    )
+    return state_file, db_file
 
 
 def load_config(path: Path | None) -> AppConfig:

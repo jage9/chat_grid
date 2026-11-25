@@ -15,6 +15,15 @@ Key options:
 - `network.allow_insecure_ws`
 - `tls.cert_file`, `tls.key_file`
 
+Set `storage.data_dir` to the directory containing the grid's `items.json`,
+world files, checkpoint history, and `chatgrid.db`. It defaults to `runtime`
+beside the selected config. An explicit `storage.state_file` or `auth.db_file`
+overrides the corresponding file path. Relative paths in all three settings
+start at the config directory. World files and checkpoints follow the items
+file when its path is overridden.
+
+`world.grid_size` sets the width and length of the starter platforms and defaults to 41.
+
 If `network.allow_insecure_ws = false`, TLS cert/key are required and server runs as `wss://`.
 For local/dev without TLS, either set `network.allow_insecure_ws = true` or pass `--allow-insecure-ws`.
 

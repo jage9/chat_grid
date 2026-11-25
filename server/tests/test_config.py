@@ -10,7 +10,8 @@ def test_load_config_defaults_when_path_none() -> None:
     assert cfg.server.bind_ip == "127.0.0.1"
     assert cfg.server.base_path == "/"
     assert cfg.network.allow_insecure_ws is False
-    assert cfg.storage.state_file == "runtime/items.json"
+    assert cfg.storage.data_dir == "runtime"
+    assert cfg.storage.state_file is None
     assert cfg.storage.state_save_debounce_ms == 200
     assert cfg.storage.state_save_max_delay_ms == 1000
     assert cfg.world.grid_size == 41
