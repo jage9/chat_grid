@@ -74,6 +74,10 @@ Contributions and ideas are welcome. The grid is already home to several rather 
 ## Notes on AI Coding
 This project has been largely coded using AI tools, with a lot of human prompting and hand-holding to enforce best practices. All ideas for improving the project or its design are welcome.
 
+## Sound credits
+
+The Ridge platform footsteps use wooden boardwalk recordings from [Zapsplat](https://www.zapsplat.com), licensed under the Zapsplat Standard License.
+
 ## License
 - MIT
 This project is licensed under the MIT License. See `LICENSE`.
