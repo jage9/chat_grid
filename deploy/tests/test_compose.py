@@ -221,6 +221,25 @@ def run_mount(mount, build):
             )
             compose("up", "-d", "--wait", "--wait-timeout", "90")
             body, headers = request(origin + mount)
+            if build:
+                for service in ("web", "server"):
+                    container = compose(
+                        "ps", "-q", service, capture_output=True, text=True
+                    ).stdout.strip()
+                    driver = subprocess.check_output(
+                        [
+                            "docker",
+                            "inspect",
+                            "--format",
+                            "{{.HostConfig.LogConfig.Type}}",
+                            container,
+                        ],
+                        text=True,
+                    ).strip()
+                    assert driver == "local", (service, driver)
+                    assert compose(
+                        "logs", "--tail=1", service, capture_output=True
+                    ).stdout.strip(), service
             index = body.decode()
             assert f'<base href="{mount}">' in index
             assert "no-store" in headers.get("Cache-Control", "")

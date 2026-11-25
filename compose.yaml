@@ -5,6 +5,8 @@ services:
       dockerfile: deploy/docker/server.Dockerfile
     user: "${CHGRID_UID:-1000}:${CHGRID_GID:-1000}"
     restart: unless-stopped
+    logging:
+      driver: local
     environment:
       CHGRID_TRUSTED_PROXY_HOST: web
       CHGRID_AUTH_SECRET: ${CHGRID_AUTH_SECRET:?Set the grid authentication secret}
@@ -33,6 +35,8 @@ services:
     depends_on:
       - server
     restart: unless-stopped
+    logging:
+      driver: local
     environment:
       CHGRID_HOST_ORIGIN: ${CHGRID_HOST_ORIGIN:?Set the public grid origin}
       CHGRID_TRUSTED_EDGE_PROXY: ${CHGRID_TRUSTED_EDGE_PROXY:-}
