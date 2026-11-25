@@ -184,7 +184,8 @@ This is a behavior guide for packet semantics beyond raw schemas.
   - exposes `GET <base_path>auth/session/clear` to expire the `HttpOnly` cookie (`X-Chgrid-Auth-Client: 1` and matching `Origin` required)
 - Server applies auth hardening before accepting login/register/resume:
   - login/register PBKDF2 work runs off the event loop in bounded worker concurrency
-  - repeated auth failures are rate-limited by IP and IP+identity windows
+  - Authentication failures are limited to 8 per identity at an IP and 20 in total at that IP in a 30-second window. Separate accounts may be online at the same address. Successful sign-ins do not consume these budgets.
+  - Authentication logs and throttling use the same client address. Native loopback proxies can forward the nearest client address. For a public Compose installation, configure the upstream proxy as described in the [Docker guide](../deploy/docker/README.md#client-addresses-behind-a-host-proxy).
   - auth failures include small randomized response jitter to reduce high-resolution probing
 - Server rate-limits each connection in fixed windows configured under `[rate_limits]`:
   - `chat_message`: default 5 per 5 seconds, including chat commands. Extra messages are not broadcast; the sender gets one system `chat_message`: "You are sending messages too quickly. Please wait a moment."

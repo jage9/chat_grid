@@ -1,5 +1,6 @@
 """Publish the portable client and configure its internal Compose proxy routes."""
 
+import ipaddress
 import os
 from pathlib import Path
 import re
@@ -10,7 +11,7 @@ from urllib.parse import urlsplit
 from configure_client import base_path
 
 
-def apache_config(mount: str, port: int, scheme: str) -> str:
+def apache_config(mount: str, port: int, scheme: str, edge_proxy: str = "") -> str:
     """Build Apache directives from a validated URL mount, port and scheme."""
     if not re.fullmatch(r"/(?:[A-Za-z0-9._~-]+/)*", mount):
         raise ValueError("Docker server.base_path must contain URL-safe path segments")
@@ -18,6 +19,18 @@ def apache_config(mount: str, port: int, scheme: str) -> str:
         raise ValueError("server.port must be between 1 and 65535")
     if scheme not in {"http", "https"}:
         raise ValueError("CHGRID_HOST_ORIGIN must use http or https")
+    remote_ip = ""
+    if edge_proxy:
+        try:
+            address = ipaddress.ip_address(edge_proxy)
+        except ValueError as exc:
+            raise ValueError("CHGRID_TRUSTED_EDGE_PROXY must be one literal IP address") from exc
+        if isinstance(address, ipaddress.IPv6Address) and address.scope_id:
+            raise ValueError("CHGRID_TRUSTED_EDGE_PROXY must be an unscoped IP address")
+        remote_ip = (
+            "    RemoteIPHeader X-Forwarded-For\n"
+            f"    RemoteIPInternalProxy {address}\n"
+        )
     document_root = "/var/www/html" if mount == "/" else "/var/www/empty"
     alias = ""
     if mount != "/":
@@ -30,6 +43,9 @@ def apache_config(mount: str, port: int, scheme: str) -> str:
     DocumentRoot "{document_root}"
     ProxyRequests Off
     ProxyPreserveHost On
+    ProxyAddHeaders Off
+{remote_ip}    RequestHeader unset X-Forwarded-For
+    RequestHeader set X-Forwarded-For "expr=%{{REMOTE_ADDR}}"
     RequestHeader set X-Forwarded-Proto "{scheme}"
     ProxyPass "{mount}ws" "ws://server:{port}{mount}ws"
     ProxyPassReverse "{mount}ws" "ws://server:{port}{mount}ws"
@@ -66,7 +82,9 @@ def main() -> None:
         or origin.fragment
     ):
         raise ValueError("CHGRID_HOST_ORIGIN must be the public origin, such as https://grid.example.com")
-    apache = apache_config(mount, port, origin.scheme)
+    apache = apache_config(
+        mount, port, origin.scheme, os.environ.get("CHGRID_TRUSTED_EDGE_PROXY", "").strip()
+    )
     destination = Path("/var/www/html")
     subprocess.run(
         [

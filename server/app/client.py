@@ -44,6 +44,7 @@ class ClientConnection:
     )
     world_ready: bool = False
     elevator_id: str | None = None
+    trusted_proxy: bool = False
 
     def summary(self) -> dict[str, str | int]:
         """Return a compact serializable snapshot for logs/diagnostics."""
