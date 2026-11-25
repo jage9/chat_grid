@@ -35,5 +35,18 @@ jobs:
           docker version
           docker compose version
 
+      - name: Verify the documented first-run commands
+        env:
+          LIVEKIT_API_KEY: example
+          LIVEKIT_API_SECRET: example
+        run: |
+          bash deploy/docker/init.sh
+          cd grid
+          first_secret=$(sha256sum .env)
+          bash ../deploy/docker/init.sh
+          test "$first_secret" = "$(sha256sum .env)"
+          docker compose config --format json | jq -e --arg grid "$PWD" '
+            .services.server.volumes | any(.target == "/grid/data" and .source == ($grid + "/data"))'
+
       - name: Test fresh install, both mount paths, and recreation
         run: uv run --directory server --no-dev python ../deploy/tests/test_compose.py

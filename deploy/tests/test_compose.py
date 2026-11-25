@@ -167,8 +167,11 @@ def run_mount(mount, build):
                     entry["id"]: entry
                     for entry in welcome["worldConfig"]["footstepSets"]
                 }
-                assert len(footstep_sets["default"]["urls"]) == 11
-                assert len(footstep_sets["bridge"]["urls"]) == 9
+                for name in ("default", "bridge"):
+                    samples = (ROOT / "client/public/sounds/steps" / name).glob("*.ogg")
+                    assert set(footstep_sets[name]["urls"]) == {
+                        f"/sounds/steps/{name}/{sample.name}" for sample in samples
+                    }
                 assert welcome["worldConfig"]["ambianceTypes"]
                 _, response_headers = request(
                     origin + mount + "auth/session/set",
@@ -203,12 +206,7 @@ def run_mount(mount, build):
                     Origin=origin,
                     Cookie=cookie,
                 )
-                assert (
-                    proxied
-                    == (
-                        ROOT / "client/public/sounds/steps/default/step-1.ogg"
-                    ).read_bytes()
-                )
+                assert proxied == request(sample)[0]
                 request(
                     origin + mount + "media_proxy.php",
                     expected=403,
