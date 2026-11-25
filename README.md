@@ -76,7 +76,7 @@ This project has been largely coded using AI tools, with a lot of human promptin
 
 ## Sound credits
 
-The Ridge platform footsteps use wooden boardwalk recordings from [Zapsplat](https://www.zapsplat.com), licensed under the Zapsplat Standard License.
+The Bridge platform footsteps use wooden boardwalk recordings from [Zapsplat](https://www.zapsplat.com), licensed under the Zapsplat Standard License.
 
 ## License
 - MIT
