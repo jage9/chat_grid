@@ -1,0 +1,47 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: deploy/docker/server.Dockerfile
+    user: "${CHGRID_UID:-1000}:${CHGRID_GID:-1000}"
+    restart: unless-stopped
+    environment:
+      CHGRID_AUTH_SECRET: ${CHGRID_AUTH_SECRET:?Set the grid authentication secret}
+      CHGRID_HOST_ORIGIN: ${CHGRID_HOST_ORIGIN:?Set the public grid origin}
+      LIVEKIT_URL: ${LIVEKIT_URL:?Set the LiveKit URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set the LiveKit API key}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set the LiveKit API secret}
+    volumes:
+      - &config
+        type: bind
+        source: ${CHGRID_INSTANCE_DIR:-./grid}/config.toml
+        target: /grid/config.toml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CHGRID_INSTANCE_DIR:-./grid}/data
+        target: /grid/data
+        bind:
+          create_host_path: false
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/docker/web.Dockerfile
+    depends_on:
+      - server
+    restart: unless-stopped
+    environment:
+      CHGRID_HOST_ORIGIN: ${CHGRID_HOST_ORIGIN:?Set the public grid origin}
+      CHGRID_MEDIA_PROXY_ALLOWLIST: ${CHGRID_MEDIA_PROXY_ALLOWLIST:-}
+    ports:
+      - "127.0.0.1:${CHGRID_HTTP_PORT:-8080}:80"
+    volumes:
+      - *config
+    healthcheck:
+      test: ["CMD", "python3", "/opt/chgrid/check_web.py"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3

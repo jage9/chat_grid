@@ -43,7 +43,7 @@ Common server overrides:
 
 ## Production Deploy
 
-Use `deploy/README.md` for the full deployment guide.
+For a Docker Compose install, follow the [Docker guide](deploy/docker/README.md). For Apache and systemd on the host, follow the [host deployment guide](deploy/README.md).
 
 Summary:
 1. Copy repo to your server.

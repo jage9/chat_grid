@@ -1,0 +1,52 @@
+name: Docker CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    name: Build and test Compose install
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: server/.python-version
+
+      - name: Install locked server dependencies
+        working-directory: server
+        run: uv sync --locked --no-dev
+
+      - name: Verify Docker tools
+        run: |
+          docker version
+          docker compose version
+
+      - name: Verify the documented first-run commands
+        env:
+          LIVEKIT_API_KEY: example
+          LIVEKIT_API_SECRET: example
+        run: |
+          bash deploy/docker/init.sh
+          cd grid
+          first_secret=$(sha256sum .env)
+          bash ../deploy/docker/init.sh
+          test "$first_secret" = "$(sha256sum .env)"
+          docker compose config --format json | jq -e --arg grid "$PWD" '
+            .services.server.volumes | any(.target == "/grid/data" and .source == ($grid + "/data"))'
+
+      - name: Test fresh install, both mount paths, and recreation
+        run: uv run --directory server --no-dev python ../deploy/tests/test_compose.py
