@@ -182,7 +182,7 @@ The server releases the user's item runtime state, saves their position and last
 
 ## World State Files
 
-Named places are server-owned inclusive rectangles stored in `regions.json` beside the other world datasets. They share the ordinary debounced save lifecycle and atomic state-file writer. World Builder mutations require `world.structure.edit`, validate floor and bounds, then broadcast canonical upserts/removals. Regions can overlap and are independent of ambiance sound rectangles. Welcome replaces the client's named-place snapshot. The coordinate command includes all containing regions on the current floor, ordered by inclusive tile area, name, then stable ID.
+Named places are server-owned inclusive rectangles stored in `regions.json` beside the other world datasets. They share the ordinary debounced save lifecycle and atomic state-file writer. World Builder mutations require `world.structure.edit`, validate floor and bounds, then broadcast canonical upserts/removals. Regions can overlap and are independent of ambiance sound rectangles. Welcome replaces the client's named-place snapshot. Location readouts put coordinates first, followed by all containing regions on that floor ordered by inclusive tile area, name, then stable ID, and finally the platform name when present.
 
 The server keeps world state in JSON files in the configured state directory: `items.json` (the configured state file), plus `platforms.json`, `structures.json`, `regions.json`, `ambiances.json`, and `piano_songs.json` beside it. Each save rewrites a whole file through a synced temporary file and a rename, so a crash mid-save leaves either the previous file or the complete new one. Saved files are readable and writable only by the server's account.
 

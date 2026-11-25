@@ -1,4 +1,4 @@
-import { containingRegions } from './state/regions';
+import { formatCoordinate, formatLocationReadout } from './state/locationReadout';
 import './styles.css';
 import { resolveArrowMovement } from './input/movement';
 import { AudioEngine, type SpatialAudioPosition } from './audio/audioEngine';
@@ -1218,11 +1218,7 @@ function getItemsAtPosition(x: number, y: number): WorldItem[] {
 
 /** Formats a complete world location for speech and lists. */
 function locationPhrase(x: number, y: number, z: number): string {
-  const configuredFloor = platformAt(state.platforms, x, y, z)?.name;
-  if (configuredFloor) {
-    return `${formatCoordinate(x)}, ${formatCoordinate(y)}, ${formatCoordinate(z)}, ${configuredFloor}`;
-  }
-  return `${formatCoordinate(x)}, ${formatCoordinate(y)}, ${formatCoordinate(z)}`;
+  return formatLocationReadout(state, { x, y, z });
 }
 
 /** Formats a user's floor for cross-floor teleport feedback. */
@@ -1382,12 +1378,6 @@ function distanceDirectionPhrase(px: number, py: number, tx: number, ty: number)
   const direction = getDirection(px, py, tx, ty);
   if (direction === 'here') return 'here';
   return `${distance} ${squareWord(distance)} ${direction}`;
-}
-
-/** Formats a coordinate with up to 2 decimals while trimming trailing zeros. */
-function formatCoordinate(value: number): string {
-  if (!Number.isFinite(value)) return '0';
-  return value.toFixed(2).replace(/\.?0+$/, '');
 }
 
 /** Picks one random footstep sample URL. */
@@ -2224,10 +2214,8 @@ function speakCoordinatesCommand(): void {
     state.player.y,
     state.player.z,
   );
-  const names = containingRegions(state.regions.values(), state.player).map((region) => region.name);
-  const regionPhrase = names.length ? ` ${names.join(', ')}.` : '';
   const structurePhrase = adjacentWalls.length > 0 ? ` Structures: ${adjacentWalls.join(', ')}.` : '';
-  updateStatus(`${locationPhrase(state.player.x, state.player.y, state.player.z)}${regionPhrase}${structurePhrase}`);
+  updateStatus(`${locationPhrase(state.player.x, state.player.y, state.player.z)}.${structurePhrase}`);
   audio.sfxUiBlip();
 }
 
