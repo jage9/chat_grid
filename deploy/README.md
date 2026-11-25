@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide is intentionally host-agnostic.
+For Docker Compose, see the [Docker install guide](docker/README.md). The steps below deploy directly to a host using Apache and systemd.
 
 ## 1) Choose Your Paths Once
 

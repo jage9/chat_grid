@@ -28,6 +28,7 @@ def main() -> None:
     parser.add_argument("built_index", type=Path)
     parser.add_argument("output_dir", type=Path)
     parser.add_argument("--expected-base", default="")
+    parser.add_argument("--session-check-host", help="Internal server hostname for a separate web container")
     args = parser.parse_args()
 
     with args.config.open("rb") as fp:
@@ -53,7 +54,7 @@ def main() -> None:
 
     origin = os.environ.get("CHGRID_HOST_ORIGIN", "").strip()
     if origin:
-        host = server.get("bind_ip", "127.0.0.1").strip()
+        host = (args.session_check_host or server.get("bind_ip", "127.0.0.1")).strip()
         if host in {"", "0.0.0.0"}:
             host = "127.0.0.1"
         elif host == "::":

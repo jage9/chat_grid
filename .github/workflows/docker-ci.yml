@@ -1,0 +1,39 @@
+name: Docker CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  compose:
+    name: Build and test Compose install
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: server/.python-version
+
+      - name: Install locked server dependencies
+        working-directory: server
+        run: uv sync --locked --no-dev
+
+      - name: Verify Docker tools
+        run: |
+          docker version
+          docker compose version
+
+      - name: Test fresh install, both mount paths, and recreation
+        run: uv run --directory server --no-dev python ../deploy/tests/test_compose.py

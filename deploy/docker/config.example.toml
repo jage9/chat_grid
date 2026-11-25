@@ -1,0 +1,22 @@
+[server]
+# Bind inside the private Compose network; only the web service publishes a port.
+bind_ip = "0.0.0.0"
+port = 8765
+# Public URL directory for this grid, such as "/" or "/ttgrid/".
+base_path = "/"
+grid_name = "Chat Grid"
+welcome_message = "Welcome to Chat Grid. Configure your audio, then log in or register."
+
+[network]
+# HTTPS terminates at your public reverse proxy. The Compose network carries HTTP.
+allow_insecure_ws = true
+
+[storage]
+# Accounts, world state, checkpoint history, and generated data stay in this mount.
+data_dir = "/grid/data"
+
+[livekit]
+room_name = "chatgrid"
+
+# All other settings use the server's normal defaults. Copy optional sections
+# from server/config.example.toml to customize limits, wall presets, or policies.
