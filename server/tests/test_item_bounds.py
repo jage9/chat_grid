@@ -15,6 +15,85 @@ async def action(world, actor, packet):
 
 
 @pytest.mark.asyncio
+async def test_widget_size_edits_use_current_anchor_and_derived_display(world):
+    actor = world.join("owner", x=10, y=12, z=40)
+    service = world.server.item_service
+    widget = service.default_item(actor, "widget")
+    service.add_item(widget)
+    runtime = world.server.item_runtime
+    display = runtime.outbound_item(widget).display
+    assert {key: display[key] for key in ("width", "depth", "height")} == {
+        "width": "1",
+        "depth": "1",
+        "height": "1",
+    }
+    result = await action(
+        world,
+        actor,
+        {
+            "type": "item_update",
+            "itemId": widget.id,
+            "params": {"width": 3, "depth": 2, "height": 5},
+        },
+    )
+    assert result.ok
+    assert item_bounds(widget) == (10, 12, 40, 12, 13, 44)
+    assert not {"width", "depth", "height"} & widget.params.keys()
+    display = runtime.outbound_item(widget).display
+    assert {key: display[key] for key in ("width", "depth", "height")} == {
+        "width": "3",
+        "depth": "2",
+        "height": "5",
+    }
+    move_item(widget, 15, 18, 40)
+    actor.x, actor.y = 15, 18
+    result = await action(
+        world,
+        actor,
+        {
+            "type": "item_update",
+            "itemId": widget.id,
+            "params": {"width": 1, "depth": 1, "height": 1},
+        },
+    )
+    assert result.ok
+    assert item_bounds(widget) == (15, 18, 40, 15, 18, 40)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"width": 0},
+        {"depth": -1},
+        {"height": 1001},
+        {"width": True},
+        {"width": 2.5},
+        {"height": "3"},
+        {"width": 2, "endX": 40},
+        {"width": 3},
+    ],
+)
+async def test_size_validation_keeps_rejected_edits_atomic(world, params):
+    actor = world.join("owner", x=39, y=39)
+    item = world.server.item_service.default_item(actor, "widget")
+    world.server.item_service.add_item(item)
+    result = await action(
+        world,
+        actor,
+        {
+            "type": "item_update",
+            "itemId": item.id,
+            "title": "Changed",
+            "params": params,
+        },
+    )
+    assert not result.ok
+    assert item.title == "widget"
+    assert item_bounds(item) == (39, 39, 0, 39, 39, 0)
+
+
+@pytest.mark.asyncio
 async def test_widget_resize_interaction_duplicate_and_restore(world):
     actor = world.join("owner", x=10, y=10)
     service = world.server.item_service
@@ -152,14 +231,14 @@ async def test_bounds_keep_ownership_and_fixed_type_validation(world):
     result = await action(
         world,
         visitor,
-        {"type": "item_update", "itemId": widget.id, "params": {"endX": 22}},
+        {"type": "item_update", "itemId": widget.id, "params": {"width": 3}},
     )
     assert not result.ok
     assert widget.endX is None
     dice = service.default_item(owner, "dice")
     service.add_item(dice)
     result = await action(
-        world, owner, {"type": "item_update", "itemId": dice.id, "params": {"endX": 22}}
+        world, owner, {"type": "item_update", "itemId": dice.id, "params": {"width": 3}}
     )
     assert not result.ok
     assert dice.endX is None

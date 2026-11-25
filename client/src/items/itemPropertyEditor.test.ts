@@ -1,8 +1,38 @@
 ﻿import { describe, expect, it, vi } from 'vitest';
 import { createItemPropertyEditor } from './itemPropertyEditor';
+import { createItemPropertyPresentation } from './itemPropertyPresentation';
+import { applyServerItemUiDefinitions, getItemPropertyMetadata, itemPropertyLabel } from './itemRegistry';
 import type { WorldItem } from '../state/gameState';
 
 function setup() {
+  applyServerItemUiDefinitions({
+    itemTypes: [
+      {
+        type: 'elevator',
+        editableProperties: ['speed', 'enabled', 'doorOpenSeconds'],
+        propertyMetadata: {
+          enabled: { valueType: 'boolean' },
+          speed: { valueType: 'number', range: { min: 0.1, max: 1000, step: 0.1 } },
+          doorOpenSeconds: { valueType: 'number', range: { min: 0.1, max: 1000, step: 0.1 } },
+        },
+      },
+      {
+        type: 'widget',
+        editableProperties: ['width', 'depth', 'height'],
+        propertyMetadata: Object.fromEntries([
+          ['width', 'Width', 'east'],
+          ['depth', 'Depth', 'north'],
+          ['height', 'Height', 'up'],
+        ].map(([key, label, direction]) => [key, {
+          label,
+          valueType: 'number',
+          range: { min: 1, max: 1000, step: 1 },
+          tooltip: `Size in squares, expanding ${direction} from the current square.`,
+        }])),
+      },
+    ],
+  });
+  const presentation = createItemPropertyPresentation();
   const item: WorldItem = {
     id: 'car', type: 'elevator', title: 'Studio elevator',
     x: 0, y: 0, z: 0, createdBy: 'self', updatedBy: 'self',
@@ -21,17 +51,11 @@ function setup() {
   const sfxUiBlip = vi.fn();
   const editor = createItemPropertyEditor({
     state, signalingSend, updateStatus, sfxUiCancel, sfxUiBlip,
-    getItemPropertyValue: (item, key) => key === 'endX' ? String(item.endX ?? item.x)
-      : typeof item.params[key] === 'boolean' ? item.params[key] ? 'on' : 'off' : String(item.params[key]),
-    itemPropertyLabel: (key) => key,
-    isItemPropertyEditable: () => true,
+    ...presentation,
+    itemPropertyLabel,
     getItemPropertyOptionValues: () => undefined,
     openOptionSelector: vi.fn(),
-    describeItemPropertyHelp: () => 'Property help.',
-    getItemPropertyMetadata: (_type, key) => key === 'enabled' ? { valueType: 'boolean' }
-      : key === 'endX' ? { valueType: 'number', range: { min: -1000000, max: 1000000, step: 1 } }
-        : { valueType: 'number', range: { min: 0.1, max: 1000, step: 0.1 } },
-    validateNumericItemPropertyInput: (_item, _key, raw) => ({ ok: true, value: Number(raw) }),
+    getItemPropertyMetadata,
     applyTextInputEdit: vi.fn(), setReplaceTextOnNextType: vi.fn(),
   });
   function reply(ok = true, params: Record<string, unknown> = {}, message = 'Updated.') {
@@ -46,7 +70,7 @@ describe('accepted item property feedback', () => {
   it('reads property help through the shared Space control', () => {
     const { editor, updateStatus, signalingSend, sfxUiBlip } = setup();
     editor.handleItemPropertiesModeInput('Space', ' ');
-    expect(updateStatus).toHaveBeenLastCalledWith('Property help.');
+    expect(updateStatus).toHaveBeenLastCalledWith(expect.stringContaining('speed'));
     expect(sfxUiBlip).toHaveBeenCalledOnce();
     expect(signalingSend).not.toHaveBeenCalled();
   });
@@ -99,20 +123,30 @@ describe('accepted item property feedback', () => {
     expect(updateStatus.mock.calls).toEqual([['off']]);
   });
 
-  it('reads widget bounds from the accepted top-level coordinates and never announces a rejected endpoint', () => {
+  it('reads widget sizes through shared presentation and drops rejected repeated changes', () => {
     const { item, state, editor, signalingSend, updateStatus, reply } = setup();
     item.type = 'widget';
     item.x = 40;
-    state.itemPropertyKeys = ['endX'];
+    item.display = { width: '1', depth: '1', height: '1' };
+    state.itemPropertyKeys = ['width', 'depth', 'height'];
     editor.handleItemPropertiesModeInput('ArrowRight', 'ArrowRight');
-    expect(signalingSend.mock.lastCall![0].params).toEqual({ endX: 41 });
+    editor.handleItemPropertiesModeInput('ArrowRight', 'ArrowRight');
+    expect(signalingSend.mock.lastCall![0].params).toEqual({ width: 2 });
     expect(updateStatus).not.toHaveBeenCalled();
     reply(false, {}, 'The item footprint does not fit on the platforms.');
+    expect(signalingSend).toHaveBeenCalledTimes(1);
     expect(updateStatus.mock.calls).toEqual([['The item footprint does not fit on the platforms.']]);
     editor.handleItemPropertiesModeInput('ArrowRight', 'ArrowRight');
+    editor.handleItemPropertiesModeInput('ArrowRight', 'ArrowRight');
     item.endX = 41;
+    item.display.width = '2';
     reply(true);
-    expect(updateStatus).toHaveBeenLastCalledWith('41');
+    expect(updateStatus).toHaveBeenLastCalledWith('2');
+    expect(signalingSend.mock.lastCall![0].params).toEqual({ width: 3 });
+    item.endX = 42;
+    item.display.width = '3';
+    reply(true);
+    expect(updateStatus).toHaveBeenLastCalledWith('3');
   });
 
   it('ignores late results after an editor session closes', () => {
@@ -151,17 +185,47 @@ describe('accepted item property feedback', () => {
     expect(updateStatus.mock.calls).toEqual([['12.3']]);
   });
 
-  it('starts a widget endpoint numeric editor at its top-level coordinate', () => {
-    const { item, state, editor, signalingSend } = setup();
+  it('uses the size for navigation, Space help, typed editing and confirmation', () => {
+    const { item, state, editor, signalingSend, updateStatus, reply } = setup();
     item.type = 'widget';
+    item.x = 40;
+    item.y = -10;
     item.endX = 45;
-    state.itemPropertyKeys = ['endX'];
+    item.display = { width: '6', depth: '1', height: '1' };
+    state.itemPropertyKeys = ['width', 'depth', 'height'];
+    editor.handleItemPropertiesModeInput('ArrowDown', 'ArrowDown');
+    expect(updateStatus).toHaveBeenLastCalledWith('Depth: 1');
+    editor.handleItemPropertiesModeInput('Space', ' ');
+    expect(updateStatus).toHaveBeenLastCalledWith(expect.stringContaining('expanding north'));
+    editor.handleItemPropertiesModeInput('ArrowUp', 'ArrowUp');
     editor.handleItemPropertiesModeInput('Enter', 'Enter');
-    expect(state.nicknameInput).toBe('45');
+    expect(state.nicknameInput).toBe('6');
     editor.handleItemPropertyEditModeInput('ArrowUp', 'ArrowUp', false);
-    expect(state.nicknameInput).toBe('46');
+    expect(state.nicknameInput).toBe('7');
     expect(signalingSend).not.toHaveBeenCalled();
+    state.nicknameInput = '8';
+    updateStatus.mockClear();
     editor.handleItemPropertyEditModeInput('Enter', 'Enter', false);
-    expect(signalingSend.mock.lastCall![0].params).toEqual({ endX: 46 });
+    expect(signalingSend.mock.lastCall![0].params).toEqual({ width: 8 });
+    expect(updateStatus).not.toHaveBeenCalled();
+    item.endX = 47;
+    item.display.width = '8';
+    reply(true);
+    expect(updateStatus.mock.calls).toEqual([['8']]);
+  });
+
+  it('keeps widget dimensions within the shared numeric editor range', () => {
+    const { item, state, editor, signalingSend, updateStatus, sfxUiCancel } = setup();
+    item.type = 'widget';
+    item.display = { width: '1', depth: '1', height: '1' };
+    state.itemPropertyKeys = ['height'];
+    editor.handleItemPropertiesModeInput('ArrowLeft', 'ArrowLeft');
+    expect(sfxUiCancel).toHaveBeenCalledOnce();
+    expect(signalingSend).not.toHaveBeenCalled();
+    editor.handleItemPropertiesModeInput('Enter', 'Enter');
+    state.nicknameInput = '0';
+    editor.handleItemPropertyEditModeInput('Enter', 'Enter', false);
+    expect(updateStatus).toHaveBeenLastCalledWith(expect.stringContaining('between 1 and 1000'));
+    expect(signalingSend).not.toHaveBeenCalled();
   });
 });

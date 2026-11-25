@@ -31,9 +31,6 @@ export function createItemPropertyPresentation(): {
 
   const getItemPropertyValue = (item: WorldItem, key: string): string => {
     if (key === 'title') return item.title;
-    if (key === 'endX') return String(item.endX ?? item.x);
-    if (key === 'endY') return String(item.endY ?? item.y);
-    if (key === 'endZ') return String(item.endZ ?? item.z);
     if (item.display && typeof item.display[key] === 'string') return item.display[key];
     const metadata = getItemPropertyMetadata(item.type, key);
     const globalValue = getItemTypeGlobalProperties(item.type)?.[key];

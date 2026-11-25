@@ -6,7 +6,7 @@ The server accepts an item_duplicate request naming a source item on the caller'
 
 ## World Item (server-authoritative)
 
-The optional integer fields `endX`, `endY` and `endZ` give compact inclusive per-instance bounds from `x`, `y` and `z`. An omitted endpoint equals its matching starting coordinate, preserving old point items. Widgets can edit these fields through `item_update.params` using the existing property editor. The server extracts them into top-level fields, validates order, span and platform support, and commits the whole change atomically. Every current non-widget type retains its fixed catalog footprint. Fields persist through the shared live-world/checkpoint item serializer. Carrying saves use a supported resting location so a restart cannot strand a wide item at a narrow edge.
+The optional integer fields `endX`, `endY` and `endZ` give compact inclusive per-instance bounds from `x`, `y` and `z`. An omitted endpoint equals its matching starting coordinate, preserving old point items. Widget edits send `width`, `depth`, or `height` through `item_update.params`. Each is a count of cells, including the anchor. The server converts each size to an inclusive endpoint (`start + size - 1`), validates span and platform support, and commits the whole change atomically. Sizes are derived from the stored bounds when the widget is displayed. Every current non-widget type retains its fixed catalog footprint. Fields persist through the shared live-world/checkpoint item serializer. Carrying saves use a supported resting location so a restart cannot strand a wide item at a narrow edge.
 
 ```json
 {

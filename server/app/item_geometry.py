@@ -6,6 +6,11 @@ from .models import COORDINATE_LIMIT, WorldItem
 
 ITEM_SPAN_LIMIT = 1000
 END_COORDINATES = ("endX", "endY", "endZ")
+ITEM_DIMENSIONS = (
+    ("width", "x", "endX"),
+    ("depth", "y", "endY"),
+    ("height", "z", "endZ"),
+)
 
 
 def item_bounds(item: WorldItem) -> tuple[int, int, int, int, int, int]:

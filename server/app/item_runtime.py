@@ -23,7 +23,14 @@ from .item_catalog import (
     is_known_item_type,
 )
 from .item_service import ItemService
-from .item_geometry import END_COORDINATES, item_bounds, move_item, validate_item_bounds
+from .item_geometry import (
+    END_COORDINATES,
+    ITEM_DIMENSIONS,
+    ITEM_SPAN_LIMIT,
+    item_bounds,
+    move_item,
+    validate_item_bounds,
+)
 from .elevator_geometry import parse_stops, validate_shaft_support
 from .platform_service import PlatformService
 from .item_type_handlers import get_item_type_handler
@@ -1499,20 +1506,34 @@ class ItemRuntime:
         edits_bounds = False
         if packet.params:
             incoming_params = dict(packet.params)
-            edits_bounds = any(field in incoming_params for field in END_COORDINATES)
             try:
-                for field in END_COORDINATES:
-                    if field in incoming_params:
-                        if update_item.type != "widget":
+                for dimension, start_field, endpoint_field in ITEM_DIMENSIONS:
+                    if (
+                        dimension not in incoming_params
+                        and endpoint_field not in incoming_params
+                    ):
+                        continue
+                    edits_bounds = True
+                    if update_item.type != "widget":
+                        raise ValueError("Only widgets support editable dimensions.")
+                    if dimension in incoming_params:
+                        if endpoint_field in incoming_params:
                             raise ValueError(
-                                "Only widgets support editable dimensions."
+                                "Specify a size or an ending coordinate for each axis."
                             )
-                        endpoint = incoming_params.pop(field)
+                        size = incoming_params.pop(dimension)
+                        if type(size) is not int or not 1 <= size <= ITEM_SPAN_LIMIT:
+                            raise ValueError(
+                                f"Item dimensions must be whole numbers between 1 and {ITEM_SPAN_LIMIT}."
+                            )
+                        endpoint = getattr(update_item, start_field) + size - 1
+                    else:
+                        endpoint = incoming_params.pop(endpoint_field)
                         if type(endpoint) is not int:
                             raise ValueError(
                                 "Ending coordinates must be whole numbers."
                             )
-                        setattr(update_item, field, endpoint)
+                    setattr(update_item, endpoint_field, endpoint)
                 if edits_bounds and not self._item_footprint_in_bounds(update_item):
                     raise ValueError(
                         "The item footprint does not fit on the platforms."
@@ -1638,6 +1659,15 @@ class ItemRuntime:
         if item.carrierId:
             carrier = self.get_client_by_id(item.carrierId)
             carrier_label = carrier.nickname if carrier is not None else item.carrierId
+        dimensions = {}
+        if item.type == "widget":
+            bounds = item_bounds(item)
+            dimensions = {
+                name: str(end - start + 1)
+                for (name, _, _), start, end in zip(
+                    ITEM_DIMENSIONS, bounds[:3], bounds[3:]
+                )
+            }
         return {
             "type": item.type,
             "x": str(item.x),
@@ -1646,6 +1676,7 @@ class ItemRuntime:
             "endX": str(item.endX if item.endX is not None else item.x),
             "endY": str(item.endY if item.endY is not None else item.y),
             "endZ": str(item.endZ if item.endZ is not None else item.z),
+            **dimensions,
             "carrierId": carrier_label,
             "version": str(item.version),
             "createdBy": item.createdByName or item.createdBy,
