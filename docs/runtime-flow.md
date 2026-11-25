@@ -155,6 +155,7 @@ Exiting a fully open car clears cabin membership only when a supported landing c
 - Normal movement and client-requested teleport packets must keep the server-owned `z`. Elevators and server-authorized item teleport transitions can change floors.
 - The client renders only the current floor. Item lists and interactions are current-floor only; the user list remains global and names each floor.
 - Cross-floor user teleport is blocked in the client, and the server rejects any packet that attempts to change `z` directly.
+- User-list and item-list teleports travel at 20 squares per second, up to three seconds. Crossing between platforms at the same elevation plays the travel cue for that interval and sends the destination to the server at the end.
 - Presence snapshots and position updates include a server-authoritative `acousticZoneId`. A user belongs to a floor zone while outside and to an elevator-cabin zone after boarding, including during travel.
 - Floors remain acoustically isolated. LiveKit subscriptions use coarse zone connectivity, while local gain continuously mixes voice across a connected elevator doorway.
 - Each elevator is one independent single-square shaft object at the same X/Y on every configured stop. Calls, doors, queueing, travel, rider movement, and carried-item movement are server-owned.

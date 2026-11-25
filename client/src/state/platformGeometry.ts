@@ -26,6 +26,23 @@ export function platformAt(platforms: ReadonlyMap<string, Platform>, x: number, 
   return undefined;
 }
 
+/** Time a list teleport and identify trips that can publish intermediate walking positions. */
+export function listTeleportTravel(
+  platforms: ReadonlyMap<string, Platform>,
+  from: { x: number; y: number; z: number },
+  toX: number,
+  toY: number,
+) {
+  const destination = platformAt(platforms, toX, toY, from.z);
+  if (!destination) return undefined;
+  const distance = Math.hypot(toX - from.x, toY - from.y);
+  const squaresPerSecond = 20;
+  return {
+    durationMs: Math.min(3000, Math.max(1, distance / squaresPerSecond * 1000)),
+    syncIntermediatePositions: platformAt(platforms, from.x, from.y, from.z)?.id === destination.id,
+  };
+}
+
 export function canWalkTo(platforms: ReadonlyMap<string, Platform>, x: number, y: number, z: number, toX: number, toY: number): boolean {
   if (Math.abs(toX - x) > 1 || Math.abs(toY - y) > 1 || !platformAt(platforms, toX, toY, z)) return false;
   return x === toX || y === toY || Boolean(platformAt(platforms, x, toY, z) && platformAt(platforms, toX, y, z));

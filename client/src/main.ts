@@ -58,7 +58,7 @@ import { createOnMessageHandler } from './network/messageHandlers';
 import { SignalingClient } from './network/signalingClient';
 import { nextHeartbeatState } from './network/reconnectPolicy';
 import { CanvasRenderer } from './render/canvasRenderer';
-import { canWalkTo, nearestLanding, platformAt } from './state/platformGeometry';
+import { canWalkTo, listTeleportTravel, nearestLanding, platformAt } from './state/platformGeometry';
 import type { FootstepSet } from './state/platformGeometry';
 import { footstepSample } from './audio/footsteps';
 import {
@@ -131,7 +131,6 @@ const MIC_GAIN_METADATA = {
 };
 const HEARTBEAT_INTERVAL_MS = 10_000;
 const AUDIO_SUBSCRIPTION_REFRESH_MS = 500;
-const TELEPORT_SQUARES_PER_SECOND = 20;
 const AUTH_POLICY_STORAGE_KEY = 'chgridAuthPolicy';
 
 declare global {
@@ -481,6 +480,7 @@ let activeTeleport:
       lastSyncAtMs: number;
       lastSentX: number;
       lastSentY: number;
+      syncIntermediatePositions: boolean;
       completionStatus: string;
     }
   | null = null;
@@ -1407,21 +1407,12 @@ function startTeleportTo(targetX: number, targetY: number, completionStatus: str
   if (teleportTransition.isActive()) return;
   const startX = state.player.x;
   const startY = state.player.y;
-  const destination = platformAt(state.platforms, targetX, targetY, state.player.z);
-  if (!destination) {
+  const travel = listTeleportTravel(state.platforms, state.player, targetX, targetY);
+  if (!travel) {
     updateStatus('No platform at that destination.');
     audio.sfxUiCancel();
     return;
   }
-  if (platformAt(state.platforms, startX, startY, state.player.z)?.id !== destination.id) {
-    // Cross gaps with one authoritative landing. Walking packets would stop at the edge.
-    signaling.send({ type: 'teleport_complete', x: targetX, y: targetY, z: state.player.z });
-    void audio.playSample(TELEPORT_SOUND_URL, WORLD_FOOTSTEP_GAIN);
-    updateStatus(completionStatus);
-    return;
-  }
-  const distance = Math.hypot(targetX - startX, targetY - startY);
-  const durationMs = Math.min(3000, Math.max(1, (distance / TELEPORT_SQUARES_PER_SECOND) * 1000));
   const nowMs = performance.now();
   activeTeleport = {
     startX,
@@ -1429,7 +1420,7 @@ function startTeleportTo(targetX: number, targetY: number, completionStatus: str
     targetX,
     targetY,
     startedAtMs: nowMs,
-    durationMs,
+    ...travel,
     lastSyncAtMs: nowMs,
     lastSentX: Math.round(startX),
     lastSentY: Math.round(startY),
@@ -1469,7 +1460,10 @@ function updateTeleport(): void {
   state.player.x = activeTeleport.startX + (activeTeleport.targetX - activeTeleport.startX) * progress;
   state.player.y = activeTeleport.startY + (activeTeleport.targetY - activeTeleport.startY) * progress;
 
-  if (nowMs - activeTeleport.lastSyncAtMs >= movementTickMs) {
+  if (
+    activeTeleport.syncIntermediatePositions
+    && nowMs - activeTeleport.lastSyncAtMs >= movementTickMs
+  ) {
     activeTeleport.lastSyncAtMs = nowMs;
     const desiredX = Math.round(state.player.x);
     const desiredY = Math.round(state.player.y);
