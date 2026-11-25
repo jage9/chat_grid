@@ -732,7 +732,7 @@ async def test_stopped_rider_waits_for_reopened_door_before_exiting(
 
 
 @pytest.mark.asyncio
-async def test_rider_cannot_exit_while_elevator_is_moving(
+async def test_rider_gets_accurate_status_while_elevator_moves_or_arrives(
     make_world,
 ) -> None:
     """A rider must remain in the car until it reaches a landing."""
@@ -756,6 +756,11 @@ async def test_rider_cannot_exit_while_elevator_is_moving(
     )
     result = transport.packets_of_type(client, ItemActionResultPacket)[0]
     assert result.message == "The elevator is moving."
+
+    elevator.params["state"] = "arriving"
+    await server.item_runtime.elevator.use(client, elevator)
+    result = transport.packets_of_type(client, ItemActionResultPacket)[-1]
+    assert result.message == "The elevator door is opening."
 
 
 @pytest.mark.asyncio
