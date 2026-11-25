@@ -252,6 +252,18 @@ describe('AudioEngine spatial preferences', () => {
     expect(peer.panner?.positionX.value).toBeCloseTo(0);
     expect(peer.panner?.positionZ.value).toBeCloseTo(-4);
 
+    peer.z = 4;
+    audio.updateSpatialAudio([peer], listener);
+    const verticalGain = gainTarget.mock.calls[gainTarget.mock.calls.length - 1]?.[0] as number;
+    expect(verticalGain).toBeLessThan(standardGain as number);
+    expect(verticalGain).toBeGreaterThan(0);
+    expect(peer.panner?.positionY.value).toBeCloseTo(4);
+    expect(peer.panner?.positionZ.value).toBeCloseTo(-4);
+
+    peer.acousticGain = undefined;
+    audio.updateSpatialAudio([peer], listener);
+    expect(gainTarget.mock.calls[gainTarget.mock.calls.length - 1]?.[0]).toBeGreaterThan(verticalGain);
+
     peer.acousticGain = 0;
     peer.occlusionLowpassHz = 120;
     audio.updateSpatialAudio([peer], listener);

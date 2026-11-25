@@ -207,6 +207,9 @@ function resolveDirectionalProfile(
   dy: number,
   directional: NonNullable<SpatialMixOptions['directional']>,
 ): DirectionalProfile {
+  if (dx === 0 && dy === 0) {
+    return { attenuationFactor: 1, offAxisRatio: 0 };
+  }
   const coneDeg = Math.max(1, Math.min(359, directional.coneDeg ?? 120));
   const rearGain = Math.max(0, Math.min(1, directional.rearGain ?? 0.5));
   const facingDeg = normalizeDegrees(directional.facingDeg);

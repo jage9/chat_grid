@@ -148,9 +148,11 @@ class ElevatorRuntime:
         """Apply one context-sensitive elevator call, enter, open, or exit action."""
 
         state = str(item.params.get("state", "idle"))
+        if state == "arriving":
+            state = "opening"
         current_z = int(item.params.get("currentZ", 0))
         if client.elevator_id == item.id:
-            if state in {"moving", "arriving"}:
+            if state == "moving":
                 await self._send_result(client, "The elevator is moving.", item.id)
                 return
             if state in {"opening", "closing"}:
@@ -206,7 +208,7 @@ class ElevatorRuntime:
             )
             return
 
-        if state in {"moving", "arriving"}:
+        if state == "moving":
             if self._queue_destination(item, client.z):
                 self._touch(item)
                 await self.callbacks.broadcast_item(item)

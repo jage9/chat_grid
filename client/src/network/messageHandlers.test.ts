@@ -25,6 +25,7 @@ function setupRemoteMovement() {
   const peerManager = {
     ensurePeer: vi.fn(),
     setPeerPosition: vi.fn(),
+    setListenerPosition: vi.fn(),
   };
   const provided = {
     state,
@@ -54,6 +55,7 @@ function setupRemoteMovement() {
     audioUiCancel,
     shouldAnnounceItemPropertyEcho,
     state,
+    peerManager,
   };
 }
 
@@ -176,6 +178,15 @@ describe('item duplication results', () => {
 });
 
 describe('local facing announcements', () => {
+  it('updates listener position for every confirmed local xyz movement', async () => {
+    const { handler, peerManager } = setupRemoteMovement();
+    await handler({
+      type: 'update_position', id: 'self', x: 9, y: 13, z: 25,
+      facingDeg: 0, acousticZoneId: 'cabin:1',
+    });
+    expect(peerManager.setListenerPosition).toHaveBeenCalledWith(9, 13, 25);
+  });
+
   it('announces a confirmed local facing change as the compass direction', async () => {
     const { handler, updateStatus } = setupRemoteMovement();
 

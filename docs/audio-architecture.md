@@ -49,10 +49,9 @@ Current defaults:
 - Distance attenuation uses hearing radius from game state.
 - Stereo panning follows horizontal offset.
 - Mono output mode collapses pan to center.
-- Every positional source and listener includes `x`, `y`, `z`, and a server-owned acoustic-zone id. Disconnected floors and closed elevator cabins are silent before distance and pan are calculated.
-- Platforms at the same elevation share a floor acoustic zone, including platforms separated by gaps. Each distinct elevation has its own zone, even when the height difference is one square.
-- LiveKit remains one room, but the client unsubscribes from audio publications for users on other floors. This preserves the global roster without downloading unheard voice tracks.
-- Elevator riders are published at progressively changing intermediate heights while the car moves, which keeps them unsubscribed from both floor audio groups.
+- Voice and item sounds use straight-line distance in X, Y, and Z. Five squares overhead has the same distance gain as five squares horizontally. Platforms and gaps do not block sound. Directional emitters use the horizontal compass bearing for their cone.
+- LiveKit subscribes to nearby voices across elevations. Closed elevator doors isolate cabin occupants from outside voices and items. Opening and closing doors fade transmission. Passengers in the same cabin can hear each other while traveling.
+- Ambiance regions play at their authored elevation. Walls affect sound paths between points on their own elevation.
 - The dedicated client elevator runtime loops `/sounds/elevator_inside.ogg` from a randomized offset. A passenger hears it in every car state; a nearby landing listener hears it through the opening/closing door transmission while the car is at that floor.
 - An elevator's optional `emitSound` belongs to the multi-floor shaft and emits at its configured stops. A rider hears it through the door at the current landing.
 - Door opening and closing play their spatial clips for landing listeners and riders. Entry/exit remains blocked for each clip's duration. `/sounds/elevator_up.ogg` or `/sounds/elevator_down.ogg` starts alongside the opening clip so the direction beep adds no delay.
@@ -63,7 +62,7 @@ Current defaults:
 - `WorldAudioRouter` is the single entry point for sampled world one-shots. It applies the world-layer toggle, acoustic-zone transmission, wall gain/filtering, range, distance, and pan for footsteps, teleports, structure contact, item-use sounds, and clock sequences.
 - One-shot admission uses acoustic connectivity at the start of playback. A landing sample can begin at zero transmission and fade in as the door opens.
 - One-shot packets carry the authoritative source acoustic-zone id. This keeps all floor sounds outside a closed or moving elevator cabin and fades them consistently with the door transition.
-- Wall occlusion never drives LiveKit subscription changes. Floor/acoustic-zone connectivity remains the stable bandwidth gate; walls are a fast local gain adjustment.
+- Wall occlusion never drives LiveKit subscription changes. Voice range and cabin connectivity control subscriptions; walls are a fast local gain adjustment.
 - A ray passing exactly through a grid corner follows diagonal movement semantics: one occupied component edge leaves an open route, while two occupied edges apply both transmissions.
 - Wall impacts and passable-structure crossings emit their configured `contactSound`. The mover receives immediate local feedback; other users receive a server-validated positional world sound that follows normal distance, floor, layer, and wall-occlusion rules.
 

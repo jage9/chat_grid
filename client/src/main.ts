@@ -14,7 +14,7 @@ import { ItemEmitRuntime } from './audio/itemEmitRuntime';
 import { AmbianceRuntime } from './audio/ambianceRuntime';
 import { TeleportTransitionController } from './audio/teleportTransition';
 import { ElevatorAudioRuntime } from './items/types/elevator/runtime';
-import { AcousticZoneRuntime, worldItemAcousticZoneId } from './audio/acousticZones';
+import { AcousticZoneRuntime, elevatorAcousticZoneId, worldItemAcousticZoneId } from './audio/acousticZones';
 import { WorldAudioRouter, WORLD_FOOTSTEP_GAIN } from './audio/worldAudio';
 import { normalizeDegrees } from './audio/spatial';
 import {
@@ -372,11 +372,6 @@ function wallAcousticMixTo(sourceX: number, sourceY: number, sourceZ: number) {
   );
 }
 
-function itemWallAcousticMix(item: WorldItem) {
-  const source = resolveWorldItemSourcePosition(item, state.player.z, state.player.x, state.player.y);
-  return wallAcousticMixTo(source.x, source.y, source.z);
-}
-
 function resolveWorldAcousticMix(source: SpatialAudioPosition, listener: SpatialAudioPosition) {
   const wall = wallAcousticMixBetween(state.structures.values(), listener, source, wallEdgeIndex);
   return {
@@ -388,7 +383,7 @@ function resolveWorldAcousticMix(source: SpatialAudioPosition, listener: Spatial
 function itemAcousticMix(item: WorldItem) {
   return resolveWorldAcousticMix({
     ...resolveWorldItemSourcePosition(item, state.player.z, state.player.x, state.player.y),
-    acousticZoneId: worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
+    acousticZoneId: worldItemAcousticZoneId(item, state),
   }, state.player);
 }
 
@@ -399,7 +394,7 @@ const radioRuntime = new RadioStationRuntime(
   itemAcousticMix,
   (item) => acousticZoneRuntime.couldConnect(
     state.player.acousticZoneId,
-    worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
+    worldItemAcousticZoneId(item, state),
     state.items,
   ),
 );
@@ -410,7 +405,7 @@ const itemEmitRuntime = new ItemEmitRuntime(
   itemAcousticMix,
   (item) => acousticZoneRuntime.couldConnect(
     state.player.acousticZoneId,
-    worldItemAcousticZoneId(item, state.player.acousticZoneId, state.items),
+    worldItemAcousticZoneId(item, state),
     state.items,
   ),
 );
@@ -419,10 +414,9 @@ const elevatorAudioRuntime = new ElevatorAudioRuntime(
   resolveIncomingSoundUrl,
   getItemSpatialConfig,
   () => state.elevatorItemId,
-  (item) => {
-    const wall = itemWallAcousticMix(item);
-    return { gain: acousticZoneRuntime.doorTransmission(item) * wall.gain, lowpassHz: wall.lowpassHz };
-  },
+  (item) => resolveWorldAcousticMix({
+    x: item.x, y: item.y, z: Number(item.params.currentZ), acousticZoneId: elevatorAcousticZoneId(item.id),
+  }, state.player),
 );
 const worldAudio = new WorldAudioRouter(
   audio,
@@ -1497,6 +1491,7 @@ function gameLoop(): void {
     z: state.player.z,
     acousticZoneId: state.player.acousticZoneId,
   };
+  peerManager.setListenerPosition(listenerPosition.x, listenerPosition.y, listenerPosition.z);
   acousticZoneRuntime.sync(state.items.values());
   for (const peer of peerManager.getPeers()) {
     const acoustic = resolveWorldAcousticMix(peer, listenerPosition);
