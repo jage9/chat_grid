@@ -48,8 +48,6 @@ if [[ ! -f config.toml ]]; then
   echo "created $SERVER_DIR/config.toml from template"
 fi
 
-mkdir -p runtime
-
 if [[ ! -f .env ]]; then
   AUTH_SECRET="$(
     python3 - <<'PY'
@@ -77,17 +75,15 @@ if [[ -n "${CHGRID_AUTH_SECRET:-}" ]]; then
 from pathlib import Path
 import os
 from app.auth_service import AuthService
-from app.config import load_config
+from app.config import load_config, resolve_storage_paths
 
-cfg = load_config(Path("config.toml"))
+config_path = Path("config.toml")
+cfg = load_config(config_path)
 secret = os.getenv("CHGRID_AUTH_SECRET", "").strip()
 if not secret:
     print("unknown")
     raise SystemExit(0)
-db_file = cfg.auth.db_file.strip() or "runtime/chatgrid.db"
-db_path = Path(db_file)
-if not db_path.is_absolute():
-    db_path = Path.cwd() / db_path
+_, db_path = resolve_storage_paths(cfg, config_path)
 svc = AuthService(
     db_path=db_path,
     token_hash_secret=secret,

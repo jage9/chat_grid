@@ -47,7 +47,7 @@ from .models import (
 )
 from .ambiance_service import AmbianceError, AmbianceService
 from .client import ClientConnection, RateLimitName
-from .config import RateLimitsConfigSection, load_config
+from .config import RateLimitsConfigSection, load_config, resolve_storage_paths
 from .delivery import Delivery, Transport, WebsocketTransport
 from .item_catalog import (
     ITEM_TYPE_EDITABLE_PROPERTIES,
@@ -3260,13 +3260,7 @@ def run() -> None:
         args.ssl_cert if args.ssl_cert is not None else config.tls.cert_file or None
     )
     ssl_key = args.ssl_key if args.ssl_key is not None else config.tls.key_file or None
-    state_file_value = config.storage.state_file.strip()
-    state_file: Path | None = None
-    if state_file_value:
-        base_dir = config_path.parent if config_path is not None else Path.cwd()
-        state_file = Path(state_file_value)
-        if not state_file.is_absolute():
-            state_file = base_dir / state_file
+    state_file, auth_db_path = resolve_storage_paths(config, config_path)
 
     if not allow_insecure_ws and (not ssl_cert or not ssl_key):
         raise SystemExit(
@@ -3290,13 +3284,6 @@ def run() -> None:
     livekit_api_secret = os.getenv("LIVEKIT_API_SECRET", "").strip()
     if not livekit_api_key or not livekit_api_secret:
         raise SystemExit("LIVEKIT_API_KEY and LIVEKIT_API_SECRET are required.")
-    auth_db_value = config.auth.db_file.strip()
-    if not auth_db_value:
-        raise SystemExit("auth.db_file must not be empty.")
-    auth_base_dir = config_path.parent if config_path is not None else Path.cwd()
-    auth_db_path = Path(auth_db_value)
-    if not auth_db_path.is_absolute():
-        auth_db_path = auth_base_dir / auth_db_path
     auth_db_path.parent.mkdir(parents=True, exist_ok=True)
 
     logging.basicConfig(

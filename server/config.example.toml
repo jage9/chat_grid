@@ -27,16 +27,14 @@ key_file = ""
 level = "INFO"
 
 [storage]
-# Item persistence file. Relative paths are resolved from this config file directory.
-state_file = "runtime/items.json"
+# Directory for runtime data files. Relative paths are resolved from this config file directory.
+data_dir = "runtime"
+# Optional item persistence path override. Relative paths are resolved from this config file directory.
+# state_file = "runtime/items.json"
 # Debounce window for coalesced item-state writes.
 state_save_debounce_ms = 200
 # Maximum delay before a pending state write is forced.
 state_save_max_delay_ms = 1000
-
-[world]
-# Grid width/height in cells. Valid coordinates are 0..grid_size-1.
-grid_size = 41
 
 # World Builder wall presets. Add more named tables as needed.
 [world.structure_presets.brick]
@@ -72,8 +70,8 @@ height = 40
 contact_sound = "/sounds/fence.ogg"
 
 [auth]
-# SQLite file for account/session data. Relative paths resolve from this config file directory.
-db_file = "runtime/chatgrid.db"
+# Optional SQLite file override for account/session data. Relative paths resolve from this config file directory.
+# db_file = "runtime/chatgrid.db"
 # Required secret is read from the CHGRID_AUTH_SECRET environment variable.
 # Password length policy.
 password_min_length = 8

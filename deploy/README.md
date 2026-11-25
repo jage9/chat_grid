@@ -39,6 +39,14 @@ CHGRID_HOST_ORIGIN=https://example.com
 
 The expected env shape is also shown in [server/.env.sample](/home/jjm/code/chgrid/server/.env.sample).
 
+For two grids with configs in the same directory, set `storage.data_dir` to
+a different directory in each config, for example `runtime` and `ttruntime`.
+If a grid already uses `ttruntime/items.json` and `ttruntime/chatgrid.db`,
+set `data_dir = "ttruntime"` under `[storage]`, remove the old `state_file`
+and `db_file` lines, and restart that grid. This reuses its existing world,
+checkpoint history, and accounts in place. Keep explicit file paths for
+installations with custom filenames or a separate account database.
+
 ## 3) Publish Client
 
 ```bash
