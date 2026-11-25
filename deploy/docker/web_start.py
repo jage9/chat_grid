@@ -3,7 +3,6 @@
 import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import tomllib
 from urllib.parse import urlsplit
@@ -69,11 +68,10 @@ def main() -> None:
         raise ValueError("CHGRID_HOST_ORIGIN must be the public origin, such as https://grid.example.com")
     apache = apache_config(mount, port, origin.scheme)
     destination = Path("/var/www/html")
-    shutil.copytree("/opt/chgrid/client", destination, dirs_exist_ok=True)
     subprocess.run(
         [
             "python3", "/opt/chgrid/configure_client.py", str(config),
-            "/opt/chgrid/client/index.html", str(destination),
+            "/opt/chgrid/index.html", str(destination),
             "--session-check-host", "server",
         ],
         check=True,
