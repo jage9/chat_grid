@@ -63,6 +63,7 @@ function setup() {
   };
   const state = {
     mode: 'normal' as const,
+    peers: new Map(),
     items,
     player: { id: 'listener', x: listener.x, y: listener.y, z: listener.z, acousticZoneId: listener.acousticZoneId },
   };

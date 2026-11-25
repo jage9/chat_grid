@@ -1,4 +1,5 @@
-import { isItemOnFloor, type WorldItem } from '../state/gameState';
+import type { WorldItem } from '../state/gameState';
+import { resolveWorldItemSourcePosition } from './worldItemPosition';
 
 const ELEVATOR_OPEN_SECONDS = 2.563107;
 const ELEVATOR_CLOSE_SECONDS = 3.765601;
@@ -18,27 +19,16 @@ export function elevatorAcousticZoneId(itemId: string): string {
   return `elevator:${itemId}`;
 }
 
-/** Resolve a floor-bound item source against the listener's connected landing. */
-export function worldItemAcousticZoneId(
-  item: WorldItem,
-  listenerZoneId: string,
-  items: Map<string, WorldItem>,
-): string {
-  const listenerFloor = parseFloorZone(listenerZoneId);
-  const listenerElevatorId = parseElevatorZone(listenerZoneId);
-  const elevator = listenerElevatorId ? items.get(listenerElevatorId) : null;
-  const connectedFloor = listenerFloor
-    ?? (elevator?.type === 'elevator' ? Number(elevator.params.currentZ) : null);
-  if (connectedFloor !== null && Number.isInteger(connectedFloor) && isItemOnFloor(item, connectedFloor)) {
-    return floorAcousticZoneId(connectedFloor);
+/** Locate a held sound in its carrier's acoustic zone and a placed sound at its nearest emitting height. */
+export function worldItemAcousticZoneId(item: WorldItem, state: {
+  player: { id: string | null; z: number; acousticZoneId: string };
+  peers: ReadonlyMap<string, { acousticZoneId: string }>;
+}): string {
+  if (item.carrierId) {
+    const carrier = item.carrierId === state.player.id ? state.player : state.peers.get(item.carrierId);
+    if (carrier) return carrier.acousticZoneId;
   }
-  return floorAcousticZoneId(item.z);
-}
-
-function parseFloorZone(zoneId: string): number | null {
-  if (!zoneId.startsWith('floor:')) return null;
-  const z = Number(zoneId.slice('floor:'.length));
-  return Number.isInteger(z) ? z : null;
+  return floorAcousticZoneId(resolveWorldItemSourcePosition(item, state.player.z).z);
 }
 
 function parseElevatorZone(zoneId: string): string | null {
@@ -86,43 +76,38 @@ export class AcousticZoneRuntime {
     nowMs = performance.now(),
   ): number {
     if (listenerZoneId === sourceZoneId) return 1;
-    const elevator = this.connectedElevator(listenerZoneId, sourceZoneId, items);
-    if (!elevator) return 0;
-    return this.doorTransmission(elevator, nowMs);
+    return this.zoneGain(listenerZoneId, items, nowMs) * this.zoneGain(sourceZoneId, items, nowMs);
   }
 
-  /** Return whether a one-shot can transmit now or during the active door transition. */
-  canTransmit(
-    listenerZoneId: string,
-    sourceZoneId: string,
-    items: Map<string, WorldItem>,
-  ): boolean {
-    if (listenerZoneId === sourceZoneId) return true;
-    const elevator = this.connectedElevator(listenerZoneId, sourceZoneId, items);
-    if (!elevator) return false;
-    return ['opening', 'arriving', 'door_open', 'closing'].includes(
-      String(elevator.params.state ?? 'idle'),
-    );
+  private zoneGain(zoneId: string, items: Map<string, WorldItem>, nowMs: number): number {
+    if (zoneId.startsWith('floor:')) return 1;
+    const item = this.cabin(zoneId, items);
+    return item ? this.doorTransmission(item, nowMs) : 0;
   }
 
+  /** Admit one-shots as doors begin opening, even when the initial gain is zero. */
+  canTransmit(listenerZoneId: string, sourceZoneId: string, items: Map<string, WorldItem>): boolean {
+    return listenerZoneId === sourceZoneId
+      || (this.zoneConnects(listenerZoneId, items, false) && this.zoneConnects(sourceZoneId, items, false));
+  }
+
+  /** Preload sources near a parked car so opening the doors can reveal them immediately. */
   couldConnect(listenerZoneId: string, sourceZoneId: string, items: Map<string, WorldItem>): boolean {
-    if (listenerZoneId === sourceZoneId) return true;
-    const elevator = this.connectedElevator(listenerZoneId, sourceZoneId, items);
-    return !!elevator && String(elevator.params.state ?? 'idle') !== 'moving';
+    return listenerZoneId === sourceZoneId
+      || (this.zoneConnects(listenerZoneId, items, true) && this.zoneConnects(sourceZoneId, items, true));
   }
 
-  private connectedElevator(
-    listenerZoneId: string,
-    sourceZoneId: string,
-    items: Map<string, WorldItem>,
-  ): WorldItem | null {
-    const listenerFloor = parseFloorZone(listenerZoneId);
-    const sourceFloor = parseFloorZone(sourceZoneId);
-    const elevatorId = parseElevatorZone(listenerZoneId) ?? parseElevatorZone(sourceZoneId);
-    const floorZ = listenerFloor ?? sourceFloor;
-    if (!elevatorId || floorZ === null) return null;
-    const elevator = items.get(elevatorId);
-    if (!elevator || elevator.type !== 'elevator' || Number(elevator.params.currentZ) !== floorZ) return null;
-    return elevator;
+  private zoneConnects(zoneId: string, items: Map<string, WorldItem>, preload: boolean): boolean {
+    if (zoneId.startsWith('floor:')) return true;
+    const cabin = this.cabin(zoneId, items);
+    if (!cabin) return false;
+    const state = String(cabin.params.state ?? 'idle');
+    return preload ? state !== 'moving' : ['opening', 'arriving', 'door_open', 'closing'].includes(state);
+  }
+
+  private cabin(zoneId: string, items: Map<string, WorldItem>): WorldItem | undefined {
+    const id = parseElevatorZone(zoneId);
+    const item = id ? items.get(id) : undefined;
+    return item?.type === 'elevator' ? item : undefined;
   }
 }

@@ -47,9 +47,8 @@ export function shouldPlayElevatorAmbience(
   if (item.type !== 'elevator') return false;
   if (occupiedElevatorId === item.id) return true;
   const state = String(item.params.state ?? 'idle');
-  if (!['opening', 'arriving', 'door_open', 'closing'].includes(state)
-    || Number(item.params.currentZ) !== listenerPosition.z) return false;
-  return Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y)
+  if (!['opening', 'arriving', 'door_open', 'closing'].includes(state)) return false;
+  return Math.hypot(item.x - listenerPosition.x, item.y - listenerPosition.y, Number(item.params.currentZ) - listenerPosition.z)
     <= Math.max(1, range || HEARING_RADIUS) + SUBSCRIBE_PRELOAD_SQUARES;
 }
 
@@ -195,7 +194,6 @@ export class ElevatorAudioRuntime {
       }
       const inside = occupiedElevatorId === item.id;
       const currentZ = Number(item.params.currentZ);
-      const sameLanding = Number.isFinite(currentZ) && currentZ === playerPosition.z;
       const spatialConfig = this.getSpatialConfig(item);
       const mix = inside
         ? resolveSpatialMix({
@@ -206,16 +204,14 @@ export class ElevatorAudioRuntime {
             nearFieldDistance: 1,
             nearFieldCenterPan: true,
           })
-          : sameLanding
-          ? resolveSpatialMix({
-              dx: item.x - playerPosition.x,
-              dy: item.y - playerPosition.y,
-              dz: currentZ - playerPosition.z,
-              range: Math.max(1, spatialConfig.range || HEARING_RADIUS),
-              nearFieldDistance: 1,
-              nearFieldCenterPan: true,
-            })
-          : null;
+        : resolveSpatialMix({
+            dx: item.x - playerPosition.x,
+            dy: item.y - playerPosition.y,
+            dz: currentZ - playerPosition.z,
+            range: Math.max(1, spatialConfig.range || HEARING_RADIUS),
+            nearFieldDistance: 1,
+            nearFieldCenterPan: true,
+          });
       const acoustic = inside ? { gain: 1, lowpassHz: 20_000 } : normalizeAcousticMix(this.getDoorAcousticMix(item));
       applyAcousticLowpass(audioCtx, output.occlusionFilter, acoustic.lowpassHz);
       const transmittedMix = mix && !inside

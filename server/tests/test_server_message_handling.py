@@ -483,6 +483,61 @@ async def test_radio_metadata_refresh_skips_when_no_listener_in_range(
     assert called is False
 
 
+def test_item_listener_range_uses_3d_euclidean_distance_and_acoustic_zone(
+    make_world,
+) -> None:
+    """Listener checks use the audible source position and keep elevator zones isolated."""
+
+    world = make_world(grid_size=41)
+    server = world.server
+    carrier = world.join("carrier", x=0, y=0, client_id="u1")
+    listener = world.join("listener", x=13, y=14, client_id="u2")
+    radio = server.item_service.default_item(carrier, "radio_station")
+    radio.x = 10
+    radio.y = 10
+    radio.params["emitRange"] = 5
+    server.item_service.add_item(radio)
+    elevator = server.item_service.default_item(carrier, "elevator")
+    elevator.id = "car-1"
+    elevator.params.update({"currentZ": 0, "state": "door_open"})
+    server.item_service.add_item(elevator)
+    carrier.x = 30
+    carrier.y = 30
+
+    assert server.item_runtime.has_listener_in_range(radio) is True
+
+    listener.x = 14
+    listener.y = 14
+    assert server.item_runtime.has_listener_in_range(radio) is False
+
+    listener.x = 13
+    listener.y = 10
+    listener.z = 4
+    assert server.item_runtime.has_listener_in_range(radio) is True
+    listener.z = 6
+    assert server.item_runtime.has_listener_in_range(radio) is False
+
+    listener.x = 10
+    listener.y = 10
+    listener.z = 0
+    listener.elevator_id = elevator.id
+    assert server.item_runtime.has_listener_in_range(radio) is True
+    elevator.params["state"] = "idle"
+    assert server.item_runtime.has_listener_in_range(radio) is False
+    elevator.params["state"] = "door_open"
+
+    radio.carrierId = carrier.id
+    carrier.x = 20
+    carrier.y = 20
+    carrier.z = 0
+    carrier.elevator_id = "car-1"
+    listener.x = 20
+    listener.y = 20
+    listener.z = 0
+    listener.elevator_id = "car-1"
+    assert server.item_runtime.has_listener_in_range(radio) is True
+
+
 @pytest.mark.asyncio
 async def test_radio_metadata_refresh_continues_after_one_stream_fails(
     make_world,

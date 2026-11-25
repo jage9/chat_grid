@@ -9,6 +9,7 @@ export type ItemBehaviorDeps = {
   state: {
     mode: GameMode;
     items: Map<string, WorldItem>;
+    peers: ReadonlyMap<string, { acousticZoneId: string }>;
     player: { id: string | null; x: number; y: number; z: number; acousticZoneId: string };
   };
   audio: {

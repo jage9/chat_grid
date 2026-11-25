@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectionState, RoomEvent, Track, type LocalAudioTrack } from 'livekit-client';
 import type { AudioEngine } from '../audio/audioEngine';
-import { PeerManager } from './peerManager';
+import { PeerManager, type PeerRuntime } from './peerManager';
 
 const livekit = vi.hoisted(() => {
   class MockRoom {
@@ -62,11 +62,43 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe('LiveKit voice recovery', () => {
+  it('range-gates subscriptions in 3D while retaining the world connectivity resolver', async () => {
+    const { manager } = setup();
+    const connectedZones = vi.fn((peer: PeerRuntime) => peer.acousticZoneId === 'cabin-a');
+    manager.setSubscriptionResolver(connectedZones);
+    const peer = manager.ensurePeer('speaker', { x: 20, y: 0, z: 0, acousticZoneId: 'cabin-a' });
+    const setSubscribed = vi.fn();
+    const publication = { setSubscribed };
+    await manager.connectToRoom('wss://voice.test', 'token');
+    const room = latestRoom();
+    room.remoteParticipants.set('speaker', { audioTrackPublications: new Map([['audio', publication]]) });
+
+    manager.setPeerPosition(peer.id, 20, 0, 0, 'cabin-a');
+    expect(setSubscribed).toHaveBeenLastCalledWith(true);
+    manager.setPeerPosition(peer.id, 20, 0, 1, 'cabin-a');
+    expect(setSubscribed).toHaveBeenLastCalledWith(false);
+    manager.setPeerPosition(peer.id, 0, 0, 20, 'cabin-a');
+    expect(setSubscribed).toHaveBeenLastCalledWith(true);
+    manager.setListenerPosition(0, 0, -1);
+    expect(setSubscribed).toHaveBeenLastCalledWith(false);
+    manager.setListenerPosition(0, 0, 0);
+    expect(setSubscribed).toHaveBeenLastCalledWith(true);
+    manager.setPeerPosition(peer.id, 20, 0, 0, 'cabin-a');
+    manager.setListenerPosition(-1, 0, 0);
+    expect(setSubscribed).toHaveBeenLastCalledWith(false);
+    manager.setListenerPosition(1, 0, 0);
+    expect(setSubscribed).toHaveBeenLastCalledWith(true);
+    manager.setPeerPosition(peer.id, 0, 0, 0, 'cabin-b');
+    expect(setSubscribed).toHaveBeenLastCalledWith(false);
+    expect(connectedZones).toHaveBeenCalled();
+    manager.cleanupAll();
+  });
+
   it.each([false, true])('waits for signaling identity when voice arrives first (placeholder %s)', async (placeholder) => {
     vi.stubGlobal('MediaStream', class { constructor(public tracks: unknown[]) {} });
     const { manager, attachRemoteStream } = setup();
     manager.setVoiceMuteResolver((peer) => peer.userId === 'muted-account');
-    if (placeholder) manager.ensurePeer('new-session', { nickname: 'user...' });
+    if (placeholder) manager.ensurePeer('new-session', { nickname: 'user...', x: 0, y: 0, z: 0 });
     await manager.connectToRoom('wss://voice.test', 'token');
     latestRoom().emit(
       RoomEvent.TrackSubscribed,
@@ -77,7 +109,7 @@ describe('LiveKit voice recovery', () => {
     expect(attachRemoteStream).not.toHaveBeenCalled();
     if (!placeholder) manager.ensurePeer('new-session', { nickname: 'user...' });
     expect(attachRemoteStream).not.toHaveBeenCalled();
-    const peer = manager.ensurePeer('new-session', { userId: 'muted-account' });
+    const peer = manager.ensurePeer('new-session', { userId: 'muted-account', x: 0, y: 0, z: 0 });
     expect(peer.voiceMuted).toBe(true);
     expect(attachRemoteStream).toHaveBeenCalledTimes(1);
     expect(attachRemoteStream).toHaveBeenCalledWith(expect.objectContaining({ voiceMuted: true }), expect.anything());

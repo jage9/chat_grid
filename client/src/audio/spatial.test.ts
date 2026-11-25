@@ -137,4 +137,21 @@ describe('shared spatial renderer', () => {
     expect(resolveSpatialMix({ dx: 0, dy: 0, dz: 40, range: 15 })).toBeNull();
     expect(resolveSpatialMix({ dx: 3, dy: 4, range: 15 })!.distance).toBe(5);
   });
+
+  it('applies directional cones in the horizontal plane while height affects range', () => {
+    const directional = { enabled: true, facingDeg: 0, coneDeg: 120, rearGain: 0.4 };
+    const horizontal = resolveSpatialMix({ dx: 10, dy: 0, range: 20, directional })!;
+    const elevated = resolveSpatialMix({ dx: 8, dy: 0, dz: 6, range: 20, directional })!;
+    expect(elevated.distance).toBe(10);
+    expect(elevated.gain).toBeCloseTo(horizontal.gain);
+    expect(elevated.gain).toBeLessThan(resolveSpatialMix({ dx: 8, dy: 0, range: 20, directional })!.gain);
+  });
+
+  it('does not apply horizontal cone attenuation directly above or below a source', () => {
+    const directional = { enabled: true, facingDeg: 180, coneDeg: 60, rearGain: 0 };
+    const overhead = resolveSpatialMix({ dx: 0, dy: 0, dz: 8, range: 20, directional })!;
+    const overheadOmni = resolveSpatialMix({ dx: 0, dy: 0, dz: 8, range: 20 })!;
+    expect(overhead.gain).toBeCloseTo(overheadOmni.gain);
+    expect(overhead.distance).toBe(8);
+  });
 });

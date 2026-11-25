@@ -11,7 +11,7 @@ import {
 } from './spatial';
 import { volumePercentToGain } from './volume';
 import { applyAcousticLowpass, normalizeAcousticMix, type AcousticMix } from './acoustics';
-import { resolveWorldItemSourcePosition } from './worldItemPosition';
+import { itemInListenerRange, resolveWorldItemSourcePosition } from './worldItemPosition';
 
 type EmitOutput = {
   soundUrl: string;
@@ -477,10 +477,7 @@ export class ItemEmitRuntime {
     const spatialConfig = this.getSpatialConfig(item);
     const baseRange = Math.max(1, spatialConfig.range || HEARING_RADIUS);
     const threshold = baseRange + (currentlyActive ? UNSUBSCRIBE_HYSTERESIS_SQUARES : SUBSCRIBE_PRELOAD_SQUARES);
-    return listenerPositions.some((listenerPosition) => {
-      const nearest = resolveWorldItemSourcePosition(item, listenerPosition.z, listenerPosition.x, listenerPosition.y);
-      return Math.hypot(nearest.x - listenerPosition.x, nearest.y - listenerPosition.y, nearest.z - listenerPosition.z) <= threshold;
-    });
+    return listenerPositions.some((listener) => itemInListenerRange(item, listener, threshold));
   }
 
   private tryStartEmitPlayback(itemId: string, element: HTMLAudioElement): void {

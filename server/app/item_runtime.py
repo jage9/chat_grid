@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import logging
 import uuid
 from copy import deepcopy
@@ -1738,17 +1739,34 @@ class ItemRuntime:
         """Return whether any connected user is currently inside item hear range."""
 
         emit_range = self.get_emit_range(item)
+        source_x, source_y, source_z, source_zone_id = self.get_sound_source(item)
+        source_open = self._sound_zone_open(source_zone_id)
         for client in self.clients.values():
-            elevator = (
-                self.items.get(client.elevator_id) if client.elevator_id else None
-            )
-            if elevator is not None and elevator.params.get("state") == "moving":
+            listener_zone_id = client_acoustic_zone_id(client)
+            if source_zone_id != listener_zone_id and not (
+                source_open and self._sound_zone_open(listener_zone_id)
+            ):
                 continue
-            if client.z != item.z:
-                continue
-            if max(abs(client.x - item.x), abs(client.y - item.y)) <= emit_range:
+            if (
+                math.dist(
+                    (client.x, client.y, client.z), (source_x, source_y, source_z)
+                )
+                <= emit_range
+            ):
                 return True
         return False
+
+    def _sound_zone_open(self, zone_id: str) -> bool:
+        """Return whether the zone admits sound to and from the surrounding world."""
+        if zone_id.startswith("floor:"):
+            return True
+        elevator = self.items.get(zone_id.removeprefix("elevator:"))
+        return elevator is not None and elevator.params.get("state") in {
+            "opening",
+            "arriving",
+            "door_open",
+            "closing",
+        }
 
     def get_sound_source(self, item: WorldItem) -> tuple[int, int, int, str]:
         """Resolve position and acoustic zone for an item-emitted one-shot."""

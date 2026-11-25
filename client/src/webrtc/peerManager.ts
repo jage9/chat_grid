@@ -10,6 +10,7 @@ import {
 } from 'livekit-client';
 import { AudioEngine, type SpatialPeerRuntime } from '../audio/audioEngine';
 import type { RemoteUser } from '../network/protocol';
+import { HEARING_RADIUS } from '../state/gameState';
 
 export type PeerRuntime = SpatialPeerRuntime & {
   id: string;
@@ -35,9 +36,9 @@ export class PeerManager {
   private recoveryAttempts = 0;
   private recoveryFailureReported = false;
   private recovering = false;
-  private listenerZ = 0;
+  private listenerPosition = { x: 0, y: 0, z: 0 };
   private voiceMuteResolver: (peer: PeerRuntime) => boolean = () => false;
-  private subscriptionResolver: (peer: PeerRuntime) => boolean = (peer) => peer.z === this.listenerZ;
+  private subscriptionResolver: (peer: PeerRuntime) => boolean = () => true;
 
   constructor(
     private readonly audio: AudioEngine,
@@ -122,7 +123,7 @@ export class PeerManager {
         void room.disconnect(false);
         return false;
       }
-      this.syncFloorSubscriptions();
+      this.syncSubscriptions();
       await this.publishOutboundTrack();
       if (this.room !== room) return false;
       if (this.recovering) this.status('Voice reconnected.');
@@ -152,6 +153,12 @@ export class PeerManager {
       acousticGain: 0,
       listenGain: 1,
     };
+    if (existing) {
+      peer.x = userData.x ?? peer.x;
+      peer.y = userData.y ?? peer.y;
+      peer.z = userData.z ?? peer.z;
+      peer.acousticZoneId = userData.acousticZoneId ?? peer.acousticZoneId;
+    }
     if (userData.userId !== undefined) peer.userId = userData.userId;
     peer.voiceMuted = this.voiceMuteResolver(peer);
     this.peers.set(targetId, peer);
@@ -162,7 +169,7 @@ export class PeerManager {
         this.attachRemoteStream(peer, pending);
       }
     }
-    this.syncParticipantFloorSubscription(targetId);
+    this.syncParticipantSubscription(targetId);
     return peer;
   }
 
@@ -254,20 +261,20 @@ export class PeerManager {
       peer.z = z;
       peer.acousticZoneId = acousticZoneId;
     }
-    this.syncParticipantFloorSubscription(id);
+    this.syncParticipantSubscription(id);
   }
 
-  /** Unsubscribe from remote voice tracks outside the listener's floor. */
-  setListenerFloor(z: number): void {
-    if (this.listenerZ === z) return;
-    this.listenerZ = z;
-    this.syncFloorSubscriptions();
+  /** Update the listener position used for range-gated voice subscriptions. */
+  setListenerPosition(x: number, y: number, z: number): void {
+    if (this.listenerPosition.x === x && this.listenerPosition.y === y && this.listenerPosition.z === z) return;
+    this.listenerPosition = { x, y, z };
+    this.syncSubscriptions();
   }
 
   /** Apply the current world acoustic connectivity rule to LiveKit tracks. */
   setSubscriptionResolver(resolver: (peer: PeerRuntime) => boolean): void {
     this.subscriptionResolver = resolver;
-    this.syncFloorSubscriptions();
+    this.syncSubscriptions();
   }
 
   setPeerAcousticGain(id: string, gain: number): void {
@@ -367,13 +374,13 @@ export class PeerManager {
     peer.remoteStream = undefined;
   }
 
-  private syncFloorSubscriptions(): void {
+  private syncSubscriptions(): void {
     for (const participantId of this.peers.keys()) {
-      this.syncParticipantFloorSubscription(participantId);
+      this.syncParticipantSubscription(participantId);
     }
   }
 
-  private syncParticipantFloorSubscription(participantId: string): void {
+  private syncParticipantSubscription(participantId: string): void {
     const peer = this.peers.get(participantId);
     const participant = this.room?.remoteParticipants.get(participantId);
     if (!peer || !participant) return;
@@ -387,6 +394,8 @@ export class PeerManager {
   }
 
   private shouldSubscribe(peer: PeerRuntime): boolean {
-    return this.subscriptionResolver(peer);
+    const { x, y, z } = this.listenerPosition;
+    return Math.hypot(peer.x - x, peer.y - y, peer.z - z) <= HEARING_RADIUS
+      && this.subscriptionResolver(peer);
   }
 }

@@ -39,7 +39,7 @@ Every item type except `radio_station` supports an editable emitted sound throug
 
 Emitted sound appears first in the audio settings, followed by its volume, range, speed/pitch, tempo, delays, effect, and direction settings.
 
-Volume, range, speed/pitch, tempo, initial delay, loop delay, effect, and directional controls appear only when an emitted sound is set. Facing additionally requires directional audio; effect amount requires an effect other than `off`. Existing type-specific ranges remain in place, including the piano's `5..20` range shared with its notes, which remains visible even without an emitted sound. Emitted audio uses the Items layer and follows the item's location, including while carried.
+Volume, range, speed/pitch, tempo, initial delay, loop delay, effect, and directional controls appear only when an emitted sound is set. Facing additionally requires directional audio; effect amount requires an effect other than `off`. Existing type-specific ranges remain in place, including the piano's `5..20` range shared with its notes, which remains visible even without an emitted sound. Emitted audio uses the Items layer and follows the item's location, including while carried. Hearing range includes height at the same scale as horizontal distance. Directional emitters aim along a horizontal compass bearing.
 
 Radio retains its stream, volume, effects, range, and facing controls; it has no separate emitted sound or emitted-sound effects.
 
