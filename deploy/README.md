@@ -54,10 +54,14 @@ cd "$REPO_ROOT"
 ./deploy/scripts/deploy_client.sh "$REPO_ROOT" "$PUBLISH_DIR" "$BASE_PATH"
 ```
 
-Optional 4th arg:
-- server config path used when generating `media_proxy.config.php`
-- use this for secondary grids that do not use `server/config.toml`
-- the same config is also used to generate `client_branding.json` for pre-login client branding
+The publish script reads `server.base_path` from `server/config.toml`. The browser uses that path for assets, sounds, signaling, session cookies, and the media proxy. If supplied, the third argument checks that the URL path matches the config before publishing. Pass the grid?s config as the fourth argument when publishing a secondary grid. The same file supplies its pre-login branding and media proxy session-check URL.
+
+By default the script builds the client. To publish an existing build at another mount, point `CHGRID_CLIENT_DIST` at the built directory and select the other grid?s config. For example:
+
+```bash
+CHGRID_CLIENT_DIST="$REPO_ROOT/client/dist" ./deploy/scripts/deploy_client.sh \
+  "$REPO_ROOT" "/var/www/html/ttgrid" /ttgrid/ "$REPO_ROOT/server/config-tt.toml"
+```
 
 ## 4) Install/Reload Service Unit
 
@@ -80,8 +84,7 @@ cd "$REPO_ROOT"
 ./deploy/scripts/up.sh "$REPO_ROOT" "$PUBLISH_DIR" "$BASE_PATH" "$UNIT_NAME"
 ```
 
-Optional 5th arg:
-- server config path used when generating the media proxy session-check URL
+For a secondary grid, pass the server config as the fifth argument. Existing five-argument commands continue to work. Republish after changing the public base path or branding.
 
 ## 6) Apache Websocket Proxy
 

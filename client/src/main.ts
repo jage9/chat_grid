@@ -10,6 +10,7 @@ import {
   RadioStationRuntime,
 } from './audio/radioStationRuntime';
 import { getProxyUrlForMedia, shouldProxyExternalMediaUrl } from './audio/mediaUrl';
+import { withAppBase as withBase } from './appPath';
 import { ItemEmitRuntime } from './audio/itemEmitRuntime';
 import { AmbianceRuntime } from './audio/ambianceRuntime';
 import { TeleportTransitionController } from './audio/teleportTransition';
@@ -316,12 +317,6 @@ dom.appVersion.textContent = APP_DISPLAY_VERSION
 const DEFAULT_GRID_NAME = 'Chat Grid';
 const DEFAULT_WELCOME_MESSAGE =
   'Welcome to the Chat Grid, your immersive audio playground. Configure your audio, then Log in or register to join the grid.';
-const APP_BASE_URL = import.meta.env.BASE_URL || '/';
-/** Resolves an app-relative path against the configured Vite base path. */
-function withBase(path: string): string {
-  const normalizedBase = APP_BASE_URL.endsWith('/') ? APP_BASE_URL : `${APP_BASE_URL}/`;
-  return `${normalizedBase}${path.replace(/^\/+/, '')}`;
-}
 const SYSTEM_SOUND_URLS = {
   logon: withBase('sounds/logon.ogg'),
   logout: withBase('sounds/logout.ogg'),
