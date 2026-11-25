@@ -62,6 +62,7 @@ class World:
         client.world_ready = True
         for name, value in fields.items():
             setattr(client, name, value)
+        self.server.authenticated_clients[client.websocket] = client
         self.server.clients[client.websocket] = client
         return client
 

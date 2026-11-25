@@ -20,7 +20,7 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `auth_login`: authenticate with username/password.
 - `auth_resume`: resume prior session via stored session token.
 - `auth_logout`: revoke current session and disconnect.
-- `welcome_ready`: client confirms it accepted `welcome` preflight and is ready to join active roster.
+- `welcome_ready`: client confirms it accepted `welcome` preflight and is ready to join active roster. If the account was deleted or disabled, the server sends a failed `auth_result` and closes the connection.
 - `livekit_token_request`: request fresh voice credentials with `{ "type": "livekit_token_request" }`. Requires an authenticated, world-ready client and enabled LiveKit configuration. The server replies only to the requester with `livekit_token`; unauthenticated requests receive the normal authentication error, and pre-ready or disabled-LiveKit requests are ignored.
 - `admin_roles_list`: request server role list (with user counts + permission sets).
 - `admin_role_create`: create role.
@@ -28,8 +28,9 @@ This is a behavior guide for packet semantics beyond raw schemas.
 - `admin_role_delete`: delete role with replacement role reassignment.
 - `admin_users_list`: request the read-only registered-user list with no `action` (`user.list` permission), or request targets for an administration action (`action`: `set_role | ban | unban | delete_account`, gated by that action's permission).
 - `admin_user_set_role`: set target user role.
-- `admin_user_ban` / `admin_user_unban`: disable/enable user account.
-- `admin_user_delete`: permanently delete target account.
+- `admin_user_ban` / `admin_user_unban`: disable/enable user account. A ban closes every authenticated connection for that user.
+- Disabling or deleting an account also discards its world actions still waiting for the world mutation gate.
+- `admin_user_delete`: permanently delete target account and close every authenticated connection for that user.
 - `update_position`: client movement intent with `x`, `y`, and `z`; server enforces bounds, wall crossings, rate policy, and an unchanged floor. Movement does not change the server-owned facing.
 - `turn`: request a validated 45-degree relative turn in either audio mode with `{ "type": "turn", "direction": "left" | "right" }`; the server persists the resulting facing and republishes the canonical position.
 - `update_facing`: retained absolute-facing packet for one of the eight headings with `facingDeg` in 45-degree steps. The server validates the heading and republishes the canonical position.

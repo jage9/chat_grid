@@ -33,6 +33,33 @@ async def request(
 
 
 @pytest.mark.asyncio
+async def test_revoked_client_cannot_publish_a_queued_checkpoint(
+    make_world, tmp_path: Path
+):
+    world = make_world(state_file=tmp_path / "items.json")
+    client = world.join("Builder", permissions={"world.checkpoint.capture"})
+    started = asyncio.Event()
+
+    async def capture() -> None:
+        started.set()
+        await world.server._handle_message(
+            client,
+            json.dumps(
+                {"type": "checkpoint_action", "action": "capture", "label": "Queued"}
+            ),
+        )
+
+    async with world.server._world_gate.operation():
+        pending = asyncio.create_task(capture())
+        await started.wait()
+        assert not pending.done()
+        client.revoked = True
+
+    await pending
+    assert world.server.world_store.list_checkpoints(0)["checkpoints"] == []
+
+
+@pytest.mark.asyncio
 async def test_capture_preview_restore_and_restart(make_world, tmp_path: Path):
     world = make_world(
         state_file=tmp_path / "items.json",

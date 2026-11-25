@@ -1,6 +1,7 @@
 """Platform union geometry, persistence, and dependent world validation."""
 
 import json
+import uuid
 
 import pytest
 
@@ -220,7 +221,12 @@ async def test_item_in_trimmed_area_blocks_resize_and_relocation(world):
 @pytest.mark.asyncio
 async def test_platform_deleted_between_welcome_and_activation(world):
     builder = world.join("Builder")
-    joining = world.connect("Joining", authenticated=True, x=10, y=10, z=40)
+    account = world.server.auth_service.register(
+        f"joining_{uuid.uuid4().hex[:8]}", "password99"
+    )
+    joining = world.connect(
+        "Joining", authenticated=True, user_id=account.user.id, x=10, y=10, z=40
+    )
     await world.server._handle_message(
         builder, json.dumps(dict(type="platform_delete", platformId="second-floor"))
     )
