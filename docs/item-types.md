@@ -270,6 +270,7 @@ Radio retains its stream, volume, effects, range, and facing controls; it has no
 - Enter calls the car or opens its door when present. Board or exit after the opening sound finishes.
 - A two-stop elevator automatically selects the other stop when boarded.
 - As the doors begin opening, one ding indicates up and two indicate down. If nobody has requested the next stop, the car gives one ding except at its highest configured stop, where it gives two.
+- On arrival, passengers hear the chime inside the cabin and the landing sounds fade in as the doors open.
 - Boarding an elevator with three or more stops opens the shared destination selector. Up/Down browse stops, Enter requests one, and Escape dismisses the selector while remaining aboard. Choose floor in Commands or touch controls reopens it.
 - Rider destinations and outside calls enter one queue in acceptance order. Duplicate destinations are coalesced, and the current trip finishes before the next request is served.
 - The door closes after its open dwell, then travel starts when the closing sound finishes. Trip time is distance divided by speed.

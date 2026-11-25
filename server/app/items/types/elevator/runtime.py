@@ -14,6 +14,7 @@ from ....item_geometry import move_item
 from ....runtime_tasks import cancel_and_join
 from ....acoustic_zones import (
     client_position_packet,
+    elevator_acoustic_zone_id,
     floor_acoustic_zone_id,
 )
 from ....client import ClientConnection
@@ -293,6 +294,7 @@ class ElevatorRuntime:
                     item.params["doorOpen"] = False
                     self._touch(item)
                     await self.callbacks.broadcast_item(item)
+                    await self._move_occupants(item, target_z)
                     await self._broadcast_opening_sounds(item, target_z)
                     continue
                 if state in {"opening", "arriving"}:
@@ -302,7 +304,7 @@ class ElevatorRuntime:
                     item.params["doorOpen"] = True
                     self._touch(item)
                     if state == "arriving":
-                        await self._move_occupants(item, current_z)
+                        await self._announce_arrival(item, current_z)
                     await self.callbacks.broadcast_item(item)
                     continue
                 if state == "door_open":
@@ -391,7 +393,7 @@ class ElevatorRuntime:
             else current_z == max(self._floor_elevations(item))
         )
         chime = "/sounds/elevator_down.ogg" if going_down else "/sounds/elevator_up.ogg"
-        await self._broadcast_sound(item, current_z, chime)
+        await self._broadcast_sound(item, current_z, chime, inside_cabin=True)
         await self._broadcast_sound(item, current_z, "/sounds/elevator_open.ogg")
 
     async def _begin_opening(self, item: WorldItem, current_z: int) -> None:
@@ -405,7 +407,7 @@ class ElevatorRuntime:
         self._restart_task(item.id)
 
     async def _move_occupants(self, item: WorldItem, destination_z: int) -> None:
-        """Move elevator riders and carried items once the arrival door is open."""
+        """Place riders and carried items at the landing as the doors start opening."""
 
         riders = [
             rider
@@ -432,6 +434,11 @@ class ElevatorRuntime:
             if rider.elevator_id != item.id:
                 continue
             await self.delivery.broadcast(client_position_packet(rider))
+
+    async def _announce_arrival(self, item: WorldItem, destination_z: int) -> None:
+        """Tell passengers when the fully open car can be exited."""
+
+        for rider in tuple(self.callbacks.iter_clients()):
             if rider.elevator_id != item.id:
                 continue
             await self.delivery.send(
@@ -449,9 +456,9 @@ class ElevatorRuntime:
             )
 
     async def _broadcast_sound(
-        self, item: WorldItem, current_z: int, sound: str
+        self, item: WorldItem, current_z: int, sound: str, *, inside_cabin: bool = False
     ) -> None:
-        """Emit one landing-zone sound transmitted through the door to riders."""
+        """Emit a landing sound, with a direct cabin feed for the direction chime."""
 
         packet = ItemUseSoundPacket(
             type="item_use_sound",
@@ -463,7 +470,20 @@ class ElevatorRuntime:
             acousticZoneId=floor_acoustic_zone_id(current_z),
             range=self.callbacks.get_emit_range(item),
         )
-        await self.delivery.broadcast(packet)
+        if not inside_cabin:
+            await self.delivery.broadcast(packet)
+            return
+        cabin = packet.model_copy(
+            update={"acousticZoneId": elevator_acoustic_zone_id(item.id)}
+        )
+        await asyncio.gather(
+            *(
+                self.delivery.send(
+                    listener, cabin if listener.elevator_id == item.id else packet
+                )
+                for listener in tuple(self.callbacks.iter_clients())
+            )
+        )
 
     async def _broadcast_travel_position(self, item: WorldItem, travel_z: int) -> None:
         """Move riders to one intermediate elevator height."""

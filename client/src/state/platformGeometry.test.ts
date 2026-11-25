@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canWalkTo, legacyPlatforms, nearestLanding, platformAt } from './platformGeometry';
+import { canWalkTo, legacyPlatforms, listTeleportTravel, nearestLanding, platformAt } from './platformGeometry';
 
 describe('flat platform geometry', () => {
   const [ground, upper] = legacyPlatforms(41);
@@ -12,6 +12,13 @@ describe('flat platform geometry', () => {
     expect(canWalkTo(platforms, -4, 1, 0, -5, 1)).toBe(false);
     expect(canWalkTo(platforms, -4, 1, 0, -6, 1)).toBe(false);
     expect(platformAt(platforms, -1, 1, 40)).toBeUndefined();
+  });
+
+  it('times same-elevation list travel across a gap without publishing midair positions', () => {
+    const start = { x: -4, y: 1, z: 0 };
+    expect(listTeleportTravel(platforms, start, -6, 1)).toEqual({ durationMs: 100, syncIntermediatePositions: false });
+    expect(listTeleportTravel(platforms, start, -2, 1)).toEqual({ durationMs: 100, syncIntermediatePositions: true });
+    expect(listTeleportTravel(platforms, start, -5, 1)).toBeUndefined();
   });
 
   it('checks both sides of a diagonal step', () => {
