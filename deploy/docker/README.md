@@ -71,7 +71,9 @@ docker compose up -d --build --wait
 docker compose ps
 ```
 
-After changing the mount, port, or branding in the config, use `docker compose up -d --force-recreate --wait` to reload both services. View logs with `docker compose logs --tail=100 web server`.
+After changing the mount, port, or branding in the config, use `docker compose up -d --force-recreate --wait` to reload both services.
+
+Both services use Docker's `local` logging driver, which rotates container logs automatically. Existing installations pick up this setting when Compose recreates the containers during the usual update above. View recent logs with `docker compose logs --tail=100 web server`.
 
 For a full backup, run `docker compose down`, copy the entire `grid/` directory including `.env`, then run `docker compose up -d --wait`. Restore the directory with the same owner and permissions. All database files and checkpoint generations stay under `grid/data/`.
 
