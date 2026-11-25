@@ -1,9 +1,7 @@
 import { defineConfig } from 'vitest/config';
 
-const base = process.env.VITE_BASE_PATH || '/';
-
 export default defineConfig({
-  base,
+  base: './',
   server: {
     host: true,
     port: 5173,

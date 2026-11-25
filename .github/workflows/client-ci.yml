@@ -39,3 +39,9 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Build portable web client
+        run: npm run build
+
+      - name: Test portable publish paths
+        run: python ../deploy/tests/test_portable_publish.py

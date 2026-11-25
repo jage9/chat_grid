@@ -1,4 +1,4 @@
-const APP_BASE_PATH = import.meta.env.BASE_URL ?? '/';
+import { withAppBase } from '../appPath';
 
 /** Returns whether the URL already points at the local media proxy. */
 function isLocalMediaProxyUrl(parsed: URL): boolean {
@@ -41,8 +41,7 @@ export function shouldProxyExternalMediaUrl(streamUrl: string): boolean {
 
 /** Builds the same-origin proxy URL for one remote media URL. */
 export function getProxyUrlForMedia(streamUrl: string): string {
-  const normalizedBase = APP_BASE_PATH.endsWith('/') ? APP_BASE_PATH : `${APP_BASE_PATH}/`;
-  const proxy = new URL(`${normalizedBase}media_proxy.php`, window.location.origin);
+  const proxy = new URL(withAppBase('media_proxy.php'), window.location.origin);
   proxy.searchParams.set('url', streamUrl);
   return proxy.toString();
 }
