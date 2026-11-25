@@ -6,6 +6,7 @@ services:
     user: "${CHGRID_UID:-1000}:${CHGRID_GID:-1000}"
     restart: unless-stopped
     environment:
+      CHGRID_TRUSTED_PROXY_HOST: web
       CHGRID_AUTH_SECRET: ${CHGRID_AUTH_SECRET:?Set the grid authentication secret}
       CHGRID_HOST_ORIGIN: ${CHGRID_HOST_ORIGIN:?Set the public grid origin}
       LIVEKIT_URL: ${LIVEKIT_URL:?Set the LiveKit URL}
@@ -34,6 +35,7 @@ services:
     restart: unless-stopped
     environment:
       CHGRID_HOST_ORIGIN: ${CHGRID_HOST_ORIGIN:?Set the public grid origin}
+      CHGRID_TRUSTED_EDGE_PROXY: ${CHGRID_TRUSTED_EDGE_PROXY:-}
       CHGRID_MEDIA_PROXY_ALLOWLIST: ${CHGRID_MEDIA_PROXY_ALLOWLIST:-}
     ports:
       - "127.0.0.1:${CHGRID_HTTP_PORT:-8080}:80"

@@ -36,6 +36,7 @@ location /ttgrid/ {
     proxy_pass http://127.0.0.1:8080;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $connection_upgrade;
 }
@@ -51,6 +52,14 @@ map $http_upgrade $connection_upgrade {
 ```
 
 For a dedicated hostname use `location /`. To change the loopback port set `CHGRID_HTTP_PORT` in `.env` and update the proxy target. Set a distinct LiveKit room name in `config.toml` when multiple grids share a LiveKit deployment.
+
+### Client addresses behind a host proxy
+
+For a public grid, configure the host reverse proxy to send the browser's address on each request, as in the nginx example above. In `grid/.env`, set `CHGRID_TRUSTED_EDGE_PROXY` to the single IP address **Apache in the web container sees for that proxy**. To find it on an existing install, leave the setting empty, open the grid through its public URL, and look for that page request in `docker compose logs --tail=30 web`. On a Linux host this address is often the Compose bridge gateway. Use the observed address and recheck it if the Docker network changes.
+
+Apply the setting with `docker compose up -d --wait`. After a login through the proxy, `docker compose logs --tail=30 server` should show the browser's public IP in the login entry. For direct local access, leave the setting empty. Only designate an address whose traffic you trust to come from the configured proxy.
+
+People sharing a public IP can sign in concurrently with separate accounts. Successful logins do not spend the failure budget. Repeated failures for one username at an address have their own limit. Failures across usernames also count toward a temporary limit for that address.
 
 ## Updates and backups
 

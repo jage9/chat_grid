@@ -9,7 +9,7 @@ FROM php:8.4-apache-bookworm
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 \
     && php -r "exit(extension_loaded('curl') ? 0 : 1);" \
-    && a2enmod headers proxy proxy_http proxy_wstunnel \
+    && a2enmod headers proxy proxy_http proxy_wstunnel remoteip \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=client /build/client/dist/ /var/www/html/
 COPY --from=client /build/client/dist/index.html /opt/chgrid/index.html

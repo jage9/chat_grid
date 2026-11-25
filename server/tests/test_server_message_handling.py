@@ -9,6 +9,7 @@ import uuid
 
 import pytest
 from websockets.asyncio.server import ServerConnection
+from websockets.datastructures import Headers
 
 from app.client import ClientConnection
 from app.auth_service import AuthError
@@ -51,6 +52,82 @@ def test_client_ip_prefers_forwarded_for_from_loopback_proxy(world: World) -> No
     )
     client = world.connect("tester", websocket=ws, client_id="u1")
     assert server._client_ip(client) == "198.51.100.25"
+
+
+@pytest.mark.parametrize("peer", ["172.20.0.3", "::ffff:172.20.0.3"])
+@pytest.mark.asyncio
+async def test_configured_proxy_address_is_resolved_once_per_connection(
+    world, monkeypatch, peer
+):
+    world.server.trusted_proxy_host = "web"
+    calls = []
+
+    async def resolve(host, port, **kwargs):
+        calls.append(host)
+        return [(2, 1, 6, "", ("172.20.0.3", 0))]
+
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", resolve)
+    ws = cast(
+        ServerConnection,
+        SimpleNamespace(
+            remote_address=(peer, 12345),
+            request=SimpleNamespace(headers={"X-Forwarded-For": "198.51.100.25"}),
+        ),
+    )
+    client = world.connect("tester", websocket=ws)
+    await world.server._identify_proxy(client)
+    for _ in range(3):
+        assert world.server._client_ip(client) == "198.51.100.25"
+    assert calls == ["web"]
+
+
+@pytest.mark.parametrize("failure", [False, True])
+@pytest.mark.asyncio
+async def test_proxy_resolution_failure_or_different_peer_does_not_trust_headers(
+    world, monkeypatch, failure
+):
+    world.server.trusted_proxy_host = "web"
+
+    async def resolve(*args, **kwargs):
+        if failure:
+            raise OSError("lookup failed")
+        return [(2, 1, 6, "", ("172.20.0.4", 0))]
+
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", resolve)
+    ws = cast(
+        ServerConnection,
+        SimpleNamespace(
+            remote_address=("172.20.0.3", 12345),
+            request=SimpleNamespace(headers={"X-Forwarded-For": "198.51.100.25"}),
+        ),
+    )
+    client = world.connect("tester", websocket=ws)
+    await world.server._identify_proxy(client)
+    assert not client.trusted_proxy
+    assert world.server._client_ip(client) == "172.20.0.3"
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        Headers(
+            [("X-Forwarded-For", "198.51.100.25"), ("X-Forwarded-For", "203.0.113.7")]
+        ),
+        Headers({"X-Forwarded-For": "198.51.100.25, invalid"}),
+        Headers({"X-Forwarded-For": "198.51.100.25%invalid"}),
+        Headers({"X-Forwarded-For": "198.51.100.25, "}),
+    ],
+)
+def test_bad_forwarded_address_falls_back_to_peer(world, headers):
+    ws = cast(
+        ServerConnection,
+        SimpleNamespace(
+            remote_address=("127.0.0.1", 12345),
+            request=SimpleNamespace(headers=headers),
+        ),
+    )
+    client = world.connect("tester", websocket=ws)
+    assert world.server._client_ip(client) == "127.0.0.1"
 
 
 def test_last_seen_persistence_is_debounced(

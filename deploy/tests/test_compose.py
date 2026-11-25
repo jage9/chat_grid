@@ -13,6 +13,7 @@ import re
 import secrets
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 from urllib.error import HTTPError
@@ -43,9 +44,13 @@ def send(connection, packet_type, **fields):
 
 
 @contextmanager
-def login(origin, mount, username, register=False):
+def login(
+    origin, mount, username, register=False, forwarded_for=None, websocket_origin=None
+):
     with connect(
-        origin.replace("http:", "ws:") + mount + "ws", origin=origin
+        (websocket_origin or origin.replace("http:", "ws:")) + mount + "ws",
+        origin=origin,
+        additional_headers={"X-Forwarded-For": forwarded_for} if forwarded_for else {},
     ) as connection:
         assert receive(connection, "auth_required")["gridName"] == "Compose test grid"
         send(
@@ -74,6 +79,75 @@ def request(url, expected=200, **headers):
         body = response.read()
         assert response.status == expected, (url, response.status, body[:300])
         return body, response.headers
+
+
+def check_trusted_logins(origin, mount):
+    """Run from the trusted peer while retaining the public browser origin."""
+    for admin_address, visitor_address in (
+        ("198.51.100.21", "198.51.100.22"),
+        ("198.51.100.23", "198.51.100.23"),
+    ):
+        with (
+            login(
+                origin,
+                mount,
+                "admin",
+                forwarded_for=admin_address,
+                websocket_origin="ws://web",
+            ),
+            login(
+                origin,
+                mount,
+                "visitor",
+                forwarded_for=visitor_address,
+                websocket_origin="ws://web",
+            ),
+        ):
+            pass
+
+
+def check_proxy_addresses(compose, environment, origin, mount):
+    """Use a known container peer to exercise the actual Apache trust boundary."""
+    container = compose(
+        "ps", "-q", "server", capture_output=True, text=True
+    ).stdout.strip()
+    details = json.loads(
+        subprocess.check_output(["docker", "inspect", container], text=True)
+    )[0]
+    networks = details["NetworkSettings"]["Networks"]
+    assert len(networks) == 1
+    environment["CHGRID_TRUSTED_EDGE_PROXY"] = next(iter(networks.values()))[
+        "IPAddress"
+    ]
+    compose("up", "-d", "--no-deps", "--force-recreate", "--wait", "web")
+    compose(
+        "exec",
+        "-T",
+        "server",
+        "python",
+        "-",
+        "--trusted-proxy-clients",
+        origin,
+        mount,
+        input=Path(__file__).read_text(),
+        text=True,
+    )
+    # This request comes from the host, which isn't the configured trusted edge.
+    with login(origin, mount, "admin", forwarded_for="198.51.100.99"):
+        pass
+    logs = compose(
+        "logs", "--no-color", "--tail", "100", "server", capture_output=True, text=True
+    ).stdout
+    successes = re.findall(r"auth login success .* ip=(\S+) username=(\S+) ", logs)
+    for address, username in (
+        ("198.51.100.21", "admin"),
+        ("198.51.100.22", "visitor"),
+        ("198.51.100.23", "admin"),
+        ("198.51.100.23", "visitor"),
+    ):
+        assert (address, username) in successes, successes
+    assert not any(address == "198.51.100.99" for address, _ in successes), successes
+    environment["CHGRID_TRUSTED_EDGE_PROXY"] = ""
 
 
 def run_mount(mount, build):
@@ -111,6 +185,7 @@ def run_mount(mount, build):
             CHGRID_HTTP_PORT=str(port),
             CHGRID_UID=str(os.getuid()),
             CHGRID_GID=str(os.getgid()),
+            CHGRID_TRUSTED_EDGE_PROXY="",
         )
         command = [
             "docker",
@@ -232,6 +307,8 @@ def run_mount(mount, build):
                 )
                 assert receive(admin, "checkpoint_result")["ok"]
 
+            if mount == "/ttgrid/":
+                check_proxy_addresses(compose, environment, origin, mount)
             compose("down", "--timeout", "20")
             compose("up", "-d", "--wait", "--wait-timeout", "90")
             with login(origin, mount, "admin") as (admin, _, welcome):
@@ -262,5 +339,8 @@ def run_mount(mount, build):
 
 
 if __name__ == "__main__":
-    run_mount("/", build=True)
-    run_mount("/ttgrid/", build=False)
+    if len(sys.argv) > 1 and sys.argv[1] == "--trusted-proxy-clients":
+        check_trusted_logins(*sys.argv[2:])
+    else:
+        run_mount("/", build=True)
+        run_mount("/ttgrid/", build=False)

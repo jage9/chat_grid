@@ -14,6 +14,7 @@ import os
 import random
 import re
 import signal
+import socket
 import ssl
 import time
 import uuid
@@ -23,7 +24,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import ValidationError, TypeAdapter
 from websockets.asyncio.server import ServerConnection, serve
-from websockets.datastructures import Headers
+from websockets.datastructures import Headers, MultipleValuesError
 from websockets.http11 import Request as HttpRequest, Response as HttpResponse
 from websockets.typing import Origin
 
@@ -345,6 +346,7 @@ class SignalingServer:
             if host_origin
             else None
         )
+        self.trusted_proxy_host = os.getenv("CHGRID_TRUSTED_PROXY_HOST", "").strip()
         self.base_path = self._normalize_base_path(base_path)
         self.grid_name = str(grid_name).strip() or "Chat Grid"
         self.world_store.source_grid = self.grid_name
@@ -873,43 +875,56 @@ class SignalingServer:
         return False
 
     @staticmethod
-    def _client_ip(client: ClientConnection) -> str:
-        """Extract best-effort remote IP string for audit logs and auth throttling."""
-
+    def _peer_ip(client: ClientConnection) -> str | None:
+        """Return the normalized socket peer before considering forwarding headers."""
         address = getattr(client.websocket, "remote_address", None)
         if isinstance(address, tuple) and address:
-            peer_raw = address[0]
-        elif isinstance(address, str):
-            peer_raw = address
-        else:
-            peer_raw = None
-        peer_ip = SignalingServer._normalized_ip(peer_raw)
-        if not peer_ip:
-            return "unknown"
+            address = address[0]
+        return SignalingServer._normalized_ip(address)
 
-        # Trust X-Forwarded-For only from a loopback proxy hop (e.g., local Apache/nginx).
-        try:
-            peer_addr = ipaddress.ip_address(peer_ip)
-        except ValueError:
-            return peer_ip
-        if not peer_addr.is_loopback:
+    @staticmethod
+    def _client_ip(client: ClientConnection) -> str:
+        """Return the client address used for audit logs and authentication limits."""
+        peer_ip = SignalingServer._peer_ip(client)
+        if peer_ip is None:
+            return "unknown"
+        if not (client.trusted_proxy or ipaddress.ip_address(peer_ip).is_loopback):
             return peer_ip
 
         request = getattr(client.websocket, "request", None)
         headers = getattr(request, "headers", None)
         if headers is None:
             return peer_ip
-        forwarded = str(headers.get("X-Forwarded-For", "")).strip()
+        try:
+            forwarded = str(headers.get("X-Forwarded-For", "")).strip()
+        except MultipleValuesError:
+            return peer_ip
         if not forwarded:
             return peer_ip
-        # In common reverse-proxy chains, the trusted proxy appends the immediate
-        # client IP to the end of X-Forwarded-For. Read right-to-left so a
-        # client-supplied left-side value can't spoof throttling/audit identity.
-        for candidate in reversed(forwarded.split(",")):
-            parsed = SignalingServer._normalized_ip(candidate)
-            if parsed:
-                return parsed
-        return peer_ip
+        # Only the nearest forwarded address was supplied by the trusted hop.
+        # A malformed final address must not expose an earlier client-supplied value.
+        return SignalingServer._normalized_ip(forwarded.rsplit(",", 1)[-1]) or peer_ip
+
+    async def _identify_proxy(self, client: ClientConnection) -> None:
+        """Trust a connection only when its peer matches the configured proxy host."""
+        if not self.trusted_proxy_host:
+            return
+        peer_ip = self._peer_ip(client)
+        if peer_ip is None or ipaddress.ip_address(peer_ip).is_loopback:
+            return
+        try:
+            async with asyncio.timeout(3):
+                addresses = await asyncio.get_running_loop().getaddrinfo(
+                    self.trusted_proxy_host, None, type=socket.SOCK_STREAM
+                )
+        except OSError:
+            LOGGER.warning(
+                "Could not resolve trusted proxy host %s", self.trusted_proxy_host
+            )
+            return
+        client.trusted_proxy = any(
+            self._normalized_ip(info[4][0]) == peer_ip for info in addresses
+        )
 
     @staticmethod
     def _normalized_ip(value: object) -> str | None:
@@ -922,10 +937,11 @@ class SignalingServer:
             return None
         if text.startswith("[") and text.endswith("]"):
             text = text[1:-1]
-        if "%" in text:
-            text = text.split("%", 1)[0]
         try:
-            return str(ipaddress.ip_address(text))
+            address = ipaddress.ip_address(text)
+            if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+                return str(address.ipv4_mapped)
+            return str(address).split("%", 1)[0]
         except ValueError:
             return None
 
@@ -1117,6 +1133,7 @@ class SignalingServer:
             if request_path != self.websocket_path:
                 await websocket.close()
                 return
+            await self._identify_proxy(client)
             cookie_token = self._session_token_from_websocket_cookie(websocket)
             if cookie_token:
                 await self._handle_auth_packet(

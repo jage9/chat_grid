@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
+from app.server import AUTH_RATE_LIMIT_PER_IDENTITY, AUTH_RATE_LIMIT_PER_IP
 from app.config import RateLimitsConfigSection
 from app.models import (
+    AuthLoginPacket,
     BroadcastChatMessagePacket,
     ItemActionResultPacket,
     ItemPianoNoteBroadcastPacket,
@@ -60,6 +63,35 @@ def system_chat(world: World, client) -> list[str]:
         )
         if packet.system
     ]
+
+
+def test_auth_failure_budgets_for_accounts_sharing_an_address(world: World) -> None:
+    def connection(ip):
+        return world.connect(
+            "visitor", websocket=SimpleNamespace(remote_address=(ip, 12345))
+        )
+
+    server = world.server
+    alice = connection("198.51.100.1")
+    bob = connection("198.51.100.1")
+    other_household = connection("198.51.100.2")
+    alice_login = AuthLoginPacket(
+        type="auth_login", username="alice", password="password"
+    )
+    bob_login = alice_login.model_copy(update={"username": "bob"})
+
+    for _ in range(AUTH_RATE_LIMIT_PER_IDENTITY):
+        server._record_auth_failure(alice, alice_login)
+    assert server._is_auth_rate_limited(alice, alice_login)
+    assert not server._is_auth_rate_limited(bob, bob_login)
+    assert not server._is_auth_rate_limited(other_household, alice_login)
+
+    for i in range(AUTH_RATE_LIMIT_PER_IP - AUTH_RATE_LIMIT_PER_IDENTITY):
+        server._record_auth_failure(
+            alice, alice_login.model_copy(update={"username": f"user{i}"})
+        )
+    assert server._is_auth_rate_limited(bob, bob_login)
+    assert not server._is_auth_rate_limited(other_household, bob_login)
 
 
 @pytest.mark.asyncio
