@@ -50,18 +50,18 @@ Current defaults:
 - Stereo panning follows horizontal offset.
 - Mono output mode collapses pan to center.
 - Every positional source and listener includes `x`, `y`, `z`, and a server-owned acoustic-zone id. Disconnected floors and closed elevator cabins are silent before distance and pan are calculated.
-- The ground floor is `z=0` and the second floor is `z=40`; sound never crosses between them.
+- Platforms at the same elevation share a floor acoustic zone, including platforms separated by gaps. Each distinct elevation has its own zone, even when the height difference is one square.
 - LiveKit remains one room, but the client unsubscribes from audio publications for users on other floors. This preserves the global roster without downloading unheard voice tracks.
 - Elevator riders are published at progressively changing intermediate heights while the car moves, which keeps them unsubscribed from both floor audio groups.
 - The dedicated client elevator runtime loops `/sounds/elevator_inside.ogg` from a randomized offset. A passenger hears it in every car state; a nearby landing listener hears it through the opening/closing door transmission while the car is at that floor.
-- An elevator's optional `emitSound` remains on the multi-floor shaft object rather than following the car, so it emits independently from both landings. A rider hears it through normal distance rules while the door is open; the client suppresses it only while that rider is inside with the door closed.
+- An elevator's optional `emitSound` belongs to the multi-floor shaft and emits at its configured stops. A rider hears it through the door at the current landing.
 - Door opening and closing play their spatial clips for landing listeners and riders. Entry/exit remains blocked for each clip's duration. `/sounds/elevator_up.ogg` or `/sounds/elevator_down.ogg` starts alongside the opening clip so the direction beep adds no delay.
-- Elevator direction and door-mechanism clips are anchored to the current landing's floor zone. Landing listeners hear them directly; cabin occupants hear them through the dynamic door transmission.
+- The direction chime plays directly in the cabin for passengers and in the landing zone for other listeners. The door clips use the landing zone and reach passengers as the door opens.
 - On the same floor, the client traces a center-to-center ray through canonical wall edges and multiplies every crossed wall's `soundTransmission` into the existing distance gain.
 - Solid walls use transmission `0`; curtains default to `0.5`. Multiple crossed walls multiply (for example, two curtains produce `0.25`).
 - Wall gain applies to LiveKit voice, radios, item emitters, elevator landing audio, footsteps, teleports, clocks, piano notes, and positional item-use sounds. Active continuous and one-shot mixes update as the listener or wall layout changes.
 - `WorldAudioRouter` is the single entry point for sampled world one-shots. It applies the world-layer toggle, acoustic-zone transmission, wall gain/filtering, range, distance, and pan for footsteps, teleports, structure contact, item-use sounds, and clock sequences.
-- One-shot admission uses stable acoustic connectivity rather than requiring positive gain at the packet instant. Elevator ding and opening samples can therefore begin at zero transmission and fade in with the opening door, while closed or moving cabin/floor pairs remain rejected.
+- One-shot admission uses acoustic connectivity at the start of playback. A landing sample can begin at zero transmission and fade in as the door opens.
 - One-shot packets carry the authoritative source acoustic-zone id. This keeps all floor sounds outside a closed or moving elevator cabin and fades them consistently with the door transition.
 - Wall occlusion never drives LiveKit subscription changes. Floor/acoustic-zone connectivity remains the stable bandwidth gate; walls are a fast local gain adjustment.
 - A ray passing exactly through a grid corner follows diagonal movement semantics: one occupied component edge leaves an open route, while two occupied edges apply both transmissions.
