@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from ....item_geometry import ITEM_SPAN_LIMIT
 from ...emit_validation import EMIT_EFFECT_OPTIONS
 
 LABEL = "widget"
 TOOLTIP = "A basic item. Make it a beacon or whatever you want."
 EDITABLE_PROPERTIES: tuple[str, ...] = (
     "title",
-    "endX",
-    "endY",
-    "endZ",
+    "width",
+    "depth",
+    "height",
     "enabled",
     "directional",
     "facing",
@@ -67,12 +68,16 @@ EFFECT_OPTIONS = EMIT_EFFECT_OPTIONS
 PROPERTY_METADATA: dict[str, dict[str, object]] = {
     **{
         field: {
-            "label": f"End {axis}",
+            "label": field.capitalize(),
             "valueType": "number",
-            "tooltip": f"Inclusive ending {axis} coordinate, at or beyond the item's starting {axis}. Each dimension can span up to 1000 cells. The base must fit on platforms.",
-            "range": {"min": -1000000, "max": 1000000, "step": 1},
+            "tooltip": f"Number of squares extending {direction} along {axis}, including the widget's starting square.",
+            "range": {"min": 1, "max": ITEM_SPAN_LIMIT, "step": 1},
         }
-        for field, axis in (("endX", "X"), ("endY", "Y"), ("endZ", "Z"))
+        for field, axis, direction in (
+            ("width", "X", "east"),
+            ("depth", "Y", "north"),
+            ("height", "Z", "up"),
+        )
     },
     "title": {
         "valueType": "text",
